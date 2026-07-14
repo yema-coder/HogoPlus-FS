@@ -43,6 +43,38 @@ def decode_token(token: str, expected_type: str) -> dict:
     return payload
 
 
+def create_registration_token(phone: str) -> str:
+    """Short-lived token proving OTP verification of an unknown phone (self-registration)."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "phone": phone,
+            "type": "registration",
+            "scope": "registration",
+            "jti": str(uuid.uuid4()),
+            "iat": now,
+            "exp": now + timedelta(minutes=15),
+        },
+        settings.jwt_secret,
+        algorithm=ALGORITHM,
+    )
+
+
+async def get_access_or_registration_payload(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> dict:
+    """Accepts a full access token OR a 15-min registration token. 401 otherwise."""
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(credentials.credentials, settings.jwt_secret, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+    if payload.get("type") not in ("access", "registration"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+    return payload
+
+
 async def get_current_employee(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     session: AsyncSession = Depends(get_session),

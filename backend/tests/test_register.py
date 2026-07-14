@@ -1,14 +1,22 @@
 from sqlalchemy import text
 
-from tests.conftest import DEMO_OTP, PHONES, login
+from tests.conftest import PHONES, login, set_otp
 
 NEW_PHONE = "+919888888801"
 
 
+async def _registration_token(client, phone: str = NEW_PHONE) -> str:
+    code = await set_otp(phone)
+    r = await client.post("/api/auth/verify-otp", json={"phone": phone, "otp": code})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_new"] is True
+    return body["registration_token"]
+
+
 async def _register(client):
-    r = await client.post("/api/auth/verify-otp", json={"phone": NEW_PHONE, "otp": DEMO_OTP})
-    assert r.json()["is_new"] is True
-    r = await client.post(
+    token = await _registration_token(client)
+    return await client.post(
         "/api/auth/register",
         json={
             "phone": NEW_PHONE,
@@ -16,20 +24,11 @@ async def _register(client):
             "department_code": "PRODUCTION",
             "selfie_key": "selfie123.jpg",
         },
+        headers={"Authorization": f"Bearer {token}"},
     )
-    return r
 
 
-async def test_register_creates_pending_worker(client):
-    r = await _register(client)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["employee"]["role_code"] == "Worker"
-    assert body["employee"]["onboarding_status"] == "pending_approval"
-    assert body["access_token"]
-
-
-async def test_register_requires_otp_verification(client):
+async def test_register_without_token_401(client):
     r = await client.post(
         "/api/auth/register",
         json={
@@ -39,7 +38,31 @@ async def test_register_requires_otp_verification(client):
             "selfie_key": "s.jpg",
         },
     )
+    assert r.status_code == 401
+
+
+async def test_register_token_phone_mismatch_403(client):
+    token = await _registration_token(client, phone="+919888888802")
+    r = await client.post(
+        "/api/auth/register",
+        json={
+            "phone": "+919888888803",
+            "full_name": "Mismatch Worker",
+            "department_code": "PRODUCTION",
+            "selfie_key": "s.jpg",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
     assert r.status_code == 403
+
+
+async def test_register_with_registration_token_creates_pending(client):
+    r = await _register(client)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["employee"]["role_code"] == "Worker"
+    assert body["employee"]["onboarding_status"] == "pending_approval"
+    assert body["access_token"]
 
 
 async def test_pending_user_cannot_access_forms(client):

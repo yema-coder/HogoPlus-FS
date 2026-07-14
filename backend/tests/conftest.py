@@ -179,6 +179,16 @@ async def login(client: AsyncClient, phone: str) -> dict:
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+async def set_otp(phone: str, code: str = "654321") -> str:
+    """Store a known OTP hash directly in Redis (mirrors send-otp) for unknown-phone tests."""
+    import hashlib
+
+    from app.redis_client import redis_client
+
+    await redis_client.setex(f"otp:code:{phone}", 300, hashlib.sha256(code.encode()).hexdigest())
+    return code
+
+
 async def employee_id_by_phone(db_session, phone: str) -> str:
     row = (await db_session.execute(text("SELECT id FROM employees WHERE phone=:p"), {"p": phone})).first()
     return str(row[0])

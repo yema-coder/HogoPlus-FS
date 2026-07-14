@@ -18,9 +18,11 @@ from app.otp import NotConfigured, get_otp_sender
 from app.redis_client import redis_client
 from app.schemas import RefreshIn, RegisterIn, SendOtpIn, UpdateMeIn, VerifyOtpIn
 from app.security import (
+    create_registration_token,
     create_token_pair,
     decode_token,
     employee_profile,
+    get_access_or_registration_payload,
     get_current_employee,
 )
 from app.shift_logic import SHIFT_A_DEPARTMENTS, now_ist
@@ -33,7 +35,6 @@ SEND_WINDOW_SECONDS = 600
 MAX_SENDS_PER_WINDOW = 3
 LOCKOUT_THRESHOLD = 5
 LOCKOUT_SECONDS = 1800
-REGISTER_WINDOW_SECONDS = 900
 
 
 def _hash(otp: str) -> str:
@@ -68,7 +69,12 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
         raise HTTPException(status_code=429, detail="Too many wrong attempts. Locked for 30 minutes.")
 
     stored = await redis_client.get(f"otp:code:{phone}")
-    demo_ok = settings.demo_otp_enabled and otp == settings.demo_otp
+    employee = (
+        await session.execute(select(Employee).where(Employee.phone == phone))
+    ).scalar_one_or_none()
+    # DEMO_OTP shortcut is only honoured for phones that already exist in the employees
+    # table — it can never be used to create accounts for unknown phones.
+    demo_ok = settings.demo_otp_enabled and otp == settings.demo_otp and employee is not None
     if not ((stored and _hash(otp) == stored) or demo_ok):
         fails = await redis_client.incr(f"otp:fail:{phone}")
         if fails == 1:
@@ -80,13 +86,9 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
 
     await redis_client.delete(f"otp:code:{phone}", f"otp:fail:{phone}")
 
-    employee = (
-        await session.execute(select(Employee).where(Employee.phone == phone))
-    ).scalar_one_or_none()
     if employee is None:
-        # unknown phone — allow self-registration within a window
-        await redis_client.setex(f"otp:verified:{phone}", REGISTER_WINDOW_SECONDS, "1")
-        return {"is_new": True}
+        # unknown phone — issue a 15-min registration token for self-registration
+        return {"is_new": True, "registration_token": create_registration_token(phone)}
     if not employee.is_active:
         raise HTTPException(status_code=403, detail="Account deactivated. Contact Time Office.")
 
@@ -97,9 +99,13 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
 
 
 @router.post("/auth/register")
-async def register(body: RegisterIn, session: AsyncSession = Depends(get_session)):
-    if not await redis_client.get(f"otp:verified:{body.phone}"):
-        raise HTTPException(status_code=403, detail="Phone not OTP-verified. Verify OTP first.")
+async def register(
+    body: RegisterIn,
+    token_payload: dict = Depends(get_access_or_registration_payload),
+    session: AsyncSession = Depends(get_session),
+):
+    if token_payload["type"] == "registration" and token_payload.get("phone") != body.phone:
+        raise HTTPException(status_code=403, detail="Registration token does not match this phone")
 
     existing = (
         await session.execute(select(Employee).where(Employee.phone == body.phone))
@@ -160,7 +166,6 @@ async def register(body: RegisterIn, session: AsyncSession = Depends(get_session
     await write_audit(session, employee.id, "employee.register", "employee", str(employee.id), {"phone": body.phone})
     await session.commit()
     await session.refresh(employee)
-    await redis_client.delete(f"otp:verified:{body.phone}")
     tokens = create_token_pair(employee)
     return {**tokens, "employee": employee_profile(employee)}
 

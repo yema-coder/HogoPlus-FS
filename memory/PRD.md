@@ -32,7 +32,22 @@ Phases 2–4 (later): mobile app (Expo, trilingual), AI hooks (gauge_read/anpr/h
 - Celery beat: escalation sweep */30min; nightly pg_dump backup 21:00 UTC (=02:30 IST), skips when FILE_STORAGE_MODE=local
 - DBs: hogoplus (dev, seeded), hogoplus_test (pytest). Postgres user hogo/hogo_secret (superuser, dev)
 
-## What's been implemented (2026-07-14) — Phase 1 complete
+## What's been implemented (2026-07-14) — Phase 1 complete + Fix Pack 1
+### Fix Pack 1 (2026-07-14, after Phase 1 finish)
+- FIX 1: Real seed_employees.csv (401 rows) replaced synthetic data. DB employees/assignments wiped and reseeded.
+  CGM = Amey Ghadge 0001 (+918483029039). 6 dept managers: ADMIN 0704, ENGINEERING 0146 (Mhaske Sanjay,
+  Works Manager — lowest-emp_id rule), PRODUCTION 0351, PURCHASE 0046, SECURITY 0429, TIME_OFFICE 0008.
+  7 without: ACCOUNTS, AGRICULTURE, CANE_YARD, CIVIL, DISTILLERY, GODOWN, STORE. 6 phone-NULL 'seeded' rows
+  (0139, 0403, 0470, 0914, 0949, 1211). seed.py adapted to real CSV columns (name/role/YES-NO eligibility).
+  scripts/generate_seed_csv.py deleted — repo CSV IS the real file.
+- FIX 2: DEMO_OTP only accepted for phones existing in employees table; unknown phones need the real
+  (logged) OTP; static 123456 can never create accounts. Test added.
+- FIX 3: verify-otp for unknown phone returns {is_new, registration_token} (JWT 15-min, scope=registration).
+  /files/upload + /auth/register require access OR registration token (401 otherwise); magic-byte content
+  validation; upload rate limit 20/hour per token (Redis). Tests added.
+- Test suite now **70 passing**.
+
+### Phase 1 (original)
 - Auth: send-otp (rate limit 3/10min), verify-otp (5 wrong → 30min lockout, demo OTP 123456),
   register (pending_approval Worker, restricted middleware), refresh, me, PATCH /employees/me
 - Form Engine: dept-scoped list, schema validation (all field types + min/max/regex), submit → manager
@@ -49,9 +64,9 @@ Phases 2–4 (later): mobile app (Expo, trilingual), AI hooks (gauge_read/anpr/h
 
 ## Deviations (justified)
 1. `/api` prefix on all routes (environment ingress requirement)
-2. DEMO_OTP accepted for any phone (not just seeded) so registration flow is demoable; disable via DEMO_OTP_ENABLED=false
-3. `POST /files/upload` unauthenticated (registration selfie precedes JWT); UUID keys
-4. Synthetic seed CSV (real one wasn't attached); format documented, seed idempotent for replacement
+2. ~~Synthetic seed CSV~~ → replaced with real 401-row CSV in Fix Pack 1
+3. ~~DEMO_OTP for any phone~~ → hardened in Fix Pack 1 (seeded phones only)
+4. ~~Unauthenticated upload~~ → secured in Fix Pack 1 (access/registration token + magic bytes + 20/hr rate limit)
 
 ## Backlog / next phases
 - P0 (Phase 2): Expo mobile app — trilingual UI (mr default), OTP login, 3-tap incident, punch-in with

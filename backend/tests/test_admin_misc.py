@@ -81,10 +81,20 @@ async def test_beacon_crud(client):
     assert r.json()["deleted"] is True
 
 
+async def test_file_upload_requires_token(client):
+    r = await client.post(
+        "/api/files/upload", files={"file": ("selfie.png", io.BytesIO(b"\x89PNG\r\n\x1a\nxx"), "image/png")}
+    )
+    assert r.status_code == 401
+
+
 async def test_file_upload_and_serve(client):
+    headers = await login(client, PHONES["w_prod1"])
     content = b"\x89PNG\r\n\x1a\n" + b"0" * 100
     r = await client.post(
-        "/api/files/upload", files={"file": ("selfie.png", io.BytesIO(content), "image/png")}
+        "/api/files/upload",
+        files={"file": ("selfie.png", io.BytesIO(content), "image/png")},
+        headers=headers,
     )
     assert r.status_code == 200
     body = r.json()
@@ -94,9 +104,37 @@ async def test_file_upload_and_serve(client):
     assert r2.content == content
     # bad extension rejected
     r3 = await client.post(
-        "/api/files/upload", files={"file": ("evil.exe", io.BytesIO(b"xx"), "application/octet-stream")}
+        "/api/files/upload",
+        files={"file": ("evil.exe", io.BytesIO(b"xx"), "application/octet-stream")},
+        headers=headers,
     )
     assert r3.status_code == 400
+    # extension/content mismatch rejected (magic bytes check)
+    r4 = await client.post(
+        "/api/files/upload",
+        files={"file": ("fake.png", io.BytesIO(b"this is not a png"), "image/png")},
+        headers=headers,
+    )
+    assert r4.status_code == 400
+
+
+async def test_file_upload_rate_limit(client):
+    headers = await login(client, PHONES["w_prod2"])
+    content = b"\x89PNG\r\n\x1a\n" + b"1" * 20
+    last = None
+    for _ in range(20):
+        last = await client.post(
+            "/api/files/upload",
+            files={"file": ("a.png", io.BytesIO(content), "image/png")},
+            headers=headers,
+        )
+        assert last.status_code == 200
+    r = await client.post(
+        "/api/files/upload",
+        files={"file": ("a.png", io.BytesIO(content), "image/png")},
+        headers=headers,
+    )
+    assert r.status_code == 429
 
 
 async def test_form_definition_versioning(client):

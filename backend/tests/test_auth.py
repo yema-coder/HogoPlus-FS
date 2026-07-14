@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from tests.conftest import DEMO_OTP, PHONES, login
+from tests.conftest import DEMO_OTP, PHONES, login, set_otp
 
 
 async def test_send_otp_success(client):
@@ -50,12 +50,21 @@ async def test_verify_demo_success(client):
     assert body["employee"]["role"]["rank"] == 6
 
 
-async def test_verify_unknown_phone_is_new(client):
-    r = await client.post("/api/auth/verify-otp", json={"phone": "+919999999999", "otp": DEMO_OTP})
+async def test_verify_unknown_phone_is_new_with_registration_token(client):
+    phone = "+919999999999"
+    code = await set_otp(phone)
+    r = await client.post("/api/auth/verify-otp", json={"phone": phone, "otp": code})
     assert r.status_code == 200
     body = r.json()
     assert body["is_new"] is True
+    assert body["registration_token"]
     assert "access_token" not in body
+
+
+async def test_demo_otp_rejected_for_unknown_phone(client):
+    # DEMO_OTP shortcut must never work for phones not present in the employees table
+    r = await client.post("/api/auth/verify-otp", json={"phone": "+919999999988", "otp": DEMO_OTP})
+    assert r.status_code == 401
 
 
 async def test_refresh_token(client):

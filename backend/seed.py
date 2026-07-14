@@ -203,19 +203,25 @@ async def seed():
         new_employees = 0
         with open(CSV_PATH) as f:
             for row in csv.DictReader(f):
-                if row["emp_id"] in existing_emp:
+                emp_id = row["emp_id"].strip()
+                if emp_id in existing_emp:
                     continue
-                bad_phone = row["phone_status"].strip().upper() != "OK"
+                full_name = (row.get("full_name") or row.get("name") or "").strip()
+                role_code = (row.get("role_code") or row.get("role") or "Worker").strip()
+                phone = (row.get("phone") or "").strip()
+                status = (row.get("phone_status") or "OK").strip().upper()
+                bad_phone = status != "OK"
+                eligible = (row.get("shift_swap_eligible") or "").strip().lower() in ("true", "yes", "1")
                 session.add(
                     Employee(
-                        emp_id=row["emp_id"],
-                        full_name=row["full_name"],
-                        phone=None if bad_phone or not row["phone"] else row["phone"],
-                        department_code=row["department_code"],
-                        designation=row["designation"],
-                        role_code=row["role_code"],
-                        language_pref=row.get("language_pref") or "mr",
-                        shift_swap_eligible=row["shift_swap_eligible"].strip().lower() == "true",
+                        emp_id=emp_id,
+                        full_name=full_name,
+                        phone=None if bad_phone or not phone else phone,
+                        department_code=row["department_code"].strip(),
+                        designation=(row.get("designation") or "").strip(),
+                        role_code=role_code,
+                        language_pref=(row.get("language_pref") or "mr").strip() or "mr",
+                        shift_swap_eligible=eligible,
                         onboarding_status="seeded" if bad_phone else "approved",
                         is_active=True,
                     )
@@ -227,15 +233,16 @@ async def seed():
         all_employees = (await session.execute(select(Employee))).scalars().all()
         counts["employees_total"] = len(all_employees)
 
-        # department managers (auto-assign from role=Manager rows)
+        # department managers (auto-assign from role=Manager rows, lowest emp_id wins
+        # so the senior manager — e.g. Works Manager before Deputy Chief Engineers — is picked)
         dept_map = {d.code: d for d in (await session.execute(select(Department))).scalars()}
         managers_assigned = 0
-        for emp in all_employees:
-            if emp.role_code == "Manager":
-                dept = dept_map.get(emp.department_code)
-                if dept is not None and dept.manager_employee_id is None:
-                    dept.manager_employee_id = emp.id
-                    managers_assigned += 1
+        managers = sorted((e for e in all_employees if e.role_code == "Manager"), key=lambda e: e.emp_id)
+        for emp in managers:
+            dept = dept_map.get(emp.department_code)
+            if dept is not None and dept.manager_employee_id is None:
+                dept.manager_employee_id = emp.id
+                managers_assigned += 1
         counts["managers_assigned"] = managers_assigned
 
         # baseline shift assignments
