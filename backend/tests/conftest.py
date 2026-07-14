@@ -73,9 +73,9 @@ async def _seed_base():
             s.add(Role(code=code, label_en=code, label_hi=code, label_mr=code, rank=rank))
         for code in DEPTS:
             s.add(Department(code=code, name_en=code.title(), name_hi=code, name_mr=code, is_active=True))
-        s.add(Shift(code="A", label="Shift A", start_time=time(6, 0), end_time=time(14, 0)))
-        s.add(Shift(code="B", label="Shift B", start_time=time(14, 0), end_time=time(22, 0)))
-        s.add(Shift(code="C", label="Shift C", start_time=time(22, 0), end_time=time(6, 0)))
+        s.add(Shift(code="A", label="Shift A", start_time=time(8, 0), end_time=time(16, 0)))
+        s.add(Shift(code="B", label="Shift B", start_time=time(16, 0), end_time=time(0, 0)))
+        s.add(Shift(code="C", label="Shift C", start_time=time(0, 0), end_time=time(8, 0)))
         s.add(Shift(code="GEN", label="General", start_time=time(9, 0), end_time=time(17, 30)))
         s.add(FactorySettings(factory_lat=19.0000, factory_lng=74.7000, radius_meters=500))
         await s.flush()

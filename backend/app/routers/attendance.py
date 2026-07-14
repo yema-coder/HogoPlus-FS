@@ -1,6 +1,6 @@
 import math
 import uuid
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -82,21 +82,11 @@ async def punch_in(
         else:
             level = "verified"
 
-    # attribute date: C-shift punch after midnight belongs to previous day
+    # attribute date: with the corrected windows (C = 00:00–08:00) every shift's
+    # punch-in window sits inside a single calendar day, so a 01:30 punch belongs
+    # to the C shift of the calendar day that just started at 00:00.
     att_date = ist_now.date()
     shift_code = await resolve_shift_code(session, employee.id, att_date)
-    if ist_now.time() < time(6, 0):
-        prev = att_date - timedelta(days=1)
-        prev_shift = await resolve_shift_code(session, employee.id, prev)
-        if prev_shift == "C":
-            existing_prev = (
-                await session.execute(
-                    select(Attendance).where(Attendance.employee_id == employee.id, Attendance.date == prev)
-                )
-            ).scalar_one_or_none()
-            if existing_prev is None:
-                att_date = prev
-                shift_code = "C"
 
     existing = (
         await session.execute(

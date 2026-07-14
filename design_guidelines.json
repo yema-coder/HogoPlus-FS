@@ -1,0 +1,160 @@
+{
+  "app_name": "HOGO PLUS-FS",
+  "personality": "4 Tactile / Playful (adapted for industrial accessibility)",
+  "personality_one_liner": "A highly touchable, high-contrast, strictly utilitarian interface designed for semi-literate field workers.",
+  "color": {
+    "surface": "#F9F8F5",
+    "onSurface": "#28251D",
+    "surfaceSecondary": "#FFFFFF",
+    "onSurfaceSecondary": "#28251D",
+    "surfaceTertiary": "#E8E6E1",
+    "onSurfaceTertiary": "#7A7974",
+    "surfaceInverse": "#28251D",
+    "onSurfaceInverse": "#F9F8F5",
+    "brand": "#0B4F6C",
+    "brandPrimary": "#0B4F6C",
+    "onBrandPrimary": "#F9F8F5",
+    "brandSecondary": "#3A5DAE",
+    "onBrandSecondary": "#F9F8F5",
+    "brandTertiary": "#DCE6F0",
+    "onBrandTertiary": "#0B4F6C",
+    "success": "#22C55E",
+    "onSuccess": "#FFFFFF",
+    "warning": "#F59E0B",
+    "onWarning": "#28251D",
+    "error": "#E85A6F",
+    "onError": "#FFFFFF",
+    "info": "#3A5DAE",
+    "onInfo": "#FFFFFF",
+    "border": "#D4D1CA",
+    "borderStrong": "#A3A099",
+    "divider": "#D4D1CA",
+    "muted": "#7A7974"
+  },
+  "typography": {
+    "displayFontFamily": "Baloo 2",
+    "textFontFamily": "Baloo 2",
+    "scale": {
+      "sm": 14,
+      "base": 16,
+      "lg": 20,
+      "xl": 24,
+      "2xl": 32
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing everywhere. screenPadding 16, headerHeight 72, bottomTabHeight 72.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "pill": 999
+  },
+  "shadow_tier": "1",
+  "navigation": "bottom_tabs",
+  "icon_set": "lucide-react-native",
+  "glassmorphism": {
+    "enabled": "false",
+    "do's": [],
+    "dont's": [
+      "No glassmorphism for this app. It requires solid, high-contrast, flat industrial utility to avoid confusing semi-literate workers."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-blur",
+      "android": "solid surfaceSecondary",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "haptics": {
+    "primary_button": "impactMedium",
+    "incident_tile": "impactHeavy",
+    "category_select": "selection",
+    "camera_shutter": "impactHeavy",
+    "success_feedback": "notificationSuccess",
+    "tab_press": "selection"
+  },
+  "screens": [
+    {
+      "name": "Authentication & Onboarding",
+      "purpose": "Language picker -> Phone+OTP -> Self-Registration with selfie.",
+      "states": {
+        "loading": "Centered spinner",
+        "empty": "N/A",
+        "error": "Toast with Retry"
+      },
+      "layout": "Language Picker: 3 massive pill buttons. OTP: 6 large boxes (auto-submit). Registration: single column form -> 13-category icon grid for department -> full screen selfie capture with face guide overlay."
+    },
+    {
+      "name": "Home Hub",
+      "purpose": "Central role-aware dashboard for workers.",
+      "states": {
+        "loading": "Skeleton of grid",
+        "empty": "N/A",
+        "error": "Retry block"
+      },
+      "layout": "Header: 72px tall, App name, User first name + dept chip, Selfie thumbnail avatar. TOP: full-width Red Incident Report tile (120px height, siren icon). BELOW: 2-column grid with Attendance, My Reports, My Shift, Notifications (badge). 16px screen padding."
+    },
+    {
+      "name": "Incident Reporting",
+      "purpose": "3-tap incident logging.",
+      "states": {
+        "loading": "Camera initializing",
+        "empty": "N/A",
+        "error": "Retry submit"
+      },
+      "layout": "Step 1: 8-category circle grid (110px circles) with icon + label. Step 2: Full-screen camera with 88px shutter and GPS chip overlay. Step 3: Watermarked preview + big submit CTA. Success: Big green check, auto-returns to home after 3s."
+    },
+    {
+      "name": "Attendance",
+      "purpose": "GPS+selfie punch-in/out and month calendar view.",
+      "states": {
+        "loading": "Scanning GPS/BLE",
+        "empty": "No attendance records",
+        "error": "Retry GPS lock"
+      },
+      "layout": "Punch view: Front camera with face guide -> verifies -> displays Result Badge (Verified+ Green, Verified Blue, Flagged Amber). Calendar view: Heatmap grid of dates (DD/MM/YYYY, 12-hour) with status colors."
+    },
+    {
+      "name": "My Reports & Notifications",
+      "purpose": "Track submitted issues and read alerts.",
+      "states": {
+        "loading": "List skeleton",
+        "empty": "Clipboard checklist illustration + 'No reports yet'",
+        "error": "List error retry"
+      },
+      "layout": "List view with status chips on each row. Generous 56px minimum touch targets per row."
+    }
+  ],
+  "images": {
+    "reports_empty_state": {
+      "url": "https://images.unsplash.com/photo-1748609115191-c222eddc7a89?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxjbGlwYm9hcmQlMjBjaGVja2xpc3R8ZW58MHx8fHwxNzgzOTk0MTA3fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Clipboard checklist empty state illustration"
+    }
+  },
+  "instructions_to_main_agent": [
+    "STRICT ADHERENCE TO TOKENS: Colors: primary teal #0B4F6C, accent blue #3A5DAE, success #22C55E, danger #E85A6F, warning #F59E0B, background #F9F8F5, border #D4D1CA, text #28251D, muted #7A7974.",
+    "STRICT ADHERENCE TO SIZES: screenPadding 16, headerHeight 72, bottomTabHeight 72, minimum touch target 56px EVERYWHERE, incident tile height 120, category circle 110, FAB 56, camera shutter 88.",
+    "Typography: Use Baloo 2 font as requested. Keep the font size scale generous (base 16) for semi-literate users.",
+    "For semi-literate users: EVERY action MUST have a big button with an ICON + LABEL. Never use icon-only buttons. Minimize reading; use high contrast and big visual cues.",
+    "Home Screen Layout: Top element MUST be a full-width red 'Incident Report' tile (120px height) using the 'danger' color #E85A6F. Below it, a 2-column grid.",
+    "Incident Category Grid: Must contain exactly 8 circles of 110px size with icon and trilingual label.",
+    "Attendance Badges: Use specific colors: Verified+ (Green #22C55E), Verified (Blue #3A5DAE), Flagged (Amber #F59E0B). Do not use red for flagged.",
+    "Icon set: MUST use lucide-react-native.",
+    "No glassmorphism. This app requires solid backgrounds and crisp contrast for factory environments."
+  ]
+}

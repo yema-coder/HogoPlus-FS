@@ -54,10 +54,10 @@ DEPARTMENTS = [
 ]
 
 SHIFTS = [
-    ("A", "Shift A (06:00–14:00)", time(6, 0), time(14, 0)),
-    ("B", "Shift B (14:00–22:00)", time(14, 0), time(22, 0)),
-    ("C", "Shift C (22:00–06:00)", time(22, 0), time(6, 0)),
-    ("GEN", "General (09:00–17:30)", time(9, 0), time(17, 30)),
+    ("A", "Shift A (08:00-16:00)", time(8, 0), time(16, 0)),
+    ("B", "Shift B (16:00-00:00)", time(16, 0), time(0, 0)),
+    ("C", "Shift C (00:00-08:00)", time(0, 0), time(8, 0)),
+    ("GEN", "General (09:00-17:30)", time(9, 0), time(17, 30)),
 ]
 
 
