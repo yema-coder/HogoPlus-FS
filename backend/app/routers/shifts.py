@@ -1,0 +1,265 @@
+import uuid
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.audit import write_audit
+from app.database import get_session
+from app.models import Department, Employee, Shift, ShiftAssignment, ShiftSwapRequest
+from app.notify import dispatcher, template
+from app.schemas import SwapCreateIn, SwapDecideIn, SwapRespondIn
+from app.security import get_approved_employee, is_dept_manager, require_role
+from app.shift_logic import now_ist, resolve_shift_code
+
+router = APIRouter(tags=["shifts"])
+
+
+def _swap_out(s: ShiftSwapRequest) -> dict:
+    return {
+        "id": str(s.id),
+        "requester_id": str(s.requester_id),
+        "target_id": str(s.target_id),
+        "swap_date": s.swap_date.isoformat(),
+        "status": s.status,
+        "target_responded_at": s.target_responded_at.isoformat() if s.target_responded_at else None,
+        "manager_id": str(s.manager_id) if s.manager_id else None,
+        "manager_responded_at": s.manager_responded_at.isoformat() if s.manager_responded_at else None,
+        "reason": s.reason,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+    }
+
+
+@router.get("/shifts/mine")
+async def my_shifts(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    shifts = {s.code: s for s in (await session.execute(select(Shift))).scalars().all()}
+    today = now_ist().date()
+    out = []
+    for offset in range(8):
+        d = today + timedelta(days=offset)
+        code = await resolve_shift_code(session, employee.id, d)
+        shift = shifts.get(code) if code else None
+        out.append(
+            {
+                "date": d.isoformat(),
+                "shift_code": code,
+                "label": shift.label if shift else None,
+                "start_time": shift.start_time.isoformat() if shift else None,
+                "end_time": shift.end_time.isoformat() if shift else None,
+            }
+        )
+    return out
+
+
+@router.get("/shifts/roster")
+async def roster(
+    department_code: str,
+    date: str | None = Query(default=None),
+    employee: Employee = Depends(require_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    target = datetime.fromisoformat(date).date() if date else now_ist().date()
+    employees = (
+        await session.execute(
+            select(Employee).where(Employee.department_code == department_code, Employee.is_active.is_(True))
+        )
+    ).scalars().all()
+    out = []
+    for emp in employees:
+        code = await resolve_shift_code(session, emp.id, target)
+        out.append(
+            {
+                "employee_id": str(emp.id),
+                "emp_id": emp.emp_id,
+                "full_name": emp.full_name,
+                "designation": emp.designation,
+                "shift_code": code,
+            }
+        )
+    return {"department_code": department_code, "date": target.isoformat(), "roster": out}
+
+
+@router.post("/shift-swaps")
+async def create_swap(
+    body: SwapCreateIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    target = await session.get(Employee, body.target_employee_id)
+    if target is None or not target.is_active:
+        raise HTTPException(status_code=404, detail="Target employee not found")
+    if target.id == employee.id:
+        raise HTTPException(status_code=400, detail="Cannot swap with yourself")
+    if not employee.shift_swap_eligible or not target.shift_swap_eligible:
+        raise HTTPException(status_code=400, detail="Both employees must be shift-swap eligible")
+    if employee.department_code != target.department_code:
+        raise HTTPException(status_code=400, detail="Swap allowed only within the same department")
+    if body.swap_date < now_ist().date():
+        raise HTTPException(status_code=400, detail="Swap date cannot be in the past")
+
+    my_shift = await resolve_shift_code(session, employee.id, body.swap_date)
+    their_shift = await resolve_shift_code(session, target.id, body.swap_date)
+    if not my_shift or not their_shift:
+        raise HTTPException(status_code=400, detail="Both employees must have a shift on the swap date")
+    if my_shift == their_shift:
+        raise HTTPException(status_code=400, detail="Both employees are on the same shift that day")
+
+    swap = ShiftSwapRequest(
+        requester_id=employee.id,
+        target_id=target.id,
+        swap_date=body.swap_date,
+        reason=body.reason,
+        status="pending_target",
+    )
+    session.add(swap)
+    await session.flush()
+    title, notif_body = template("swap_request", f"{employee.full_name} → {body.swap_date.isoformat()}")
+    await dispatcher.notify(session, target.id, "swap_request", title, notif_body, "shift_swap", str(swap.id))
+    await write_audit(session, employee.id, "shift_swap.created", "shift_swap", str(swap.id), {"swap_date": body.swap_date.isoformat()})
+    await session.commit()
+    await session.refresh(swap)
+    return _swap_out(swap)
+
+
+@router.post("/shift-swaps/{swap_id}/respond")
+async def respond_swap(
+    swap_id: uuid.UUID,
+    body: SwapRespondIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    swap = await session.get(ShiftSwapRequest, swap_id)
+    if swap is None:
+        raise HTTPException(status_code=404, detail="Swap request not found")
+    if swap.target_id != employee.id:
+        raise HTTPException(status_code=403, detail="Only the target employee can respond")
+    if swap.status != "pending_target":
+        raise HTTPException(status_code=409, detail=f"Swap is {swap.status}")
+
+    swap.target_responded_at = datetime.now(timezone.utc)
+    if body.accept:
+        swap.status = "pending_manager"
+        # notify department manager (or CGM)
+        dept = (
+            await session.execute(select(Department).where(Department.code == employee.department_code))
+        ).scalar_one_or_none()
+        recipient = dept.manager_employee_id if dept else None
+        if recipient is None:
+            cgm = (
+                await session.execute(
+                    select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
+                )
+            ).scalar_one_or_none()
+            recipient = cgm.id if cgm else None
+        if recipient:
+            title, notif_body = template("swap_manager_pending", f"{swap.swap_date.isoformat()}")
+            await dispatcher.notify(session, recipient, "swap_manager_pending", title, notif_body, "shift_swap", str(swap.id))
+    else:
+        swap.status = "rejected"
+    await write_audit(
+        session, employee.id, "shift_swap.target_response", "shift_swap", str(swap.id),
+        {"accepted": body.accept},
+    )
+    await session.commit()
+    await session.refresh(swap)
+    return _swap_out(swap)
+
+
+@router.post("/shift-swaps/{swap_id}/decide")
+async def decide_swap(
+    swap_id: uuid.UUID,
+    body: SwapDecideIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    swap = await session.get(ShiftSwapRequest, swap_id)
+    if swap is None:
+        raise HTTPException(status_code=404, detail="Swap request not found")
+    requester = await session.get(Employee, swap.requester_id)
+    if not await is_dept_manager(session, employee, requester.department_code):
+        raise HTTPException(status_code=403, detail="Only the department Manager (or CGM/MD) can decide")
+    if swap.status != "pending_manager":
+        raise HTTPException(status_code=409, detail=f"Swap is {swap.status}")
+
+    swap.manager_id = employee.id
+    swap.manager_responded_at = datetime.now(timezone.utc)
+
+    if body.approve:
+        swap.status = "approved"
+        req_shift = await resolve_shift_code(session, swap.requester_id, swap.swap_date)
+        tgt_shift = await resolve_shift_code(session, swap.target_id, swap.swap_date)
+        for emp_id, new_code in ((swap.requester_id, tgt_shift), (swap.target_id, req_shift)):
+            existing = (
+                await session.execute(
+                    select(ShiftAssignment).where(
+                        ShiftAssignment.employee_id == emp_id,
+                        ShiftAssignment.effective_date == swap.swap_date,
+                        ShiftAssignment.source == "swap",
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing:
+                existing.shift_code = new_code
+            else:
+                session.add(
+                    ShiftAssignment(
+                        employee_id=emp_id, shift_code=new_code,
+                        effective_date=swap.swap_date, source="swap",
+                    )
+                )
+        # both sides to audit_events
+        detail = {
+            "swap_id": str(swap.id), "swap_date": swap.swap_date.isoformat(),
+            "requester_shift": f"{req_shift}->{tgt_shift}", "target_shift": f"{tgt_shift}->{req_shift}",
+        }
+        await write_audit(session, employee.id, "shift_swap.applied", "employee", str(swap.requester_id), detail)
+        await write_audit(session, employee.id, "shift_swap.applied", "employee", str(swap.target_id), detail)
+    else:
+        swap.status = "rejected"
+        swap.reason = body.reason or swap.reason
+
+    await write_audit(
+        session, employee.id,
+        "shift_swap.approved" if body.approve else "shift_swap.rejected",
+        "shift_swap", str(swap.id), {"reason": body.reason},
+    )
+    decision_txt = "approved" if body.approve else f"rejected: {body.reason or ''}"
+    for recipient in (swap.requester_id, swap.target_id):
+        title, notif_body = template("swap_decided", decision_txt)
+        await dispatcher.notify(session, recipient, "swap_decided", title, notif_body, "shift_swap", str(swap.id))
+    await session.commit()
+    await session.refresh(swap)
+    return _swap_out(swap)
+
+
+@router.get("/shift-swaps/mine")
+async def my_swaps(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = (
+        await session.execute(
+            select(ShiftSwapRequest)
+            .where((ShiftSwapRequest.requester_id == employee.id) | (ShiftSwapRequest.target_id == employee.id))
+            .order_by(ShiftSwapRequest.created_at.desc())
+        )
+    ).scalars().all()
+    return [_swap_out(s) for s in rows]
+
+
+@router.get("/shift-swaps/pending")
+async def pending_swaps(
+    employee: Employee = Depends(require_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    query = select(ShiftSwapRequest).where(ShiftSwapRequest.status == "pending_manager")
+    if employee.role.rank == 3:
+        query = query.join(Employee, ShiftSwapRequest.requester_id == Employee.id).where(
+            Employee.department_code == employee.department_code
+        )
+    rows = (await session.execute(query.order_by(ShiftSwapRequest.created_at.desc()))).scalars().all()
+    return [_swap_out(s) for s in rows]

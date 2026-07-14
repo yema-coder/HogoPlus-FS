@@ -1,0 +1,402 @@
+emp_id,full_name,phone,department_code,designation,role_code,shift_swap_eligible,phone_status,language_pref
+0001,Rajendra Deshmukh,+919700000001,ADMIN,Chief General Manager,CGM,false,OK,en
+0002,Onkar Shinde,+919700000002,PRODUCTION,Production Manager,Manager,false,OK,en
+0003,Suresh Yadav,+919700000003,ENGINEERING,Chief Engineer,Manager,false,OK,en
+0004,Balasaheb Kale,+919700000004,SECURITY,Chief Security Officer,Manager,false,OK,en
+0005,Santosh Pawar,+919700000005,TIME_OFFICE,Time Office In-Charge,Manager,false,OK,en
+0006,Yashwant Shinde,+919700000006,ACCOUNTS,Chief Accountant,Manager,false,OK,en
+0007,Shantaram Yadav,+919700000007,STORE,Stores Manager,Manager,false,OK,en
+0008,Jalindar Mane,+919700000008,PRODUCTION,Chemist,Staff,false,OK,mr
+0009,Vitthal Gaikwad,+919700000009,PRODUCTION,Chemist,Staff,false,OK,mr
+0010,Dnyaneshwar Gaikwad,+919700000010,PRODUCTION,Chemist,Staff,false,OK,hi
+0011,Santosh Kamble,+919700000011,PRODUCTION,Pan In-Charge,Staff,false,OK,hi
+0012,Archana Gholap,+919700000012,PRODUCTION,Shift Supervisor,Staff,false,OK,mr
+0013,Trimbak Mane,+919700000013,PRODUCTION,Lab Assistant,Staff,false,OK,mr
+0014,Vijay Gaikwad,+919700000014,PRODUCTION,Shift Supervisor,Staff,false,OK,mr
+0015,Vitthal Thorat,+919700000015,ENGINEERING,Junior Engineer,Staff,false,OK,mr
+0016,Shobha Salunkhe,+919700000016,ENGINEERING,Electrical Engineer,Staff,false,OK,hi
+0017,Archana Deshmukh,+919700000017,ENGINEERING,Electrical Engineer,Staff,false,OK,hi
+0018,Eknath Shinde,+919700000018,ENGINEERING,Electrical Engineer,Staff,false,OK,mr
+0019,Dnyaneshwar Bhosale,+919700000019,ENGINEERING,Junior Engineer,Staff,false,OK,hi
+0020,Jyoti Gholap,+919700000020,ENGINEERING,Instrumentation Technician,Staff,false,OK,mr
+0021,Uttam Jadhav,+919700000021,DISTILLERY,Distillery Chemist,Staff,false,OK,mr
+0022,Vandana Bhosale,+919700000022,DISTILLERY,Distillery Chemist,Staff,false,OK,mr
+0023,Mangal Shinde,+919700000023,DISTILLERY,Distillery Chemist,Staff,false,OK,mr
+0024,Vikas Lokhande,+919700000024,DISTILLERY,Shift Supervisor,Staff,false,OK,mr
+0025,Nitin Salunkhe,+919700000025,AGRICULTURE,Agriculture Officer,Staff,false,OK,mr
+0026,Trimbak Rendal,+919700000026,AGRICULTURE,Cane Development Officer,Staff,false,OK,hi
+0027,Laxman Lokhande,+919700000027,AGRICULTURE,Agriculture Officer,Staff,false,OK,mr
+0028,Ajay Kamble,+919700000028,AGRICULTURE,Agriculture Officer,Staff,false,OK,mr
+0029,Pooja Lokhande,+919700000029,ACCOUNTS,Assistant Accountant,Staff,false,OK,hi
+0030,Shantaram Kadam,+919700000030,ACCOUNTS,Accountant,Staff,false,OK,mr
+0031,Savita Deshmukh,+919700000031,ACCOUNTS,Accountant,Staff,false,OK,mr
+0032,Balasaheb Jadhav,+919700000032,ACCOUNTS,Assistant Accountant,Staff,false,OK,mr
+0033,Rajesh Lokhande,+919700000033,ADMIN,Computer Operator,Staff,false,OK,mr
+0034,Jyoti Rendal,+919700000034,ADMIN,Computer Operator,Staff,false,OK,hi
+0035,Vijay Chavan,+919700000035,ADMIN,Computer Operator,Staff,false,OK,mr
+0036,Yashwant Dhumal,+919700000036,STORE,Store Keeper,Staff,false,OK,hi
+0037,Yashwant Nikam,+919700000037,STORE,Assistant Store Keeper,Staff,false,OK,mr
+0038,Nitin Kale,+919700000038,STORE,Assistant Store Keeper,Staff,false,OK,mr
+0039,Vitthal Zende,+919700000039,CANE_YARD,Yard Supervisor,Staff,false,OK,mr
+0040,Vijay Lokhande,+919700000040,CANE_YARD,Weighbridge Operator,Staff,false,OK,mr
+0041,Laxman Jadhav,+919700000041,CANE_YARD,Yard Supervisor,Staff,false,OK,mr
+0042,Laxman Kamble,+919700000042,SECURITY,Security Havaldar,Staff,true,OK,hi
+0043,Dnyaneshwar Gholap,+919700000043,SECURITY,Security Havaldar,Staff,true,OK,mr
+0044,Shantaram Autade,+919700000044,TIME_OFFICE,Time Keeper,Staff,false,OK,hi
+0045,Vandana Lokhande,+919700000045,PURCHASE,Purchase Assistant,Staff,false,OK,mr
+0046,Tukaram Mane,+919700000046,GODOWN,Godown Keeper,Staff,false,OK,mr
+0047,Ramesh Yadav,+919700000047,CIVIL,Civil Overseer,Staff,false,OK,hi
+0048,Bhausaheb Sawant,+919700000048,ACCOUNTS,Junior Clerk,Clerk,false,OK,hi
+0049,Ashwini Shinde,+919700000049,ACCOUNTS,Record Clerk,Clerk,false,OK,mr
+0050,Rekha Lokhande,+919700000050,ACCOUNTS,Godown Clerk,Clerk,false,OK,hi
+0051,Sunil Pawar,+919700000051,ACCOUNTS,Cane Clerk,Clerk,false,OK,mr
+0052,Eknath Zende,+919700000052,ACCOUNTS,Godown Clerk,Clerk,false,OK,mr
+0053,Laxman Kadam,+919700000053,TIME_OFFICE,Bill Clerk,Clerk,false,OK,mr
+0054,Sachin Rendal,+919700000054,TIME_OFFICE,Cane Clerk,Clerk,false,OK,mr
+0055,Kailas Deshmukh,+919700000055,TIME_OFFICE,Junior Clerk,Clerk,false,OK,hi
+0056,Vitthal Jadhav,+919700000056,TIME_OFFICE,Record Clerk,Clerk,false,OK,mr
+0057,Savita Jadhav,+919700000057,STORE,Godown Clerk,Clerk,false,OK,mr
+0058,Sanjay Shelar,+919700000058,STORE,Bill Clerk,Clerk,false,OK,hi
+0059,Ajay Chavan,+919700000059,STORE,Godown Clerk,Clerk,false,OK,hi
+0060,Rahul Gaikwad,+919700000060,STORE,Godown Clerk,Clerk,false,OK,hi
+0061,Trimbak Gaikwad,+919700000061,PURCHASE,Record Clerk,Clerk,false,OK,mr
+0062,Swapnil Shelar,+919700000062,PURCHASE,Record Clerk,Clerk,false,OK,mr
+0063,Rohit Autade,+919700000063,PURCHASE,Godown Clerk,Clerk,false,OK,mr
+0064,Sachin Kale,+919700000064,GODOWN,Junior Clerk,Clerk,false,OK,mr
+0065,Shivaji Patil,+919700000065,GODOWN,Godown Clerk,Clerk,false,OK,hi
+0066,Santosh Nikam,+919700000066,GODOWN,Junior Clerk,Clerk,false,OK,mr
+0067,Prakash Suryawanshi,+919700000067,ADMIN,Record Clerk,Clerk,false,OK,mr
+0068,Santosh Jadhav,+919700000068,ADMIN,Clerk,Clerk,false,OK,mr
+0069,Prakash Sawant,+919700000069,ADMIN,Junior Clerk,Clerk,false,OK,mr
+0070,Raosaheb Waghmare,+919700000070,CANE_YARD,Junior Clerk,Clerk,false,OK,hi
+0071,Sanjay Yadav,+919700000071,CANE_YARD,Godown Clerk,Clerk,false,OK,hi
+0072,Dinesh Kale,+919700000072,CANE_YARD,Bill Clerk,Clerk,false,OK,mr
+0073,Sunil Shinde,+919700000073,AGRICULTURE,Clerk,Clerk,false,OK,hi
+0074,Rahul Salunkhe,+919700000074,AGRICULTURE,Bill Clerk,Clerk,false,OK,mr
+0075,Vikas Gholap,+919700000075,PRODUCTION,Record Clerk,Clerk,false,OK,mr
+0076,Shantaram Lokhande,+919700000076,ENGINEERING,Record Clerk,Clerk,false,OK,mr
+0077,Mahesh Thorat,+919700000077,DISTILLERY,Record Clerk,Clerk,false,OK,mr
+0078,Archana Gholap,+919700000078,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0079,Kailas Gaikwad,+919700000079,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0080,Eknath Kamble,+919700000080,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0081,Rahul More,+919700000081,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0082,Vikas Kale,+919700000082,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0083,Rohit Ingale,+919700000083,PRODUCTION,Helper,Worker,true,OK,mr
+0084,Dattatray Deshmukh,+919700000084,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0085,Eknath Bansode,+919700000085,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0086,Vitthal Rendal,+919700000086,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0087,Ajay Mane,+919700000087,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0088,Dinesh Gaikwad,+919700000088,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0089,Kavita Deshmukh,+919700000089,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0090,Sagar Patil,+919700000090,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0091,Bhausaheb Rendal,+919700000091,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0092,Tukaram Mane,+919700000092,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0093,Vasant Ingale,+919700000093,PRODUCTION,Helper,Worker,true,OK,mr
+0094,Raosaheb Suryawanshi,+919700000094,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0095,Vijay Gaikwad,+919700000095,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0096,Rajesh Deshmukh,+919700000096,PRODUCTION,Helper,Worker,true,OK,mr
+0097,Yashwant Dhumal,+919700000097,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0098,Yashwant Kadam,+919700000098,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0099,Mahesh Nikam,+919700000099,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0100,Manoj Rendal,+919700000100,PRODUCTION,Helper,Worker,true,OK,mr
+0101,Mahesh Sawant,,PRODUCTION,Pan Operator,Worker,true,MISSING,mr
+0102,Shobha More,+919700000102,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0103,Laxman Jadhav,+919700000103,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0104,Mangal Kale,+919700000104,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0105,Sachin Autade,+919700000105,PRODUCTION,Helper,Worker,true,OK,mr
+0106,Kailas Nikam,+919700000106,PRODUCTION,Helper,Worker,true,OK,mr
+0107,Ganesh Ghadge,+919700000107,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0108,Amol Shelar,+919700000108,PRODUCTION,Helper,Worker,true,OK,mr
+0109,Hanumant Sawant,+919700000109,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0110,Pooja Chavan,+919700000110,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0111,Raosaheb Suryawanshi,+919700000111,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0112,Kailas Chavan,+919700000112,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0113,Sanjay Shelar,+919700000113,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0114,Namdev Kamble,+919700000114,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0115,Pooja Zende,+919700000115,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0116,Ramesh Kamble,+919700000116,PRODUCTION,Helper,Worker,true,OK,mr
+0117,Hanumant Shinde,+919700000117,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0118,Eknath Gaikwad,+919700000118,PRODUCTION,Helper,Worker,true,OK,mr
+0119,Bhausaheb Pawar,+919700000119,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0120,Jyoti Jadhav,+919700000120,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0121,Nitin Bhosale,+919700000121,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0122,Rohit Bansode,+919700000122,PRODUCTION,Helper,Worker,true,OK,mr
+0123,Uttam Bhosale,+919700000123,PRODUCTION,Helper,Worker,true,OK,mr
+0124,Archana Lokhande,+919700000124,PRODUCTION,Helper,Worker,true,OK,mr
+0125,Ramesh Shelar,+919700000125,PRODUCTION,Helper,Worker,true,OK,mr
+0126,Namdev Rendal,+919700000126,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0127,Dattatray Autade,+919700000127,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0128,Bhausaheb Shinde,+919700000128,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0129,Yashwant Dhumal,+919700000129,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0130,Balasaheb Bhosale,+919700000130,PRODUCTION,Helper,Worker,true,OK,mr
+0131,Rajesh Suryawanshi,+919700000131,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0132,Rajesh Shelar,+919700000132,PRODUCTION,Mazdoor,Worker,true,OK,mr
+0133,Shobha Chavan,+919700000133,PRODUCTION,Helper,Worker,true,OK,mr
+0134,Kiran Chavan,+919700000134,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0135,Vitthal Lokhande,+919700000135,PRODUCTION,Machine Operator,Worker,true,OK,mr
+0136,Rekha Chavan,+919700000136,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0137,Ramesh Kadam,+919700000137,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0138,Onkar Chavan,+919700000138,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0139,Yashwant Kamble,+919700000139,PRODUCTION,Helper,Worker,true,OK,mr
+0140,Uttam Mane,+919700000140,PRODUCTION,Helper,Worker,true,OK,mr
+0141,Ramesh Shinde,+919700000141,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0142,Jyoti Suryawanshi,+919700000142,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0143,Eknath Deshmukh,+919700000143,PRODUCTION,Boiler Attendant,Worker,true,OK,mr
+0144,Jalindar Dhumal,+919700000144,PRODUCTION,Centrifugal Operator,Worker,true,OK,mr
+0145,Rahul Pawar,+919700000145,PRODUCTION,Pan Operator,Worker,true,OK,mr
+0146,Namdev Salunkhe,+919700000146,ENGINEERING,Khalashi,Worker,true,OK,mr
+0147,Mangal Deshmukh,+919700000147,ENGINEERING,Welder,Worker,true,OK,mr
+0148,Rajesh Shelar,+919700000148,ENGINEERING,Turner,Worker,true,OK,mr
+0149,Raosaheb Shinde,+919700000149,ENGINEERING,Welder,Worker,true,OK,mr
+0150,Madhukar Yadav,,ENGINEERING,Turner,Worker,true,INVALID,mr
+0151,Pooja Rendal,+919700000151,ENGINEERING,Turner,Worker,true,OK,mr
+0152,Mangal More,+919700000152,ENGINEERING,Khalashi,Worker,true,OK,mr
+0153,Archana More,+919700000153,ENGINEERING,Electrician,Worker,true,OK,mr
+0154,Suresh More,+919700000154,ENGINEERING,Helper,Worker,true,OK,mr
+0155,Pooja Kadam,+919700000155,ENGINEERING,Khalashi,Worker,true,OK,mr
+0156,Pooja Mane,+919700000156,ENGINEERING,Khalashi,Worker,true,OK,mr
+0157,Raosaheb Gholap,+919700000157,ENGINEERING,Helper,Worker,true,OK,mr
+0158,Archana Kale,+919700000158,ENGINEERING,Welder,Worker,true,OK,mr
+0159,Ajay Ingale,+919700000159,ENGINEERING,Helper,Worker,true,OK,mr
+0160,Dattatray Thorat,+919700000160,ENGINEERING,Khalashi,Worker,true,OK,mr
+0161,Ganesh Gholap,+919700000161,ENGINEERING,Electrician,Worker,true,OK,mr
+0162,Santosh Gaikwad,+919700000162,ENGINEERING,Khalashi,Worker,true,OK,mr
+0163,Ashwini Kamble,+919700000163,ENGINEERING,Welder,Worker,true,OK,mr
+0164,Namdev Bansode,+919700000164,ENGINEERING,Khalashi,Worker,true,OK,mr
+0165,Mangal Kale,+919700000165,ENGINEERING,Turner,Worker,true,OK,mr
+0166,Suresh Shelar,+919700000166,ENGINEERING,Turner,Worker,true,OK,mr
+0167,Swapnil Kadam,+919700000167,ENGINEERING,Welder,Worker,true,OK,mr
+0168,Mangal Jadhav,+919700000168,ENGINEERING,Khalashi,Worker,true,OK,mr
+0169,Balasaheb Salunkhe,+919700000169,ENGINEERING,Helper,Worker,true,OK,mr
+0170,Manoj Thorat,+919700000170,ENGINEERING,Helper,Worker,true,OK,mr
+0171,Rekha Dhumal,+919700000171,ENGINEERING,Welder,Worker,true,OK,mr
+0172,Suresh Shinde,+919700000172,ENGINEERING,Welder,Worker,true,OK,mr
+0173,Anil Nikam,+919700000173,ENGINEERING,Welder,Worker,true,OK,mr
+0174,Ganesh Shinde,+919700000174,ENGINEERING,Wireman,Worker,true,OK,mr
+0175,Rahul Salunkhe,+919700000175,ENGINEERING,Helper,Worker,true,OK,mr
+0176,Manisha Kadam,+919700000176,ENGINEERING,Electrician,Worker,true,OK,mr
+0177,Laxman Sawant,+919700000177,ENGINEERING,Fitter,Worker,true,OK,mr
+0178,Sagar Autade,+919700000178,ENGINEERING,Wireman,Worker,true,OK,mr
+0179,Sunil Chavan,+919700000179,ENGINEERING,Fitter,Worker,true,OK,mr
+0180,Uttam Mane,+919700000180,ENGINEERING,Fitter,Worker,true,OK,mr
+0181,Popat Rendal,+919700000181,ENGINEERING,Khalashi,Worker,true,OK,mr
+0182,Eknath Shelar,+919700000182,ENGINEERING,Helper,Worker,true,OK,mr
+0183,Yashwant Yadav,+919700000183,ENGINEERING,Helper,Worker,true,OK,mr
+0184,Sunil Salunkhe,+919700000184,ENGINEERING,Electrician,Worker,true,OK,mr
+0185,Prakash Shelar,+919700000185,ENGINEERING,Welder,Worker,true,OK,mr
+0186,Madhukar Kadam,+919700000186,ENGINEERING,Helper,Worker,true,OK,mr
+0187,Shobha Shinde,+919700000187,ENGINEERING,Helper,Worker,true,OK,mr
+0188,Kavita Bhosale,+919700000188,ENGINEERING,Wireman,Worker,true,OK,mr
+0189,Namdev Shelar,+919700000189,ENGINEERING,Electrician,Worker,true,OK,mr
+0190,Pandurang Thorat,+919700000190,ENGINEERING,Helper,Worker,true,OK,mr
+0191,Tukaram Dhumal,+919700000191,ENGINEERING,Turner,Worker,true,OK,mr
+0192,Sunil Mane,+919700000192,ENGINEERING,Helper,Worker,true,OK,mr
+0193,Sagar Shelar,+919700000193,ENGINEERING,Helper,Worker,true,OK,mr
+0194,Kavita More,+919700000194,ENGINEERING,Wireman,Worker,true,OK,mr
+0195,Hanumant Bhosale,+919700000195,ENGINEERING,Electrician,Worker,true,OK,mr
+0196,Dnyaneshwar Bansode,+919700000196,ENGINEERING,Fitter,Worker,true,OK,mr
+0197,Namdev Bhosale,+919700000197,ENGINEERING,Turner,Worker,true,OK,mr
+0198,Rahul Ingale,+919700000198,ENGINEERING,Wireman,Worker,true,OK,mr
+0199,Laxman Lokhande,+919700000199,ENGINEERING,Welder,Worker,true,OK,mr
+0200,Rohit Kamble,,ENGINEERING,Helper,Worker,true,INVALID,mr
+0201,Rajesh Sawant,+919700000201,ENGINEERING,Electrician,Worker,true,OK,mr
+0202,Manisha Autade,+919700000202,ENGINEERING,Khalashi,Worker,true,OK,mr
+0203,Yashwant More,+919700000203,ENGINEERING,Helper,Worker,true,OK,mr
+0204,Vitthal Bhosale,+919700000204,CANE_YARD,Hamal,Worker,true,OK,mr
+0205,Vitthal Bansode,+919700000205,CANE_YARD,Unloader,Worker,true,OK,mr
+0206,Shantaram Bhosale,+919700000206,CANE_YARD,Unloader,Worker,true,OK,mr
+0207,Archana Gaikwad,+919700000207,CANE_YARD,Unloader,Worker,true,OK,mr
+0208,Suresh Deshmukh,+919700000208,CANE_YARD,Unloader,Worker,true,OK,mr
+0209,Dinesh Ghadge,+919700000209,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0210,Vikas Mane,+919700000210,CANE_YARD,Unloader,Worker,true,OK,mr
+0211,Uttam Suryawanshi,+919700000211,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0212,Kiran Thorat,+919700000212,CANE_YARD,Unloader,Worker,true,OK,mr
+0213,Vijay Lokhande,+919700000213,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0214,Kavita Zende,+919700000214,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0215,Vandana Mane,+919700000215,CANE_YARD,Unloader,Worker,true,OK,mr
+0216,Anil Ingale,+919700000216,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0217,Mahesh Dhumal,+919700000217,CANE_YARD,Unloader,Worker,true,OK,mr
+0218,Ashwini Gholap,+919700000218,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0219,Vikas Pawar,+919700000219,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0220,Raosaheb Sawant,+919700000220,CANE_YARD,Hamal,Worker,true,OK,mr
+0221,Sunita Autade,+919700000221,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0222,Madhukar Bansode,+919700000222,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0223,Rekha Rendal,+919700000223,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0224,Kavita More,+919700000224,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0225,Rohit Chavan,+919700000225,CANE_YARD,Unloader,Worker,true,OK,mr
+0226,Rekha Lokhande,+919700000226,CANE_YARD,Hamal,Worker,true,OK,mr
+0227,Vandana Zende,+919700000227,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0228,Onkar Kale,+919700000228,CANE_YARD,Hamal,Worker,true,OK,mr
+0229,Rohit Jadhav,+919700000229,CANE_YARD,Hamal,Worker,true,OK,mr
+0230,Kailas Chavan,+919700000230,CANE_YARD,Hamal,Worker,true,OK,mr
+0231,Pandurang Autade,+919700000231,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0232,Sanjay Pawar,+919700000232,CANE_YARD,Unloader,Worker,true,OK,mr
+0233,Sagar Suryawanshi,+919700000233,CANE_YARD,Unloader,Worker,true,OK,mr
+0234,Uttam Gaikwad,+919700000234,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0235,Amol Mane,+919700000235,CANE_YARD,Hamal,Worker,true,OK,mr
+0236,Eknath Kamble,+919700000236,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0237,Mahesh Gaikwad,+919700000237,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0238,Sagar Autade,+919700000238,CANE_YARD,Crane Operator,Worker,true,OK,mr
+0239,Shobha Autade,+919700000239,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0240,Dinesh Patil,+919700000240,CANE_YARD,Hamal,Worker,true,OK,mr
+0241,Namdev Zende,+919700000241,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0242,Shobha Autade,+919700000242,CANE_YARD,Mazdoor,Worker,true,OK,mr
+0243,Eknath Yadav,+919700000243,CANE_YARD,Unloader,Worker,true,OK,mr
+0244,Kiran Kale,+919700000244,DISTILLERY,Helper,Worker,true,OK,mr
+0245,Rahul Waghmare,+919700000245,DISTILLERY,Still Operator,Worker,true,OK,mr
+0246,Sagar Kadam,+919700000246,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0247,Vasant More,+919700000247,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0248,Ashwini Pawar,+919700000248,DISTILLERY,Still Operator,Worker,true,OK,mr
+0249,Ashwini Thorat,+919700000249,DISTILLERY,Still Operator,Worker,true,OK,mr
+0250,Pravin Mane,,DISTILLERY,Fermentation Attendant,Worker,true,MISSING,mr
+0251,Mangal Kamble,+919700000251,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0252,Mahesh Chavan,+919700000252,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0253,Pandurang Gaikwad,+919700000253,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0254,Pandurang Kadam,+919700000254,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0255,Balasaheb Zende,+919700000255,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0256,Bhausaheb Bansode,+919700000256,DISTILLERY,Still Operator,Worker,true,OK,mr
+0257,Dinesh Patil,+919700000257,DISTILLERY,Still Operator,Worker,true,OK,mr
+0258,Sambhaji Kale,+919700000258,DISTILLERY,Still Operator,Worker,true,OK,mr
+0259,Vandana Lokhande,+919700000259,DISTILLERY,Still Operator,Worker,true,OK,mr
+0260,Sunita Patil,+919700000260,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0261,Sunil Bansode,+919700000261,DISTILLERY,Still Operator,Worker,true,OK,mr
+0262,Madhukar Pawar,+919700000262,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0263,Sanjay Waghmare,+919700000263,DISTILLERY,Still Operator,Worker,true,OK,mr
+0264,Hanumant Gaikwad,+919700000264,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0265,Trimbak Chavan,+919700000265,DISTILLERY,Helper,Worker,true,OK,mr
+0266,Ajay Ghadge,+919700000266,DISTILLERY,Still Operator,Worker,true,OK,mr
+0267,Vandana Bansode,+919700000267,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0268,Namdev Shinde,+919700000268,DISTILLERY,Still Operator,Worker,true,OK,mr
+0269,Pooja Bhosale,+919700000269,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0270,Swapnil Suryawanshi,+919700000270,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0271,Prakash Nikam,+919700000271,DISTILLERY,Fermentation Attendant,Worker,true,OK,mr
+0272,Dattatray Suryawanshi,+919700000272,DISTILLERY,Helper,Worker,true,OK,mr
+0273,Shobha Shelar,+919700000273,DISTILLERY,Still Operator,Worker,true,OK,mr
+0274,Manisha Nikam,+919700000274,DISTILLERY,Still Operator,Worker,true,OK,mr
+0275,Sambhaji Dhumal,+919700000275,DISTILLERY,Mazdoor,Worker,true,OK,mr
+0276,Raosaheb Salunkhe,+919700000276,DISTILLERY,Still Operator,Worker,true,OK,mr
+0277,Manoj Lokhande,+919700000277,DISTILLERY,Helper,Worker,true,OK,mr
+0278,Ramesh Gholap,+919700000278,SECURITY,Watchman,Worker,true,OK,mr
+0279,Savita Waghmare,+919700000279,SECURITY,Security Guard,Worker,true,OK,mr
+0280,Rahul Salunkhe,+919700000280,SECURITY,Gate Keeper,Worker,true,OK,mr
+0281,Kavita Bansode,+919700000281,SECURITY,Watchman,Worker,true,OK,mr
+0282,Uttam Pawar,+919700000282,SECURITY,Watchman,Worker,true,OK,mr
+0283,Anil Yadav,+919700000283,SECURITY,Gate Keeper,Worker,true,OK,mr
+0284,Pravin Chavan,+919700000284,SECURITY,Gate Keeper,Worker,true,OK,mr
+0285,Archana Rendal,+919700000285,SECURITY,Gate Keeper,Worker,true,OK,mr
+0286,Vandana Waghmare,+919700000286,SECURITY,Watchman,Worker,true,OK,mr
+0287,Rahul Bansode,+919700000287,SECURITY,Gate Keeper,Worker,true,OK,mr
+0288,Jalindar Chavan,+919700000288,SECURITY,Watchman,Worker,true,OK,mr
+0289,Shobha Kale,+919700000289,SECURITY,Security Guard,Worker,true,OK,mr
+0290,Balasaheb Autade,+919700000290,SECURITY,Watchman,Worker,true,OK,mr
+0291,Kailas Zende,+919700000291,SECURITY,Watchman,Worker,true,OK,mr
+0292,Hanumant Ghadge,+919700000292,SECURITY,Gate Keeper,Worker,true,OK,mr
+0293,Sagar Kadam,+919700000293,SECURITY,Security Guard,Worker,true,OK,mr
+0294,Kiran Gholap,+919700000294,SECURITY,Watchman,Worker,true,OK,mr
+0295,Anil Waghmare,+919700000295,SECURITY,Security Guard,Worker,true,OK,mr
+0296,Sambhaji Ingale,+919700000296,SECURITY,Watchman,Worker,true,OK,mr
+0297,Shivaji Chavan,+919700000297,SECURITY,Gate Keeper,Worker,true,OK,mr
+0298,Trimbak Autade,+919700000298,SECURITY,Watchman,Worker,true,OK,mr
+0299,Dnyaneshwar Patil,+919700000299,SECURITY,Gate Keeper,Worker,true,OK,mr
+0300,Vitthal Kale,,SECURITY,Gate Keeper,Worker,true,MISSING,mr
+0301,Amol Waghmare,+919700000301,SECURITY,Gate Keeper,Worker,true,OK,mr
+0302,Sunita Kale,+919700000302,SECURITY,Gate Keeper,Worker,true,OK,mr
+0303,Dinesh Lokhande,+919700000303,SECURITY,Gate Keeper,Worker,true,OK,mr
+0304,Kiran Kamble,+919700000304,SECURITY,Security Guard,Worker,true,OK,mr
+0305,Vitthal Bhosale,+919700000305,SECURITY,Security Guard,Worker,true,OK,mr
+0306,Swapnil Suryawanshi,+919700000306,SECURITY,Security Guard,Worker,true,OK,mr
+0307,Namdev Shelar,+919700000307,SECURITY,Gate Keeper,Worker,true,OK,mr
+0308,Nitin Waghmare,+919700000308,AGRICULTURE,Driver,Worker,true,OK,mr
+0309,Popat Salunkhe,+919700000309,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0310,Yashwant Dhumal,+919700000310,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0311,Sambhaji Suryawanshi,+919700000311,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0312,Balasaheb Bhosale,+919700000312,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0313,Santosh Shinde,+919700000313,AGRICULTURE,Driver,Worker,true,OK,mr
+0314,Sunil Kadam,+919700000314,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0315,Yashwant Dhumal,+919700000315,AGRICULTURE,Driver,Worker,true,OK,mr
+0316,Anil Gaikwad,+919700000316,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0317,Yashwant Waghmare,+919700000317,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0318,Vasant Nikam,+919700000318,AGRICULTURE,Driver,Worker,true,OK,mr
+0319,Laxman Bhosale,+919700000319,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0320,Rekha Gaikwad,+919700000320,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0321,Santosh Salunkhe,+919700000321,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0322,Namdev Patil,+919700000322,AGRICULTURE,Driver,Worker,true,OK,mr
+0323,Eknath Pawar,+919700000323,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0324,Ganesh Deshmukh,+919700000324,AGRICULTURE,Driver,Worker,true,OK,mr
+0325,Tukaram Suryawanshi,+919700000325,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0326,Onkar Gholap,+919700000326,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0327,Dattatray Gholap,+919700000327,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0328,Hanumant Bhosale,+919700000328,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0329,Dinesh Kamble,+919700000329,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0330,Anil Deshmukh,+919700000330,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0331,Mangal Waghmare,+919700000331,AGRICULTURE,Field Mazdoor,Worker,true,OK,mr
+0332,Savita Jadhav,+919700000332,AGRICULTURE,Nursery Worker,Worker,true,OK,mr
+0333,Kiran Jadhav,+919700000333,AGRICULTURE,Driver,Worker,true,OK,mr
+0334,Onkar Shelar,+919700000334,GODOWN,Hamal,Worker,true,OK,mr
+0335,Vijay Pawar,+919700000335,GODOWN,Helper,Worker,true,OK,mr
+0336,Namdev Jadhav,+919700000336,GODOWN,Hamal,Worker,true,OK,mr
+0337,Sachin Dhumal,+919700000337,GODOWN,Bag Stacker,Worker,true,OK,mr
+0338,Laxman Ghadge,+919700000338,GODOWN,Helper,Worker,true,OK,mr
+0339,Santosh Zende,+919700000339,GODOWN,Helper,Worker,true,OK,mr
+0340,Sagar Kamble,+919700000340,GODOWN,Bag Stacker,Worker,true,OK,mr
+0341,Namdev Gholap,+919700000341,GODOWN,Helper,Worker,true,OK,mr
+0342,Rahul Bhosale,+919700000342,GODOWN,Helper,Worker,true,OK,mr
+0343,Madhukar Deshmukh,+919700000343,GODOWN,Helper,Worker,true,OK,mr
+0344,Yashwant Shinde,+919700000344,GODOWN,Hamal,Worker,true,OK,mr
+0345,Onkar Gaikwad,+919700000345,GODOWN,Bag Stacker,Worker,true,OK,mr
+0346,Raosaheb Jadhav,+919700000346,GODOWN,Hamal,Worker,true,OK,mr
+0347,Kailas More,+919700000347,GODOWN,Helper,Worker,true,OK,mr
+0348,Prakash More,+919700000348,GODOWN,Hamal,Worker,true,OK,mr
+0349,Amol Kamble,+919700000349,GODOWN,Helper,Worker,true,OK,mr
+0350,Tukaram Deshmukh,,GODOWN,Hamal,Worker,true,INVALID,mr
+0351,Tukaram Suryawanshi,+919700000351,GODOWN,Bag Stacker,Worker,true,OK,mr
+0352,Trimbak Gholap,+919700000352,STORE,Helper,Worker,true,OK,mr
+0353,Prakash Shelar,+919700000353,STORE,Hamal,Worker,true,OK,mr
+0354,Pooja Chavan,+919700000354,STORE,Hamal,Worker,true,OK,mr
+0355,Rahul Shinde,+919700000355,STORE,Hamal,Worker,true,OK,mr
+0356,Pravin Pawar,+919700000356,STORE,Helper,Worker,true,OK,mr
+0357,Savita Pawar,+919700000357,STORE,Hamal,Worker,true,OK,mr
+0358,Mahesh More,+919700000358,STORE,Helper,Worker,true,OK,mr
+0359,Laxman Yadav,+919700000359,STORE,Helper,Worker,true,OK,mr
+0360,Rohit Shinde,+919700000360,STORE,Helper,Worker,true,OK,mr
+0361,Trimbak Bhosale,+919700000361,STORE,Helper,Worker,true,OK,mr
+0362,Balasaheb Sawant,+919700000362,STORE,Helper,Worker,true,OK,mr
+0363,Rohit Jadhav,+919700000363,STORE,Hamal,Worker,true,OK,mr
+0364,Jyoti Mane,+919700000364,STORE,Helper,Worker,true,OK,mr
+0365,Laxman Chavan,+919700000365,STORE,Hamal,Worker,true,OK,mr
+0366,Vitthal Kale,+919700000366,CIVIL,Mason,Worker,true,OK,mr
+0367,Sunita Shelar,+919700000367,CIVIL,Plumber,Worker,true,OK,mr
+0368,Hanumant Deshmukh,+919700000368,CIVIL,Carpenter,Worker,true,OK,mr
+0369,Dinesh Sawant,+919700000369,CIVIL,Helper,Worker,true,OK,mr
+0370,Ashwini Chavan,+919700000370,CIVIL,Carpenter,Worker,true,OK,mr
+0371,Jalindar Mane,+919700000371,CIVIL,Helper,Worker,true,OK,mr
+0372,Vitthal Waghmare,+919700000372,CIVIL,Plumber,Worker,true,OK,mr
+0373,Amol Kadam,+919700000373,CIVIL,Plumber,Worker,true,OK,mr
+0374,Raosaheb Shinde,+919700000374,CIVIL,Carpenter,Worker,true,OK,mr
+0375,Shivaji Mane,+919700000375,CIVIL,Helper,Worker,true,OK,mr
+0376,Tukaram Shelar,+919700000376,CIVIL,Helper,Worker,true,OK,mr
+0377,Savita Zende,+919700000377,CIVIL,Mason,Worker,true,OK,mr
+0378,Vikas Jadhav,+919700000378,CIVIL,Plumber,Worker,true,OK,mr
+0379,Bhausaheb Kadam,+919700000379,CIVIL,Mason,Worker,true,OK,mr
+0380,Vandana Thorat,+919700000380,ADMIN,Peon,Worker,true,OK,mr
+0381,Raosaheb Gholap,+919700000381,ADMIN,Driver,Worker,true,OK,mr
+0382,Amol Deshmukh,+919700000382,ADMIN,Sweeper,Worker,true,OK,mr
+0383,Popat Salunkhe,+919700000383,ADMIN,Driver,Worker,true,OK,mr
+0384,Onkar Kamble,+919700000384,ADMIN,Peon,Worker,true,OK,mr
+0385,Rajesh Chavan,+919700000385,ADMIN,Sweeper,Worker,true,OK,mr
+0386,Pooja Bhosale,+919700000386,ADMIN,Driver,Worker,true,OK,mr
+0387,Jyoti Suryawanshi,+919700000387,ADMIN,Driver,Worker,true,OK,mr
+0388,Sachin Patil,+919700000388,ADMIN,Sweeper,Worker,true,OK,mr
+0389,Uttam More,+919700000389,ADMIN,Gardener,Worker,true,OK,mr
+0390,Dnyaneshwar Patil,+919700000390,ACCOUNTS,Peon,Worker,true,OK,mr
+0391,Vitthal Kale,+919700000391,ACCOUNTS,Peon,Worker,true,OK,mr
+0392,Vikas Shinde,+919700000392,ACCOUNTS,Peon,Worker,true,OK,mr
+0393,Kiran Rendal,+919700000393,ACCOUNTS,Peon,Worker,true,OK,mr
+0394,Manoj Suryawanshi,+919700000394,ACCOUNTS,Peon,Worker,true,OK,mr
+0395,Amol Bansode,+919700000395,PURCHASE,Peon,Worker,true,OK,mr
+0396,Dinesh Kale,+919700000396,PURCHASE,Peon,Worker,true,OK,mr
+0397,Dnyaneshwar Pawar,+919700000397,PURCHASE,Peon,Worker,true,OK,mr
+0398,Sunil Rendal,+919700000398,PURCHASE,Peon,Worker,true,OK,mr
+0399,Mangal Jadhav,+919700000399,TIME_OFFICE,Peon,Worker,true,OK,mr
+0400,Vandana Ingale,+919700000400,TIME_OFFICE,Peon,Worker,true,OK,mr
+0401,Shivaji Rendal,+919700000401,TIME_OFFICE,Peon,Worker,true,OK,mr
