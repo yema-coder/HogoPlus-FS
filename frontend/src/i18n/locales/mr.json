@@ -19,7 +19,9 @@
     "today": "आज",
     "tomorrow": "उद्या",
     "openSettings": "सेटिंग्ज उघडा",
-    "close": "बंद करा"
+    "close": "बंद करा",
+    "confirm": "नक्की करा",
+    "home": "होमवर जा"
   },
   "lang": {
     "title": "तुमची भाषा निवडा",
@@ -68,7 +70,8 @@
     "approvals": "मंजुऱ्या",
     "deptSubmissions": "विभागाचे फॉर्म",
     "pending": "{{count}} बाकी",
-    "punchedOut": "दिवस पूर्ण"
+    "punchedOut": "दिवस पूर्ण",
+    "hello": "नमस्कार"
   },
   "cat": {
     "safety": "सुरक्षा",
@@ -98,7 +101,8 @@
     "queuedBody": "नेटवर्क आल्यावर पाठवले जाईल",
     "returningHome": "होमवर जात आहोत…",
     "cameraPermissionTitle": "कॅमेरा हवा",
-    "cameraPermissionBody": "समस्येचा फोटो काढून नोंदवा"
+    "cameraPermissionBody": "समस्येचा फोटो काढून नोंदवा",
+    "locationHelps": "लोकेशनमुळे मॅनेजरला जागा लवकर सापडते"
   },
   "status": {
     "submitted": "पाठवले",
@@ -147,7 +151,11 @@
     "locationPermissionTitle": "लोकेशन हवे",
     "locationPermissionBody": "तुम्ही कारखान्यात आहात हे नक्की करते",
     "shift": "शिफ्ट",
-    "legend": "खुणा"
+    "legend": "खुणा",
+    "notPunched": "अजून पंच इन झाले नाही",
+    "viewHistory": "इतिहास",
+    "already": "आज आधीच पंच इन झाले आहे",
+    "zoneChecking": "झोन तपासत आहोत…"
   },
   "notif": {
     "title": "सूचना",
@@ -194,5 +202,11 @@
     "d4": "गु",
     "d5": "शु",
     "d6": "श"
+  },
+  "tabs": {
+    "home": "होम",
+    "reports": "अहवाल",
+    "alerts": "सूचना",
+    "profile": "प्रोफाइल"
   }
 }

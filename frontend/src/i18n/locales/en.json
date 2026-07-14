@@ -19,7 +19,9 @@
     "today": "Today",
     "tomorrow": "Tomorrow",
     "openSettings": "Open Settings",
-    "close": "Close"
+    "close": "Close",
+    "confirm": "Confirm",
+    "home": "Go Home"
   },
   "lang": {
     "title": "Choose your language",
@@ -68,7 +70,8 @@
     "approvals": "Approvals",
     "deptSubmissions": "Dept. Submissions",
     "pending": "{{count}} pending",
-    "punchedOut": "Day complete"
+    "punchedOut": "Day complete",
+    "hello": "Hello"
   },
   "cat": {
     "safety": "Safety",
@@ -98,7 +101,8 @@
     "queuedBody": "Will be sent when network returns",
     "returningHome": "Going back home…",
     "cameraPermissionTitle": "Camera needed",
-    "cameraPermissionBody": "Take a photo to report the problem"
+    "cameraPermissionBody": "Take a photo to report the problem",
+    "locationHelps": "Location helps the manager find the spot"
   },
   "status": {
     "submitted": "Sent",
@@ -147,7 +151,11 @@
     "locationPermissionTitle": "Location needed",
     "locationPermissionBody": "Confirms you are at the factory",
     "shift": "Shift",
-    "legend": "Legend"
+    "legend": "Legend",
+    "notPunched": "Not punched in yet",
+    "viewHistory": "History",
+    "already": "Already punched in today",
+    "zoneChecking": "Checking zone…"
   },
   "notif": {
     "title": "Alerts",
@@ -194,5 +202,11 @@
     "d4": "Th",
     "d5": "Fr",
     "d6": "Sa"
+  },
+  "tabs": {
+    "home": "Home",
+    "reports": "Reports",
+    "alerts": "Alerts",
+    "profile": "Profile"
   }
 }

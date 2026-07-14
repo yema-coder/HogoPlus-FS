@@ -101,3 +101,40 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Phase 2 Part 1 — Mobile App (2026-06 fork)
+user_problem_statement: Expo mobile app for factory workers (trilingual en/hi/mr, Marathi default).
+  Auth (Phone→OTP→Home or Register→Pending), role-aware Home with red incident tile, 3-tap incident
+  reporting (category→camera+GPS→watermark burn-in→submit) with offline outbox, attendance punch-in
+  (selfie+GPS+BLE→Verified+/Verified/Flagged), notifications, profile, shift screen, EAS config.
+
+frontend:
+  - task: "Auth flow (language→phone→OTP→home / register→pending)"
+    implemented: true
+    working: "NA (smoke-tested login happy path via screenshot: works)"
+    files: ["app/(auth)/*.tsx"]
+  - task: "Home screen role-aware (worker vs manager tiles, attendance card, punch in/out)"
+    implemented: true
+    working: "NA (smoke-tested render for worker)"
+    files: ["app/(tabs)/home.tsx", "app/(tabs)/_layout.tsx"]
+  - task: "Incident 3-tap flow with watermark burn-in + compression + offline outbox"
+    implemented: true
+    working: "NA"
+    files: ["app/incident/category.tsx", "app/incident/capture.tsx", "app/incident/success.tsx", "app/incident/[id].tsx", "src/offline/outbox.ts"]
+  - task: "Attendance punch-in (selfie+GPS+BLE) + result + history"
+    implemented: true
+    working: "NA"
+    files: ["app/attendance/punch.tsx", "app/attendance/result.tsx", "app/attendance/history.tsx"]
+  - task: "Alerts + Profile (language switcher, logout) + Shift screen"
+    implemented: true
+    working: "NA"
+    files: ["app/(tabs)/alerts.tsx", "app/(tabs)/profile.tsx", "app/shift.tsx"]
+
+backend: unchanged this session (Phase 1 complete, 70 pytest passing)
+
+credentials: see /app/memory/test_credentials.md — demo OTP 123456 for seeded phones.
+  Worker: +917972540971 (Khot Mahavir). Manager: +919834705825 (ENGINEERING). CGM: +918483029039.
+
+notes:
+  - BLE is a noop scanner on web/Expo Go BY DESIGN (isolated interface) — punch-in will yield "verified" not "verified_plus" in tests; this is expected.
+  - Watermark viewshot burn-in is skipped on web (falls back to plain compressed photo) BY DESIGN.
+  - File serving GET /api/files/{key} is public; upload requires Bearer token.

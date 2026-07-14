@@ -1,24 +1,36 @@
 {
   "expo": {
-    "name": "frontend",
+    "name": "Hogo Plus",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "hogoplus",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.hogobackendphase.pk03sz"
+      "bundleIdentifier": "com.hogoplus.fs",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take photos to report factory incidents",
+        "NSLocationWhenInUseUsageDescription": "Confirms your attendance location at the factory",
+        "NSBluetoothAlwaysUsageDescription": "Detects factory zone beacons for attendance"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#000000"
+        "backgroundColor": "#0B4F6C"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.hogobackendphase.pk03sz"
+      "package": "com.hogoplus.fs",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -33,11 +45,30 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#000000"
+          "backgroundColor": "#0B4F6C"
         }
       ],
       "expo-audio",
-      "react-native-ble-plx"
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Take photos to report factory incidents",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Confirms your attendance location at the factory"
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

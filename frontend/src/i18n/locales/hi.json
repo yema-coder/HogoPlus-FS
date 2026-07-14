@@ -19,7 +19,9 @@
     "today": "आज",
     "tomorrow": "कल",
     "openSettings": "सेटिंग्स खोलें",
-    "close": "बंद करें"
+    "close": "बंद करें",
+    "confirm": "पक्का करें",
+    "home": "होम पर जाएँ"
   },
   "lang": {
     "title": "अपनी भाषा चुनें",
@@ -68,7 +70,8 @@
     "approvals": "मंज़ूरियाँ",
     "deptSubmissions": "विभाग के फॉर्म",
     "pending": "{{count}} बाकी",
-    "punchedOut": "दिन पूरा"
+    "punchedOut": "दिन पूरा",
+    "hello": "नमस्ते"
   },
   "cat": {
     "safety": "सुरक्षा",
@@ -98,7 +101,8 @@
     "queuedBody": "नेटवर्क आते ही भेज दिया जाएगा",
     "returningHome": "होम पर जा रहे हैं…",
     "cameraPermissionTitle": "कैमरा चाहिए",
-    "cameraPermissionBody": "समस्या की फोटो लेकर रिपोर्ट करें"
+    "cameraPermissionBody": "समस्या की फोटो लेकर रिपोर्ट करें",
+    "locationHelps": "लोकेशन से मैनेजर को जगह जल्दी मिलती है"
   },
   "status": {
     "submitted": "भेजा गया",
@@ -147,7 +151,11 @@
     "locationPermissionTitle": "लोकेशन चाहिए",
     "locationPermissionBody": "पक्का करता है कि आप फैक्टरी में हैं",
     "shift": "शिफ्ट",
-    "legend": "संकेत"
+    "legend": "संकेत",
+    "notPunched": "अभी पंच इन नहीं हुआ",
+    "viewHistory": "इतिहास",
+    "already": "आज पहले ही पंच इन हो चुका है",
+    "zoneChecking": "ज़ोन जाँच रहे हैं…"
   },
   "notif": {
     "title": "सूचनाएँ",
@@ -194,5 +202,11 @@
     "d4": "गु",
     "d5": "शु",
     "d6": "श"
+  },
+  "tabs": {
+    "home": "होम",
+    "reports": "रिपोर्ट",
+    "alerts": "सूचना",
+    "profile": "प्रोफ़ाइल"
   }
 }
