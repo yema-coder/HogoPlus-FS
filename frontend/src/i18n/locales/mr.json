@@ -71,7 +71,9 @@
     "deptSubmissions": "विभागाचे फॉर्म",
     "pending": "{{count}} बाकी",
     "punchedOut": "दिवस पूर्ण",
-    "hello": "नमस्कार"
+    "hello": "नमस्कार",
+    "stripOpen": "{{count}} चालू",
+    "stripResolved": "या आठवड्यात {{count}} सोडवले"
   },
   "cat": {
     "safety": "सुरक्षा",
@@ -110,7 +112,9 @@
     "in_progress": "काम सुरू",
     "resolved": "सोडवले",
     "escalated": "वर पाठवले",
-    "queued": "पाठवणे बाकी"
+    "queued": "पाठवणे बाकी",
+    "approved": "मंजूर",
+    "rejected": "नाकारले"
   },
   "reports": {
     "title": "माझ्या नोंदी",
@@ -155,7 +159,10 @@
     "notPunched": "अजून पंच इन झाले नाही",
     "viewHistory": "इतिहास",
     "already": "आज आधीच पंच इन झाले आहे",
-    "zoneChecking": "झोन तपासत आहोत…"
+    "zoneChecking": "झोन तपासत आहोत…",
+    "review": "हजेरी तपासणी",
+    "reasonGps": "GPS नाही",
+    "reasonGeofence": "कारखान्याबाहेर"
   },
   "notif": {
     "title": "सूचना",
@@ -183,7 +190,19 @@
   "approvals": {
     "title": "मंजुऱ्या",
     "comingSoon": "पुढील अपडेटमध्ये येईल",
-    "body": "फॉर्मच्या मंजुऱ्या इथे दिसतील. घटनांच्या मंजुऱ्या नोंदींच्या यादीत आहेत."
+    "body": "फॉर्मच्या मंजुऱ्या इथे दिसतील. घटनांच्या मंजुऱ्या नोंदींच्या यादीत आहेत.",
+    "formsTab": "फॉर्म",
+    "regsTab": "नवीन नोंदणी",
+    "swapsTab": "शिफ्ट बदली",
+    "incidentsTab": "घटना",
+    "attendanceTab": "हजेरी",
+    "approve": "मंजूर करा",
+    "reject": "नाकारा",
+    "rejectReason": "का नाकारता?",
+    "empty": "काही प्रलंबित नाही",
+    "allDepts": "सर्व",
+    "wantsToJoin": "{{dept}} मध्ये येऊ इच्छितात",
+    "actionDone": "झाले"
   },
   "errors": {
     "network": "इंटरनेट नाही. कनेक्शन तपासा.",
@@ -207,6 +226,62 @@
     "home": "होम",
     "reports": "अहवाल",
     "alerts": "सूचना",
-    "profile": "प्रोफाइल"
+    "profile": "प्रोफाइल",
+    "dept": "विभाग",
+    "approvals": "मंजुऱ्या"
+  },
+  "forms": {
+    "title": "फॉर्म",
+    "mySubs": "माझे फॉर्म",
+    "deptSubs": "विभागाचे फॉर्म",
+    "noForms": "अजून फॉर्म नाहीत",
+    "noSubs": "अजून फॉर्म पाठवला नाही",
+    "required": "हे आवश्यक आहे",
+    "min": "किमान {{v}}",
+    "max": "कमाल {{v}}",
+    "fixErrors": "लाल खुणेचे रकाने दुरुस्त करा",
+    "submit": "पाठवा",
+    "draftResumed": "अपूर्ण फॉर्म परत मिळाला",
+    "successTitle": "फॉर्म पाठवला!",
+    "successBody": "मॅनेजरकडे पाठवला आहे",
+    "takePhoto": "फोटो काढा",
+    "photoDone": "फोटो जोडला",
+    "record": "आवाज रेकॉर्ड करा",
+    "recording": "रेकॉर्डिंग… {{s}}s",
+    "play": "ऐका",
+    "stop": "थांबवा",
+    "reRecord": "पुन्हा रेकॉर्ड करा",
+    "captureLocation": "लोकेशन घ्या",
+    "locationCaptured": "लोकेशन मिळाले (±{{m}}मी)",
+    "aiHint": "फोटोतून आपोआप वाचले जाईल",
+    "pickDateTime": "तारीख आणि वेळ निवडा",
+    "rejectionReason": "नाकारण्याचे कारण",
+    "submittedBy": "पाठवणारा",
+    "micPermissionTitle": "माइक हवा",
+    "micPermissionBody": "छोटी व्हॉइस नोट रेकॉर्ड करा",
+    "micDenied": "माइकची परवानगी हवी. सेटिंग्जमध्ये जाऊन द्या.",
+    "dateHint": "DD/MM/YYYY HH:mm",
+    "invalidDate": "योग्य तारीख टाका"
+  },
+  "swap": {
+    "title": "शिफ्ट बदली",
+    "button": "शिफ्ट बदला",
+    "pickDate": "कोणता दिवस?",
+    "pickColleague": "कोणासोबत बदलायची?",
+    "noCandidates": "त्या दिवशी दुसऱ्या शिफ्टमध्ये कोणी सहकारी नाही",
+    "reasonOptional": "कारण (ऐच्छिक)",
+    "send": "विनंती पाठवा",
+    "sent": "विनंती पाठवली",
+    "myRequests": "माझ्या बदली विनंत्या",
+    "incomingTitle": "{{name}} शिफ्ट बदलू इच्छितात",
+    "accept": "स्वीकारा",
+    "decline": "नाकारा",
+    "cancel": "विनंती रद्द करा",
+    "cancelled": "रद्द",
+    "pending_target": "सहकाऱ्याच्या उत्तराची वाट",
+    "pending_manager": "मॅनेजरच्या उत्तराची वाट",
+    "approved": "मंजूर झाली",
+    "rejected": "नाकारली",
+    "youGet": "तुम्हाला मिळेल"
   }
 }

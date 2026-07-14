@@ -22,6 +22,7 @@ import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { StatusChip } from "@/src/components/StatusChip";
 import { categoryDef } from "@/src/constants/categories";
+import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, statusColors, type } from "@/src/theme/tokens";
 import { formatDateTime } from "@/src/utils/format";
@@ -31,6 +32,7 @@ export default function IncidentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
+  const adjustApprovals = useApprovalsStore((s) => s.adjust);
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [failed, setFailed] = useState(false);
@@ -57,6 +59,9 @@ export default function IncidentDetailScreen() {
     setActing(true);
     try {
       await changeIncidentStatus(id, status, actionNote);
+      if (detail && (detail.status === "submitted" || detail.status === "escalated")) {
+        adjustApprovals("incidents", -1);
+      }
       setResolving(false);
       setNote("");
       await load();

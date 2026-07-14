@@ -12,6 +12,7 @@ import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
+import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatDateTime } from "@/src/utils/format";
@@ -19,6 +20,7 @@ import { formatDateTime } from "@/src/utils/format";
 export default function AlertsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const rank = useAuthStore((s) => s.profile?.role?.rank ?? 6);
   const { data, loading, error, refresh } = useCachedFetch<NotificationList>(
     "notifs",
     myNotifications,
@@ -47,6 +49,14 @@ export default function AlertsScreen() {
     }
     if (item.entity_type === "incident" && item.entity_id) {
       router.push(`/incident/${item.entity_id}`);
+    } else if (item.entity_type === "form_submission" && item.entity_id) {
+      router.push(`/submission/${item.entity_id}`);
+    } else if (item.entity_type === "shift_swap") {
+      router.push("/shift");
+    } else if (item.entity_type === "employee") {
+      if (rank <= 3) router.push("/(tabs)/approvals");
+    } else if (item.entity_type === "attendance") {
+      router.push("/attendance/history");
     }
   };
 

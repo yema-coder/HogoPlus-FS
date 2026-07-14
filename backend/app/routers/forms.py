@@ -189,6 +189,7 @@ async def list_submissions(
     status: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    scope: str | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     employee: Employee = Depends(get_approved_employee),
@@ -200,6 +201,9 @@ async def list_submissions(
         if department_code:
             query = query.where(FormSubmission.department_code == department_code)
     elif rank == 3:
+        query = query.where(FormSubmission.department_code == employee.department_code)
+    elif rank in (4, 5) and scope == "department":
+        # Staff/Clerk read-only view of their own department's submissions
         query = query.where(FormSubmission.department_code == employee.department_code)
     else:
         query = query.where(FormSubmission.submitted_by == employee.id)
@@ -214,7 +218,51 @@ async def list_submissions(
     total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar() or 0
     rows = (
         await session.execute(
-            query.order_by(FormSubmission.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+            select(FormSubmission, FormDefinition, Employee)
+            .join(FormDefinition, FormSubmission.form_definition_id == FormDefinition.id)
+            .join(Employee, FormSubmission.submitted_by == Employee.id)
+            .where(FormSubmission.id.in_(query.with_only_columns(FormSubmission.id)))
+            .order_by(FormSubmission.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         )
-    ).scalars().all()
-    return {"items": [_sub_out(s) for s in rows], "total": total, "page": page, "page_size": page_size}
+    ).all()
+    items = []
+    for s, d, emp in rows:
+        out = _sub_out(s, d.code)
+        out["form_title_en"] = d.title_en
+        out["form_title_hi"] = d.title_hi
+        out["form_title_mr"] = d.title_mr
+        out["submitted_by_name"] = emp.full_name
+        out["submitted_by_emp_id"] = emp.emp_id
+        items.append(out)
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/submissions/{submission_id}")
+async def submission_detail(
+    submission_id: uuid.UUID,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    submission = await session.get(FormSubmission, submission_id)
+    if submission is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    rank = employee.role.rank
+    allowed = (
+        submission.submitted_by == employee.id
+        or rank <= 2
+        or (rank in (3, 4, 5) and submission.department_code == employee.department_code)
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    definition = await session.get(FormDefinition, submission.form_definition_id)
+    submitter = await session.get(Employee, submission.submitted_by)
+    out = _sub_out(submission, definition.code if definition else None)
+    if definition:
+        out["form_title_en"] = definition.title_en
+        out["form_title_hi"] = definition.title_hi
+        out["form_title_mr"] = definition.title_mr
+    out["submitted_by_name"] = submitter.full_name if submitter else None
+    out["submitted_by_emp_id"] = submitter.emp_id if submitter else None
+    return out

@@ -3,16 +3,26 @@ import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, punchIn } from "@/src/api/endpoints";
+import { createIncident, punchIn, submitForm } from "@/src/api/endpoints";
 import { storage } from "@/src/utils/storage";
+
+export interface OutboxFile {
+  /** data_json key that receives the uploaded file key */
+  field: string;
+  uri: string;
+  name: string;
+  kind: "photo" | "audio";
+}
 
 export interface OutboxItem {
   id: string;
-  type: "incident" | "attendance";
+  type: "incident" | "attendance" | "form";
   payload: Record<string, unknown>;
   photoUri: string | null;
   photoName: string;
   photoField: string; // payload key that receives the uploaded file key
+  /** form submissions may carry multiple photos / voice notes */
+  files?: OutboxFile[];
   createdAt: number;
   retries: number;
   nextAttemptAt: number;
@@ -33,13 +43,13 @@ async function persist(items: OutboxItem[]): Promise<void> {
   await storage.setItem(STORE_KEY, JSON.stringify(items));
 }
 
-async function copyIntoOutbox(uri: string, id: string): Promise<string> {
+async function copyIntoOutbox(uri: string, fileName: string): Promise<string> {
   if (Platform.OS === "web") return uri;
   try {
     const FileSystem = await import("expo-file-system/legacy");
     const dir = `${FileSystem.documentDirectory}outbox/`;
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
-    const dest = `${dir}${id}.jpg`;
+    const dest = `${dir}${fileName}`;
     await FileSystem.copyAsync({ from: uri, to: dest });
     return dest;
   } catch {
@@ -85,10 +95,18 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
 
   enqueue: async (partial) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const photoUri = partial.photoUri ? await copyIntoOutbox(partial.photoUri, id) : null;
+    const photoUri = partial.photoUri ? await copyIntoOutbox(partial.photoUri, `${id}.jpg`) : null;
+    let files: OutboxFile[] | undefined;
+    if (partial.files) {
+      files = [];
+      for (const f of partial.files) {
+        files.push({ ...f, uri: await copyIntoOutbox(f.uri, `${id}-${f.field}-${f.name}`) });
+      }
+    }
     const item: OutboxItem = {
       ...partial,
       photoUri,
+      files,
       id,
       createdAt: Date.now(),
       retries: 0,
@@ -115,11 +133,28 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
             payload[item.photoField] = uploaded.key;
           }
           if (item.type === "incident") await createIncident(payload);
-          else await punchIn(payload);
+          else if (item.type === "attendance") await punchIn(payload);
+          else {
+            // form submission: upload each queued file, patch data_json, submit
+            const data = { ...(payload.data_json as Record<string, unknown>) };
+            const photoKeys: string[] = [];
+            for (const f of item.files ?? []) {
+              const uploaded = await uploadFile(f.uri, f.name);
+              data[f.field] = uploaded.key;
+              if (f.kind === "photo") photoKeys.push(uploaded.key);
+            }
+            await submitForm(String(payload.definition_id), {
+              data_json: data,
+              photos: photoKeys,
+              gps_lat: (payload.gps_lat as number | null) ?? null,
+              gps_lng: (payload.gps_lng as number | null) ?? null,
+            });
+          }
           const items = get().items.filter((i) => i.id !== item.id);
           set({ items });
           await persist(items);
           await removeOutboxFile(item.photoUri);
+          for (const f of item.files ?? []) await removeOutboxFile(f.uri);
         } catch (e) {
           const status = e instanceof ApiError ? e.status : 0;
           if (status >= 400 && status < 500 && status !== 401 && status !== 429) {
@@ -128,6 +163,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
             set({ items });
             await persist(items);
             await removeOutboxFile(item.photoUri);
+            for (const f of item.files ?? []) await removeOutboxFile(f.uri);
           } else {
             const retries = item.retries + 1;
             const backoff = Math.min(5000 * 2 ** retries, MAX_BACKOFF_MS);

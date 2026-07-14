@@ -1,0 +1,7 @@
+{
+  "CFBundleDisplayName": "Hogo Plus",
+  "NSCameraUsageDescription": "Take photos to report factory incidents",
+  "NSLocationWhenInUseUsageDescription": "Confirms your attendance location at the factory",
+  "NSMicrophoneUsageDescription": "Record short voice notes for factory forms",
+  "NSBluetoothAlwaysUsageDescription": "Detects factory zone beacons for attendance"
+}

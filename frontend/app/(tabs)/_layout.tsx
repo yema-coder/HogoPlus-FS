@@ -1,9 +1,11 @@
 import { Redirect, Tabs } from "expo-router";
-import { Bell, ClipboardList, Home, UserRound } from "lucide-react-native";
-import React from "react";
+import { Bell, ClipboardCheck, ClipboardList, Home, UserRound } from "lucide-react-native";
+import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { departmentIcon } from "@/src/constants/departments";
+import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
@@ -16,6 +18,17 @@ export default function TabsLayout() {
   const profile = useAuthStore((s) => s.profile);
   const outboxCount = useOutboxStore((s) => s.items.length);
   const unread = useNotifStore((s) => s.unread);
+  const approvalsTotal = useApprovalsStore((s) => s.total);
+  const refreshApprovals = useApprovalsStore((s) => s.refresh);
+
+  const rank = profile?.role?.rank ?? 6;
+  const isManager = rank <= 3;
+  const showAttendance = rank <= 2 || (profile?.department_code === "TIME_OFFICE" && rank === 3);
+  const DeptIcon = departmentIcon(profile?.department_code ?? "");
+
+  useEffect(() => {
+    if (isManager) void refreshApprovals(showAttendance);
+  }, [isManager, showAttendance, refreshApprovals]);
 
   if (status === "loading") return null;
   if (status === "unauthenticated") return <Redirect href="/(auth)/phone" />;
@@ -34,7 +47,7 @@ export default function TabsLayout() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
         },
-        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 13 },
+        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11 },
         tabBarBadgeStyle: {
           backgroundColor: colors.danger,
           color: "#FFFFFF",
@@ -51,12 +64,31 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="department"
+        options={{
+          title: t("tabs.dept"),
+          tabBarIcon: ({ color }) => <DeptIcon size={26} color={color} strokeWidth={2.2} />,
+        }}
+      />
+      <Tabs.Screen
         name="reports"
         options={{
           title: t("tabs.reports"),
           tabBarBadge: outboxCount > 0 ? outboxCount : undefined,
           tabBarIcon: ({ color }) => <ClipboardList size={26} color={color} strokeWidth={2.2} />,
         }}
+      />
+      <Tabs.Screen
+        name="approvals"
+        options={
+          isManager
+            ? {
+                title: t("tabs.approvals"),
+                tabBarBadge: approvalsTotal > 0 ? (approvalsTotal > 99 ? "99+" : approvalsTotal) : undefined,
+                tabBarIcon: ({ color }) => <ClipboardCheck size={26} color={color} strokeWidth={2.2} />,
+              }
+            : { href: null }
+        }
       />
       <Tabs.Screen
         name="alerts"

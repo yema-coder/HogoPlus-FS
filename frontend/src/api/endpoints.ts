@@ -3,11 +3,17 @@ import type {
   AttendanceRecord,
   DepartmentItem,
   EmployeeProfile,
+  FlaggedAttendance,
+  FormDefinitionItem,
   Incident,
   IncidentDetail,
   NotificationList,
   NotificationItem,
   ShiftDay,
+  SubmissionItem,
+  SubmissionList,
+  SwapCandidates,
+  SwapRequest,
   TokenPair,
   VerifyOtpResponse,
 } from "@/src/api/types";
@@ -71,3 +77,72 @@ export const myNotifications = () => api<NotificationList>("/notifications/mine"
 
 export const markNotificationRead = (id: string) =>
   api<NotificationItem>(`/notifications/${id}/read`, { method: "POST" });
+
+// ---------- Phase 3: forms / swaps / approvals ----------
+
+export const listForms = (departmentCode?: string) =>
+  api<FormDefinitionItem[]>(
+    `/forms${departmentCode ? `?department_code=${departmentCode}` : ""}`,
+  );
+
+export const submitForm = (
+  definitionId: string,
+  body: {
+    data_json: Record<string, unknown>;
+    photos: string[];
+    gps_lat?: number | null;
+    gps_lng?: number | null;
+  },
+) => api<SubmissionItem>(`/forms/${definitionId}/submit`, { method: "POST", body });
+
+export const listSubmissions = (
+  params: { status?: string; department_code?: string; scope?: string; page_size?: number } = {},
+) => {
+  const q = new URLSearchParams();
+  if (params.status) q.set("status", params.status);
+  if (params.department_code) q.set("department_code", params.department_code);
+  if (params.scope) q.set("scope", params.scope);
+  q.set("page_size", String(params.page_size ?? 50));
+  return api<SubmissionList>(`/submissions?${q.toString()}`);
+};
+
+export const submissionDetail = (id: string) => api<SubmissionItem>(`/submissions/${id}`);
+
+export const approveSubmission = (id: string) =>
+  api<SubmissionItem>(`/submissions/${id}/approve`, { method: "POST" });
+
+export const rejectSubmission = (id: string, reason: string) =>
+  api<SubmissionItem>(`/submissions/${id}/reject`, { method: "POST", body: { reason } });
+
+export const pendingEmployees = () => api<EmployeeProfile[]>("/admin/employees/pending");
+
+export const approveEmployee = (id: string) =>
+  api<EmployeeProfile>(`/admin/employees/${id}/approve`, { method: "POST" });
+
+export const rejectEmployee = (id: string, reason: string) =>
+  api<EmployeeProfile>(`/admin/employees/${id}/reject`, { method: "POST", body: { reason } });
+
+export const swapCandidates = (date: string) =>
+  api<SwapCandidates>(`/shift-swaps/candidates?date=${date}`);
+
+export const createSwap = (body: { target_employee_id: string; swap_date: string; reason?: string | null }) =>
+  api<SwapRequest>("/shift-swaps", { method: "POST", body });
+
+export const respondSwap = (id: string, accept: boolean) =>
+  api<SwapRequest>(`/shift-swaps/${id}/respond`, { method: "POST", body: { accept } });
+
+export const decideSwap = (id: string, approve: boolean, reason?: string) =>
+  api<SwapRequest>(`/shift-swaps/${id}/decide`, { method: "POST", body: { approve, reason } });
+
+export const cancelSwap = (id: string) =>
+  api<SwapRequest>(`/shift-swaps/${id}/cancel`, { method: "POST" });
+
+export const mySwaps = () => api<SwapRequest[]>("/shift-swaps/mine");
+
+export const pendingSwaps = () => api<SwapRequest[]>("/shift-swaps/pending");
+
+export const flaggedAttendance = (date?: string) =>
+  api<FlaggedAttendance[]>(`/attendance/flagged${date ? `?date=${date}` : ""}`);
+
+export const approveAttendance = (id: string) =>
+  api<AttendanceRecord>(`/attendance/${id}/approve`, { method: "POST" });

@@ -1,0 +1,7 @@
+{
+  "CFBundleDisplayName": "होगो प्लस",
+  "NSCameraUsageDescription": "कारखान्यातील समस्या नोंदवण्यासाठी फोटो काढा",
+  "NSLocationWhenInUseUsageDescription": "कारखान्यातील तुमच्या हजेरीची जागा नक्की करते",
+  "NSMicrophoneUsageDescription": "फॉर्मसाठी छोटी व्हॉइस नोट रेकॉर्ड करा",
+  "NSBluetoothAlwaysUsageDescription": "हजेरीसाठी कारखाना झोन बीकन ओळखते"
+}

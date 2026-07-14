@@ -152,3 +152,116 @@ export interface UploadResult {
   key: string;
   url: string;
 }
+
+// ---------- Phase 3: forms / swaps / approvals ----------
+
+export type FormFieldType =
+  | "text"
+  | "number"
+  | "select"
+  | "photo"
+  | "voice_note"
+  | "datetime"
+  | "toggle"
+  | "gps_point";
+
+export interface FormFieldDef {
+  key: string;
+  type: FormFieldType;
+  label_en: string;
+  label_hi: string;
+  label_mr: string;
+  required: boolean;
+  options: string[] | null;
+  ai_hook: string | null;
+  validation: { min?: number; max?: number; regex?: string } | null;
+}
+
+export interface FormDefinitionItem {
+  id: string;
+  department_code: string;
+  code: string;
+  title_en: string;
+  title_hi: string;
+  title_mr: string;
+  schema_json: { fields: FormFieldDef[] };
+  version: number;
+  is_active: boolean;
+  requires_approval: boolean;
+  approval_role_code: string | null;
+}
+
+export type SubmissionStatus = "submitted" | "approved" | "rejected" | "escalated";
+
+export interface SubmissionItem {
+  id: string;
+  form_definition_id: string;
+  form_code: string | null;
+  form_version: number;
+  submitted_by: string;
+  department_code: string;
+  data_json: Record<string, unknown>;
+  photos: string[];
+  gps_lat: number | null;
+  gps_lng: number | null;
+  status: SubmissionStatus;
+  approver_id: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  escalated_to: string | null;
+  escalated_at: string | null;
+  created_at: string | null;
+  form_title_en?: string;
+  form_title_hi?: string;
+  form_title_mr?: string;
+  submitted_by_name?: string | null;
+  submitted_by_emp_id?: string | null;
+}
+
+export interface SubmissionList {
+  items: SubmissionItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export type SwapStatus = "pending_target" | "pending_manager" | "approved" | "rejected" | "cancelled";
+
+export interface SwapRequest {
+  id: string;
+  requester_id: string;
+  target_id: string;
+  swap_date: string;
+  status: SwapStatus;
+  target_responded_at: string | null;
+  manager_id: string | null;
+  manager_responded_at: string | null;
+  reason: string | null;
+  created_at: string | null;
+  requester_name: string | null;
+  requester_emp_id: string | null;
+  target_name: string | null;
+  target_emp_id: string | null;
+  department_code: string | null;
+  requester_shift_code: string | null;
+  target_shift_code: string | null;
+}
+
+export interface SwapCandidate {
+  employee_id: string;
+  emp_id: string;
+  full_name: string;
+  shift_code: string;
+}
+
+export interface SwapCandidates {
+  date: string;
+  my_shift_code: string | null;
+  candidates: SwapCandidate[];
+}
+
+export interface FlaggedAttendance extends AttendanceRecord {
+  employee_name: string;
+  emp_id: string;
+  department_code: string;
+}

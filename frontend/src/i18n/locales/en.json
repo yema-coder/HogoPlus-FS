@@ -71,7 +71,9 @@
     "deptSubmissions": "Dept. Submissions",
     "pending": "{{count}} pending",
     "punchedOut": "Day complete",
-    "hello": "Hello"
+    "hello": "Hello",
+    "stripOpen": "{{count}} in progress",
+    "stripResolved": "{{count}} resolved this week"
   },
   "cat": {
     "safety": "Safety",
@@ -110,7 +112,9 @@
     "in_progress": "In progress",
     "resolved": "Resolved",
     "escalated": "Escalated",
-    "queued": "Waiting to send"
+    "queued": "Waiting to send",
+    "approved": "Approved",
+    "rejected": "Rejected"
   },
   "reports": {
     "title": "My Reports",
@@ -155,7 +159,10 @@
     "notPunched": "Not punched in yet",
     "viewHistory": "History",
     "already": "Already punched in today",
-    "zoneChecking": "Checking zone…"
+    "zoneChecking": "Checking zone…",
+    "review": "Attendance Review",
+    "reasonGps": "No GPS",
+    "reasonGeofence": "Outside factory"
   },
   "notif": {
     "title": "Alerts",
@@ -183,7 +190,19 @@
   "approvals": {
     "title": "Approvals",
     "comingSoon": "Coming in next update",
-    "body": "Form approvals will appear here. Incident approvals are in the incident list."
+    "body": "Form approvals will appear here. Incident approvals are in the incident list.",
+    "formsTab": "Forms",
+    "regsTab": "Registrations",
+    "swapsTab": "Swaps",
+    "incidentsTab": "Incidents",
+    "attendanceTab": "Attendance",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectReason": "Why rejecting?",
+    "empty": "Nothing pending",
+    "allDepts": "All",
+    "wantsToJoin": "Wants to join {{dept}}",
+    "actionDone": "Done"
   },
   "errors": {
     "network": "No internet. Check your connection.",
@@ -207,6 +226,62 @@
     "home": "Home",
     "reports": "Reports",
     "alerts": "Alerts",
-    "profile": "Profile"
+    "profile": "Profile",
+    "dept": "Dept",
+    "approvals": "Approvals"
+  },
+  "forms": {
+    "title": "Forms",
+    "mySubs": "My Submissions",
+    "deptSubs": "Department Submissions",
+    "noForms": "No forms yet",
+    "noSubs": "No submissions yet",
+    "required": "This is required",
+    "min": "Minimum {{v}}",
+    "max": "Maximum {{v}}",
+    "fixErrors": "Fix the marked fields",
+    "submit": "SUBMIT",
+    "draftResumed": "Draft resumed",
+    "successTitle": "Form sent!",
+    "successBody": "Sent to the manager",
+    "takePhoto": "Take photo",
+    "photoDone": "Photo added",
+    "record": "Record voice note",
+    "recording": "Recording… {{s}}s",
+    "play": "Play",
+    "stop": "Stop",
+    "reRecord": "Record again",
+    "captureLocation": "Capture location",
+    "locationCaptured": "Location captured (±{{m}}m)",
+    "aiHint": "Will be read automatically from the photo",
+    "pickDateTime": "Pick date & time",
+    "rejectionReason": "Rejection reason",
+    "submittedBy": "Submitted by",
+    "micPermissionTitle": "Microphone needed",
+    "micPermissionBody": "Record a short voice note",
+    "micDenied": "Microphone permission needed. Allow it in Settings.",
+    "dateHint": "DD/MM/YYYY HH:mm",
+    "invalidDate": "Enter a valid date"
+  },
+  "swap": {
+    "title": "Swap shift",
+    "button": "Swap shift",
+    "pickDate": "Which day?",
+    "pickColleague": "Swap with whom?",
+    "noCandidates": "No colleague on a different shift that day",
+    "reasonOptional": "Reason (optional)",
+    "send": "Send request",
+    "sent": "Request sent",
+    "myRequests": "My swap requests",
+    "incomingTitle": "{{name}} wants to swap",
+    "accept": "Accept",
+    "decline": "Decline",
+    "cancel": "Cancel request",
+    "cancelled": "Cancelled",
+    "pending_target": "Waiting for colleague",
+    "pending_manager": "Waiting for manager",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "youGet": "You get"
   }
 }

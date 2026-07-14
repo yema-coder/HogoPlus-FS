@@ -29,8 +29,14 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT"
+        "BLUETOOTH_CONNECT",
+        "POST_NOTIFICATIONS"
       ]
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "hi": "./locales/hi.json",
+      "mr": "./locales/mr.json"
     },
     "web": {
       "bundler": "metro",
@@ -48,7 +54,12 @@
           "backgroundColor": "#0B4F6C"
         }
       ],
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Record short voice notes for factory forms"
+        }
+      ],
       [
         "expo-camera",
         {
@@ -68,7 +79,8 @@
           "isBackgroundEnabled": false,
           "neverForLocation": true
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

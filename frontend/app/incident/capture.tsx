@@ -1,7 +1,6 @@
 import dayjs from "dayjs";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Camera as CameraIcon,
@@ -30,7 +29,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
-import { captureRef } from "react-native-view-shot";
 
 import { ApiError, uploadFile } from "@/src/api/client";
 import { createIncident, listDepartments } from "@/src/api/endpoints";
@@ -45,6 +43,7 @@ import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
+import { burnInAndCompress } from "@/src/utils/burnIn";
 import { acquireGps, type GpsFix } from "@/src/utils/gps";
 
 interface Shot {
@@ -54,8 +53,6 @@ interface Shot {
 }
 
 type GpsStatus = "searching" | "ok" | "none" | "blocked";
-
-const MAX_DIM = 1600;
 
 /** Taps 2 & 3 of the incident flow: shutter, watermark burn-in, submit. */
 export default function IncidentCapture() {
@@ -117,35 +114,7 @@ export default function IncidentCapture() {
   /** Burn watermark into pixels via view-shot, then compress to ~300-500 KB. */
   const buildFinalImage = async (): Promise<string> => {
     if (!shot) throw new Error("no shot");
-    const landscape = shot.width >= shot.height;
-    const maxSide = Math.min(MAX_DIM, Math.max(shot.width, shot.height));
-    const targetW = landscape ? maxSide : Math.round((maxSide * shot.width) / shot.height);
-    const targetH = landscape ? Math.round((maxSide * shot.height) / shot.width) : maxSide;
-
-    if (Platform.OS !== "web" && watermarkRef.current) {
-      try {
-        const burned = await captureRef(watermarkRef, {
-          format: "jpg",
-          quality: 0.9,
-          width: targetW,
-          height: targetH,
-          result: "tmpfile",
-        });
-        const out = await ImageManipulator.manipulateAsync(burned, [], {
-          compress: 0.7,
-          format: ImageManipulator.SaveFormat.JPEG,
-        });
-        return out.uri;
-      } catch {
-        // fall back to the raw photo below
-      }
-    }
-    const out = await ImageManipulator.manipulateAsync(
-      shot.uri,
-      [{ resize: landscape ? { width: targetW } : { height: targetH } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-    );
-    return out.uri;
+    return burnInAndCompress(watermarkRef, shot.uri, shot.width, shot.height);
   };
 
   const submit = async () => {

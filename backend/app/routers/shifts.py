@@ -31,6 +31,21 @@ def _swap_out(s: ShiftSwapRequest) -> dict:
     }
 
 
+async def _swap_out_full(session: AsyncSession, s: ShiftSwapRequest) -> dict:
+    """Swap payload enriched with both employees' names + shift codes (mobile approval cards)."""
+    out = _swap_out(s)
+    requester = await session.get(Employee, s.requester_id)
+    target = await session.get(Employee, s.target_id)
+    out["requester_name"] = requester.full_name if requester else None
+    out["requester_emp_id"] = requester.emp_id if requester else None
+    out["target_name"] = target.full_name if target else None
+    out["target_emp_id"] = target.emp_id if target else None
+    out["department_code"] = requester.department_code if requester else None
+    out["requester_shift_code"] = await resolve_shift_code(session, s.requester_id, s.swap_date)
+    out["target_shift_code"] = await resolve_shift_code(session, s.target_id, s.swap_date)
+    return out
+
+
 @router.get("/shifts/mine")
 async def my_shifts(
     employee: Employee = Depends(get_approved_employee),
@@ -83,6 +98,51 @@ async def roster(
     return {"department_code": department_code, "date": target.isoformat(), "roster": out}
 
 
+@router.get("/shift-swaps/candidates")
+async def swap_candidates(
+    date: str = Query(...),
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Same-department, swap-eligible colleagues on a DIFFERENT shift for the given date.
+    Accessible to any eligible employee (roster stays Manager+ only)."""
+    if not employee.shift_swap_eligible:
+        raise HTTPException(status_code=403, detail="Not shift-swap eligible")
+    try:
+        target_date = datetime.fromisoformat(date).date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    if target_date < now_ist().date():
+        raise HTTPException(status_code=400, detail="Date cannot be in the past")
+
+    my_shift = await resolve_shift_code(session, employee.id, target_date)
+    candidates = []
+    if my_shift:
+        colleagues = (
+            await session.execute(
+                select(Employee).where(
+                    Employee.department_code == employee.department_code,
+                    Employee.is_active.is_(True),
+                    Employee.shift_swap_eligible.is_(True),
+                    Employee.onboarding_status == "approved",
+                    Employee.id != employee.id,
+                )
+            )
+        ).scalars().all()
+        for emp in colleagues:
+            code = await resolve_shift_code(session, emp.id, target_date)
+            if code and code != my_shift:
+                candidates.append(
+                    {
+                        "employee_id": str(emp.id),
+                        "emp_id": emp.emp_id,
+                        "full_name": emp.full_name,
+                        "shift_code": code,
+                    }
+                )
+    return {"date": target_date.isoformat(), "my_shift_code": my_shift, "candidates": candidates}
+
+
 @router.post("/shift-swaps")
 async def create_swap(
     body: SwapCreateIn,
@@ -122,7 +182,7 @@ async def create_swap(
     await write_audit(session, employee.id, "shift_swap.created", "shift_swap", str(swap.id), {"swap_date": body.swap_date.isoformat()})
     await session.commit()
     await session.refresh(swap)
-    return _swap_out(swap)
+    return await _swap_out_full(session, swap)
 
 
 @router.post("/shift-swaps/{swap_id}/respond")
@@ -166,7 +226,7 @@ async def respond_swap(
     )
     await session.commit()
     await session.refresh(swap)
-    return _swap_out(swap)
+    return await _swap_out_full(session, swap)
 
 
 @router.post("/shift-swaps/{swap_id}/decide")
@@ -233,7 +293,27 @@ async def decide_swap(
         await dispatcher.notify(session, recipient, "swap_decided", title, notif_body, "shift_swap", str(swap.id))
     await session.commit()
     await session.refresh(swap)
-    return _swap_out(swap)
+    return await _swap_out_full(session, swap)
+
+
+@router.post("/shift-swaps/{swap_id}/cancel")
+async def cancel_swap(
+    swap_id: uuid.UUID,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    swap = await session.get(ShiftSwapRequest, swap_id)
+    if swap is None:
+        raise HTTPException(status_code=404, detail="Swap request not found")
+    if swap.requester_id != employee.id:
+        raise HTTPException(status_code=403, detail="Only the requester can cancel")
+    if swap.status not in ("pending_target", "pending_manager"):
+        raise HTTPException(status_code=409, detail=f"Swap is {swap.status}")
+    swap.status = "cancelled"
+    await write_audit(session, employee.id, "shift_swap.cancelled", "shift_swap", str(swap.id), {})
+    await session.commit()
+    await session.refresh(swap)
+    return await _swap_out_full(session, swap)
 
 
 @router.get("/shift-swaps/mine")
@@ -248,7 +328,7 @@ async def my_swaps(
             .order_by(ShiftSwapRequest.created_at.desc())
         )
     ).scalars().all()
-    return [_swap_out(s) for s in rows]
+    return [await _swap_out_full(session, s) for s in rows]
 
 
 @router.get("/shift-swaps/pending")
@@ -262,4 +342,4 @@ async def pending_swaps(
             Employee.department_code == employee.department_code
         )
     rows = (await session.execute(query.order_by(ShiftSwapRequest.created_at.desc()))).scalars().all()
-    return [_swap_out(s) for s in rows]
+    return [await _swap_out_full(session, s) for s in rows]

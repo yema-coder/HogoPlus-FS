@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Bell,
   CalendarDays,
+  ChevronRight,
   ClipboardCheck,
   ClipboardList,
   LogIn,
@@ -16,8 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "@/src/api/client";
-import { myAttendance, myNotifications, myShifts, punchOut } from "@/src/api/endpoints";
-import type { AttendanceRecord, NotificationList, ShiftDay } from "@/src/api/types";
+import { myAttendance, myIncidents, myNotifications, myShifts, punchOut } from "@/src/api/endpoints";
+import type { AttendanceRecord, Incident, NotificationList, ShiftDay } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
 import { GridTile } from "@/src/components/GridTile";
@@ -44,6 +45,7 @@ export default function HomeScreen() {
   const att = useCachedFetch<AttendanceRecord[]>(`att-${month}`, () => myAttendance(month));
   const shifts = useCachedFetch<ShiftDay[]>("shifts", myShifts);
   const notifs = useCachedFetch<NotificationList>("notifs", myNotifications);
+  const incidents = useCachedFetch<Incident[]>("incidents-mine", myIncidents);
 
   useEffect(() => {
     if (notifs.data) setUnread(notifs.data.unread_count);
@@ -53,14 +55,30 @@ export default function HomeScreen() {
     useCallback(() => {
       void att.refresh();
       void notifs.refresh();
+      void incidents.refresh();
       // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh fns are stable per key
     }, []),
   );
 
   const rank = profile?.role?.rank ?? 6;
+  const eligible = profile?.shift_swap_eligible ?? false;
   const today = dayjs().format("YYYY-MM-DD");
   const todayRec = att.data?.find((r) => r.date === today) ?? null;
   const todayShift = shifts.data?.[0] ?? null;
+
+  // My Reports strip: last 7 days summary
+  const weekAgo = dayjs().subtract(7, "day");
+  const recentReports = (incidents.data ?? []).filter(
+    (i) => i.created_at && dayjs(i.created_at).isAfter(weekAgo),
+  );
+  const openCount = recentReports.filter((i) => i.status !== "resolved").length;
+  const resolvedCount = recentReports.filter((i) => i.status === "resolved").length;
+  const stripText = [
+    openCount > 0 ? t("home.stripOpen", { count: openCount }) : null,
+    resolvedCount > 0 ? t("home.stripResolved", { count: resolvedCount }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const doPunchOut = async () => {
     setConfirmOut(false);
@@ -151,7 +169,7 @@ export default function HomeScreen() {
               {profile?.department ? ` · ${tri(profile.department as unknown as Record<string, unknown>, "name")}` : ""}
             </Text>
           </View>
-          {todayShift?.shift_code ? (
+          {eligible && todayShift?.shift_code ? (
             <View style={styles.shiftChip} testID="today-shift-chip">
               <Text style={styles.shiftChipCode}>{todayShift.shift_code}</Text>
               <Text style={styles.shiftChipTime}>
@@ -176,6 +194,20 @@ export default function HomeScreen() {
           <Text style={styles.incidentLabel}>{t("home.reportIncident")}</Text>
         </Pressable>
 
+        {stripText ? (
+          <Pressable
+            testID="reports-strip"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/reports")}
+            style={({ pressed }) => [styles.strip, { opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={styles.stripText} numberOfLines={1}>
+              {stripText}
+            </Text>
+            <ChevronRight size={20} color={colors.accent} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+
         <View style={[styles.attCard, shadow.card]} testID="attendance-card">
           <View style={styles.attHead}>
             <Text style={styles.attTitle}>{t("att.title")}</Text>
@@ -198,35 +230,49 @@ export default function HomeScreen() {
             badge={outboxCount}
             onPress={() => router.push("/(tabs)/reports")}
           />
-          <GridTile
-            testID="home-tile-shift"
-            label={t("home.myShift")}
-            icon={CalendarDays}
-            tint={colors.accent}
-            onPress={() => router.push("/shift")}
-          />
-        </View>
-        <View style={styles.grid}>
-          <GridTile
-            testID="home-tile-alerts"
-            label={t("home.notifications")}
-            icon={Bell}
-            badge={unread}
-            tint={colors.warning}
-            onPress={() => router.push("/(tabs)/alerts")}
-          />
-          {rank <= 3 ? (
+          {eligible ? (
             <GridTile
-              testID="home-tile-approvals"
-              label={t("home.approvals")}
-              icon={ClipboardCheck}
-              tint={colors.success}
-              onPress={() => showToast(t("common.comingSoon"), "info")}
+              testID="home-tile-shift"
+              label={t("home.myShift")}
+              icon={CalendarDays}
+              tint={colors.accent}
+              onPress={() => router.push("/shift")}
             />
           ) : (
-            <View style={{ flex: 1 }} />
+            <GridTile
+              testID="home-tile-alerts"
+              label={t("home.notifications")}
+              icon={Bell}
+              badge={unread}
+              tint={colors.warning}
+              onPress={() => router.push("/(tabs)/alerts")}
+            />
           )}
         </View>
+        {eligible || rank <= 3 ? (
+          <View style={styles.grid}>
+            {eligible ? (
+              <GridTile
+                testID="home-tile-alerts"
+                label={t("home.notifications")}
+                icon={Bell}
+                badge={unread}
+                tint={colors.warning}
+                onPress={() => router.push("/(tabs)/alerts")}
+              />
+            ) : null}
+            {rank <= 3 ? (
+              <GridTile
+                testID="home-tile-approvals"
+                label={t("home.approvals")}
+                icon={ClipboardCheck}
+                tint={colors.success}
+                onPress={() => router.push("/(tabs)/approvals")}
+              />
+            ) : null}
+            {(eligible ? 1 : 0) + (rank <= 3 ? 1 : 0) === 1 ? <View style={{ flex: 1 }} /> : null}
+          </View>
+        ) : null}
       </ScrollView>
 
       <ConfirmModal
@@ -307,4 +353,17 @@ const styles = StyleSheet.create({
   },
   lateChipText: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.onWarning },
   grid: { flexDirection: "row", gap: spacing.md },
+  strip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    minHeight: 48,
+    marginTop: -spacing.xs,
+  },
+  stripText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.accent, flex: 1 },
 });

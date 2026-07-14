@@ -83,4 +83,6 @@ export const statusColors: Record<string, string> = {
   resolved: colors.success,
   escalated: colors.danger,
   queued: colors.warning,
+  approved: colors.success,
+  rejected: colors.danger,
 };

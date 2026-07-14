@@ -3,6 +3,8 @@ import * as Location from "expo-location";
 export interface GpsFix {
   lat: number;
   lng: number;
+  /** metres, when the platform reports it */
+  accuracy: number | null;
 }
 
 export interface GpsResult {
@@ -30,13 +32,19 @@ export async function acquireGps(timeoutMs = 10000): Promise<GpsResult> {
     ]);
     if (current) {
       return {
-        fix: { lat: current.coords.latitude, lng: current.coords.longitude },
+        fix: {
+          lat: current.coords.latitude,
+          lng: current.coords.longitude,
+          accuracy: current.coords.accuracy ?? null,
+        },
         blocked: false,
       };
     }
     const last = await Location.getLastKnownPositionAsync();
     return {
-      fix: last ? { lat: last.coords.latitude, lng: last.coords.longitude } : null,
+      fix: last
+        ? { lat: last.coords.latitude, lng: last.coords.longitude, accuracy: last.coords.accuracy ?? null }
+        : null,
       blocked: false,
     };
   } catch {

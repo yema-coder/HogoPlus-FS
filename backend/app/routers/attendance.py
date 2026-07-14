@@ -187,13 +187,18 @@ async def flagged_attendance(
 ):
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
-    query = select(Attendance).where(
-        Attendance.verification_level == "flagged", Attendance.approved_by.is_(None)
+    query = (
+        select(Attendance, Employee.full_name, Employee.emp_id, Employee.department_code)
+        .join(Employee, Attendance.employee_id == Employee.id)
+        .where(Attendance.verification_level == "flagged", Attendance.approved_by.is_(None))
     )
     if date:
         query = query.where(Attendance.date == datetime.fromisoformat(date).date())
-    rows = (await session.execute(query.order_by(Attendance.date.desc()))).scalars().all()
-    return [_out(a) for a in rows]
+    rows = (await session.execute(query.order_by(Attendance.date.desc()))).all()
+    return [
+        {**_out(a), "employee_name": name, "emp_id": emp_id, "department_code": dept}
+        for a, name, emp_id, dept in rows
+    ]
 
 
 @router.get("/attendance/department/{code}")
