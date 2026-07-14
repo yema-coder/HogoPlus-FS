@@ -48,7 +48,7 @@ export default function ReportsScreen() {
       <Pressable
         testID={`incident-row-${item.id}`}
         accessibilityRole="button"
-        onPress={() => router.push(`/incident/${item.id}`)}
+        onPress={() => router.push({ pathname: "/incident/[id]", params: { id: item.id } })}
         style={({ pressed }) => [styles.row, { opacity: pressed ? 0.85 : 1 }]}
       >
         <View style={[styles.iconWrap, { backgroundColor: `${def.tint}18` }]}>

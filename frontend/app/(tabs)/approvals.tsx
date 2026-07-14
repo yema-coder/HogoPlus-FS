@@ -231,7 +231,7 @@ export default function ApprovalsScreen() {
       return (
         <Pressable
           testID={`approval-sub-${s.id}`}
-          onPress={() => router.push(`/submission/${s.id}`)}
+          onPress={() => router.push({ pathname: "/submission/[id]", params: { id: s.id } })}
           style={({ pressed }) => [styles.card, { opacity: pressed ? 0.85 : 1 }]}
         >
           <View style={{ flex: 1, gap: 2 }}>
@@ -337,7 +337,7 @@ export default function ApprovalsScreen() {
       return (
         <Pressable
           testID={`approval-incident-${inc.id}`}
-          onPress={() => router.push(`/incident/${inc.id}`)}
+          onPress={() => router.push({ pathname: "/incident/[id]", params: { id: inc.id } })}
           style={({ pressed }) => [styles.card, { opacity: pressed ? 0.85 : 1 }]}
         >
           <View style={[styles.incIcon, { backgroundColor: `${def.tint}18` }]}>

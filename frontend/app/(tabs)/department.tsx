@@ -86,7 +86,7 @@ export default function DepartmentScreen() {
                     key={f.id}
                     testID={`form-tile-${f.code}`}
                     accessibilityRole="button"
-                    onPress={() => router.push(`/form/${f.id}`)}
+                    onPress={() => router.push({ pathname: "/form/[id]", params: { id: f.id } })}
                     style={({ pressed }) => [styles.formTile, { opacity: pressed ? 0.85 : 1 }]}
                   >
                     <View style={styles.formIconWrap}>
@@ -127,7 +127,7 @@ export default function DepartmentScreen() {
           <Pressable
             testID={`submission-row-${item.id}`}
             accessibilityRole="button"
-            onPress={() => router.push(`/submission/${item.id}`)}
+            onPress={() => router.push({ pathname: "/submission/[id]", params: { id: item.id } })}
             style={({ pressed }) => [styles.subRow, { opacity: pressed ? 0.85 : 1 }]}
           >
             <View style={styles.subIconWrap}>

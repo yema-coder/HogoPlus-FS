@@ -48,9 +48,9 @@ export default function AlertsScreen() {
       markNotificationRead(item.id).catch(() => undefined);
     }
     if (item.entity_type === "incident" && item.entity_id) {
-      router.push(`/incident/${item.entity_id}`);
+      router.push({ pathname: "/incident/[id]", params: { id: item.entity_id } });
     } else if (item.entity_type === "form_submission" && item.entity_id) {
-      router.push(`/submission/${item.entity_id}`);
+      router.push({ pathname: "/submission/[id]", params: { id: item.entity_id } });
     } else if (item.entity_type === "shift_swap") {
       router.push("/shift");
     } else if (item.entity_type === "employee") {
