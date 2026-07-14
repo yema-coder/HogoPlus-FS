@@ -1,0 +1,145 @@
+import { useRouter } from "expo-router";
+import { Phone } from "lucide-react-native";
+import React, { useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
+
+import { ApiError } from "@/src/api/client";
+import { sendOtp } from "@/src/api/endpoints";
+import { BigButton } from "@/src/components/BigButton";
+import { showToast } from "@/src/components/Toast";
+import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
+
+export default function PhoneEntry() {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const [digits, setDigits] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const valid = /^[6-9]\d{9}$/.test(digits);
+
+  const submit = async () => {
+    if (!valid) {
+      showToast(t("auth.invalidPhone"), "error");
+      return;
+    }
+    const phone = `+91${digits}`;
+    setLoading(true);
+    try {
+      await sendOtp(phone);
+      router.push({ pathname: "/(auth)/otp", params: { phone } });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) showToast(t("auth.locked"), "error");
+      else if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
+      else showToast(t("errors.server"), "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safe} testID="phone-entry-screen">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.hero}>
+            <View style={styles.iconCircle}>
+              <Phone size={36} color={colors.onPrimary} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.appName}>Hogo Plus</Text>
+            <Text style={styles.welcome}>{t("auth.welcome")}</Text>
+          </View>
+
+          <Text style={styles.label}>{t("auth.phoneTitle")}</Text>
+          <View style={styles.inputRow}>
+            <View style={styles.prefix}>
+              <Text style={styles.prefixText}>+91</Text>
+            </View>
+            <TextInput
+              testID="phone-input"
+              style={styles.input}
+              value={digits}
+              onChangeText={(v) => setDigits(v.replace(/\D/g, "").slice(0, 10))}
+              keyboardType="number-pad"
+              maxLength={10}
+              placeholder={t("auth.phoneHint")}
+              placeholderTextColor={colors.muted}
+              autoFocus
+              onSubmitEditing={() => void submit()}
+            />
+          </View>
+
+          <BigButton
+            testID="send-otp-button"
+            label={t("auth.sendOtp")}
+            onPress={() => void submit()}
+            loading={loading}
+            disabled={!valid}
+            height={64}
+            style={{ marginTop: spacing.xl }}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.background },
+  scroll: { padding: sizes.screenPadding, flexGrow: 1 },
+  hero: { alignItems: "center", marginVertical: spacing.xxl, gap: spacing.xs },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.md,
+  },
+  appName: { fontFamily: fonts.bold, fontSize: type.xxl, color: colors.primary },
+  welcome: { fontFamily: fonts.regular, fontSize: type.base, color: colors.muted },
+  label: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.lg,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  inputRow: { flexDirection: "row", gap: spacing.sm },
+  prefix: {
+    height: 64,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceTertiary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  prefixText: { fontFamily: fonts.semiBold, fontSize: type.xl, color: colors.text },
+  input: {
+    flex: 1,
+    height: 64,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    fontFamily: fonts.semiBold,
+    fontSize: type.xl,
+    color: colors.text,
+    letterSpacing: 2,
+  },
+});

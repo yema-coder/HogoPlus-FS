@@ -1,30 +1,38 @@
-import { Text, View, StyleSheet, Image } from "react-native";
+import { Redirect } from "expo-router";
+import React from "react";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { useAuthStore } from "@/src/stores/authStore";
+import { colors, fonts, type } from "@/src/theme/tokens";
 
 export default function Index() {
-  console.log(EXPO_PUBLIC_BACKEND_URL, "EXPO_PUBLIC_BACKEND_URL");
+  const { status, profile, langPicked } = useAuthStore();
 
-  return (
-    <View style={styles.container}>
-      <Image
-        source={require("../assets/images/app-image.png")}
-        style={styles.image}
-      />
-    </View>
-  );
+  if (status === "loading") {
+    return (
+      <View style={styles.splash} testID="splash-screen">
+        <Text style={styles.logo}>Hogo Plus</Text>
+        <ActivityIndicator size="large" color={colors.onPrimary} />
+      </View>
+    );
+  }
+  if (!langPicked && status !== "authenticated") return <Redirect href="/(auth)/language" />;
+  if (status !== "authenticated") return <Redirect href="/(auth)/phone" />;
+  if (profile && profile.onboarding_status !== "approved") return <Redirect href="/(auth)/pending" />;
+  return <Redirect href="/(tabs)/home" />;
 }
 
 const styles = StyleSheet.create({
-  container: {
+  splash: {
     flex: 1,
-    backgroundColor: "#0c0c0c",
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    gap: 24,
   },
-  image: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "contain",
+  logo: {
+    fontFamily: fonts.bold,
+    fontSize: type.xxl,
+    color: colors.onPrimary,
   },
 });
