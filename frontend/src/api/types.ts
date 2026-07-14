@@ -81,6 +81,7 @@ export interface Incident {
   voice_note_key: string | null;
   status: IncidentStatus;
   severity: string;
+  severity_reason: string | null;
   assigned_manager_id: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
@@ -117,6 +118,8 @@ export interface AttendanceRecord {
   shift_code: string | null;
   is_late: boolean;
   flagged_reason: string | null;
+  face_match_score: number | null;
+  face_verified: boolean | null;
   approved_by: string | null;
 }
 
@@ -264,4 +267,43 @@ export interface FlaggedAttendance extends AttendanceRecord {
   employee_name: string;
   emp_id: string;
   department_code: string;
+  selfie_url: string | null;
+  reference_selfie_url: string | null;
+}
+
+// ---------- Phase 4: AI services ----------
+
+export interface AnprResult {
+  plate: string | null;
+  confidence: number;
+  valid: boolean;
+  source: string | null;
+  model: string;
+}
+
+export interface GaugeResult {
+  value: number | null;
+  unit: string | null;
+  confidence: number;
+  in_range: boolean | null;
+  model: string;
+}
+
+export interface VoiceFillResult {
+  transcript: string;
+  language: string;
+  fields: Record<string, unknown>;
+  model: string;
+}
+
+export interface ChatCitation {
+  doc_title: string;
+  page: number;
+}
+
+export interface ChatResult {
+  conversation_id: string;
+  answer: string;
+  citations: ChatCitation[];
+  model: string;
 }

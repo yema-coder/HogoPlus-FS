@@ -111,3 +111,71 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 ### Phase 2 Part 2 backlog
 - Forms engine renderer (schema_json), manager approval screens (registrations/forms/swaps),
   shift swap flow, Time Office flagged-attendance approval, dept attendance dashboard.
+
+## Phase 4 — AI Services + Production Storage + Integrations (June 2026) — COMPLETE
+
+### Part A — Production storage (Cloudflare R2)
+- FILE_STORAGE_MODE=s3 live. S3Storage: sigv4, region auto, NO ACLs (R2), presigned GET 24h with
+  ResponseContentType override (browsers need image/jpeg, R2 stores octet-stream otherwise).
+- Migration: scripts/migrate_uploads_to_r2.py — 8 files migrated, keys preserved.
+- Backups: nightly 02:30 IST (21:00 UTC beat) pg_dump→gzip→R2 backups/YYYY-MM-DD.sql.gz, keep 14.
+  Manual: POST /api/admin/backup-now (CGM/MD). Proof: backups/2026-07-14.sql.gz.
+- Secrets in backend/.env (NEVER print): S3_ENDPOINT_URL, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY,
+  AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION=ap-south-1, EMERGENT_LLM_KEY.
+  NOTE: must be re-added in Deployment→Secrets at deploy time.
+
+### Part B — Face verification (Rekognition: CompareFaces/DetectFaces/DetectText ONLY)
+- employees.reference_selfie_key/set_at; attendance.face_match_score/face_verified.
+- Bootstrap: registration approval sets reference from selfie; else FIRST punch selfie (audit event).
+- Celery task app.tasks.verify_face (async, never blocks punch): ≥90 verified=true; <80 false +
+  flagged/face_mismatch + notify TIME_OFFICE manager; 80-89 borderline (null, level kept);
+  Rekognition infra error → null + rekognition:failures counter (NEVER flag); InvalidParameter
+  (no face) → score 0 (real mismatch).
+- POST /api/admin/employees/{id}/reset-reference-selfie (TO mgr/CGM/MD).
+- DetectFaces gate on registration selfie (0 faces → 400 trilingual, fail-open on infra errors, skipped in TESTING).
+- Flagged queue returns selfie_url + reference_selfie_url (presigned) + score; mobile shows side-by-side.
+
+### Part C — AI services (Universal Key, gemini-2.5-flash, temp 0, all return value+confidence+model)
+- POST /api/ai/anpr {photo_key} → vision → normalize+regex ^[A-Z]{2}[0-9]{1,2}[A-Z]{0,3}[0-9]{4}$ →
+  fallback Rekognition DetectText. Smoke: MH12AB1234 @ 1.0.
+- POST /api/ai/gauge-read {photo_key,expected_min/max} → value+in_range. Smoke: 72.5 Brix.
+- POST /api/ai/voice-fill {audio_key,form_definition_id} → Whisper (Devanagari-bias prompt) → LLM maps
+  to schema (only text/number/select/toggle; select must match option verbatim; omit uncertain).
+- POST /api/ai/chat → embed query (LOCAL fastembed sentence-transformers/paraphrase-multilingual-
+  MiniLM-L12-v2, 384-dim, cache /app/backend/.fastembed_cache) → pgvector cosine top-6 (gate 0.78) →
+  grounded answer in user language + citations; trilingual honest fallback; history last 6 turns
+  (chat_messages table).
+- SOP RAG admin: POST/GET/DELETE /api/admin/sop-docs (PDF→R2→celery sop_ingest: pypdf per-page,
+  ~800-token chunks w/ overlap, embed → sop_chunks pgvector). No OCR (text-layer only).
+- Incident severity: celery classify_incident_severity after create → severity+severity_reason(EN)+
+  timeline ai_severity; critical → notify dept mgr + CGM/MD. Smoke: fire+trapped → critical.
+- Nightly report: 06:00 IST (00:30 UTC) → per-dept attendance/submissions/incidents/approvals-aging →
+  fpdf2 + Noto Sans Devanagari (bundled assets/fonts) + set_text_shaping(True) + set_fallback_fonts
+  (Deva font lacks Latin letters!) → R2 reports/YYYY-MM-DD/factory-report-{mr,en}.pdf → notify CGM/MD
+  presigned link. Manual POST /api/admin/generate-report {date}. Devanagari visually verified.
+- Cost: redis cache 24h by (endpoint,photo_key); GET /api/admin/ai-usage counters (CGM/MD).
+- SMS stubs: OTP_MODE=demo; MSG91Sender + SMSGatewayHubSender raise NotConfigured until keys arrive.
+
+### Part D — Mobile wiring
+- AnprTextInput (text field ai_hook=anpr): camera scan btn → upload → /ai/anpr → autofill + AI chip
+  (confidence %). Silent fallback on failure. Manual edit clears chip (never locks).
+- gauge_read photo → auto-fill first number field via /ai/gauge-read + out-of-range toast.
+- VoiceFillButton FAB (forms with 2+ fillable fields): ≤60s expo-audio rec → /ai/voice-fill →
+  prefill + AI chips + toast.
+- Sahayak chat: app/sahayak.tsx (entry: profile testID sahayak-entry). Bubbles + citation chips +
+  trilingual empty state.
+- Incident detail: SeverityChip (muted/amber/red) + AI reason card + one 8s re-poll; approvals
+  incidents sort critical-first + severity chip.
+- Time Office queue: side-by-side reference/punch selfies + Face match % for face_mismatch rows.
+- i18n: 272 keys ×3 (was 247, +25), parity script green.
+
+### Phase 4 infra notes
+- Pod recycle wiped PG16+redis: reinstalled via PGDG apt (postgresql-16, postgresql-16-pgvector,
+  redis-server), recreated hogo role + hogoplus/hogoplus_test DBs + vector extension, alembic 0001-0003,
+  seed.py (401 employees). If it recycles again, repeat those steps.
+- Migration 0003: face cols, severity_reason, sop_docs, sop_chunks(vector 384), chat_messages.
+- Tests: 99 passed (was 78; +21: test_face_verification.py matrix, test_ai_endpoints.py mocked).
+- Demo seeded: face_mismatch row for emp 0056 (ENG worker +917775915271) w/ synthetic selfies.
+
+### Phase 5 backlog (NOT started)
+- MD Web Dashboard (web app for MD role) — user will request explicitly.

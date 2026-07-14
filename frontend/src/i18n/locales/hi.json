@@ -162,7 +162,11 @@
     "zoneChecking": "ज़ोन जाँच रहे हैं…",
     "review": "हाज़िरी जाँच",
     "reasonGps": "GPS नहीं",
-    "reasonGeofence": "फैक्टरी के बाहर"
+    "reasonGeofence": "फैक्टरी के बाहर",
+    "reasonFace": "चेहरा मेल नहीं खाया",
+    "faceScore": "चेहरा मिलान {{s}}%",
+    "refPhoto": "संदर्भ फोटो",
+    "punchPhoto": "पंच सेल्फी"
   },
   "notif": {
     "title": "सूचनाएँ",
@@ -177,7 +181,8 @@
     "shift": "आज की शिफ्ट",
     "language": "भाषा",
     "logout": "लॉग आउट",
-    "memberNote": "जानकारी बदलने के लिए टाइम ऑफिस से मिलें"
+    "memberNote": "जानकारी बदलने के लिए टाइम ऑफिस से मिलें",
+    "sahayak": "SOP सहायक — कुछ भी पूछें"
   },
   "shift": {
     "title": "मेरी शिफ्ट",
@@ -283,5 +288,31 @@
     "approved": "मंज़ूर हुआ",
     "rejected": "अस्वीकार",
     "youGet": "आपको मिलेगी"
+  },
+  "ai": {
+    "reading": "AI पढ़ रहा है…",
+    "scanPlate": "प्लेट स्कैन करें",
+    "voiceFill": "बोलकर भरें",
+    "voiceListening": "बोलिए… {{s}}s",
+    "voiceProcessing": "समझ रहे हैं…",
+    "voiceApplied": "{{n}} फ़ील्ड भरे गए — जाँच लें",
+    "voiceNone": "समझ नहीं आया। हाथ से भरें।",
+    "voiceHint": "मान बोलें — जैसे स्टेशन, रीडिंग, टिप्पणी",
+    "outOfRange": "रीडिंग सीमा से बाहर लग रही है — जाँचें"
+  },
+  "sahayak": {
+    "title": "सहायक",
+    "placeholder": "SOP के बारे में पूछें…",
+    "empty": "SOP के बारे में कुछ भी पूछो",
+    "emptyHint": "जैसे: बॉयलर का सेट प्रेशर क्या है?",
+    "page": "पृष्ठ",
+    "error": "जवाब नहीं मिला। फिर कोशिश करें।",
+    "thinking": "सहायक सोच रहा है…"
+  },
+  "severity": {
+    "normal": "सामान्य",
+    "high": "उच्च",
+    "critical": "गंभीर",
+    "aiReason": "AI आकलन"
   }
 }

@@ -92,6 +92,15 @@ T = {
     "attendance_approved": {
         "title": {"en": "Flagged attendance approved", "hi": "चिह्नित उपस्थिति स्वीकृत", "mr": "चिन्हांकित हजेरी मंजूर"},
     },
+    "attendance_face_mismatch": {
+        "title": {"en": "Face mismatch on punch-in", "hi": "पंच-इन पर चेहरा मेल नहीं खाया", "mr": "पंच-इनला चेहरा जुळला नाही"},
+    },
+    "incident_critical": {
+        "title": {"en": "CRITICAL incident detected", "hi": "गंभीर घटना का पता चला", "mr": "गंभीर घटना आढळली"},
+    },
+    "report_ready": {
+        "title": {"en": "Daily factory report is ready", "hi": "दैनिक कारखाना रिपोर्ट तैयार", "mr": "दैनिक कारखाना अहवाल तयार"},
+    },
 }
 
 

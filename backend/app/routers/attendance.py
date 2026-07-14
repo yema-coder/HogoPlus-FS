@@ -14,6 +14,7 @@ from app.notify import dispatcher, template
 from app.schemas import PunchInIn
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
+from app.storage import get_storage
 
 router = APIRouter(tags=["attendance"])
 
@@ -44,6 +45,8 @@ def _out(a: Attendance) -> dict:
         "shift_code": a.shift_code,
         "is_late": a.is_late,
         "flagged_reason": a.flagged_reason,
+        "face_match_score": a.face_match_score,
+        "face_verified": a.face_verified,
         "approved_by": str(a.approved_by) if a.approved_by else None,
     }
 
@@ -124,6 +127,16 @@ async def punch_in(
         await session.rollback()
         raise HTTPException(status_code=409, detail="Already punched in for this day")
     await session.refresh(record)
+
+    # Face verification runs ASYNC in Celery — the punch response is never delayed.
+    # The task also handles the bootstrap rule (first selfie becomes the reference).
+    try:
+        from app.tasks import verify_face_task
+
+        verify_face_task.delay(str(record.id))
+    except Exception:  # broker unavailable must never fail a punch
+        pass
+
     return _out(record)
 
 
@@ -188,16 +201,30 @@ async def flagged_attendance(
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
     query = (
-        select(Attendance, Employee.full_name, Employee.emp_id, Employee.department_code)
+        select(
+            Attendance,
+            Employee.full_name,
+            Employee.emp_id,
+            Employee.department_code,
+            Employee.reference_selfie_key,
+        )
         .join(Employee, Attendance.employee_id == Employee.id)
         .where(Attendance.verification_level == "flagged", Attendance.approved_by.is_(None))
     )
     if date:
         query = query.where(Attendance.date == datetime.fromisoformat(date).date())
     rows = (await session.execute(query.order_by(Attendance.date.desc()))).all()
+    storage = get_storage()
     return [
-        {**_out(a), "employee_name": name, "emp_id": emp_id, "department_code": dept}
-        for a, name, emp_id, dept in rows
+        {
+            **_out(a),
+            "employee_name": name,
+            "emp_id": emp_id,
+            "department_code": dept,
+            "selfie_url": storage.url_for(a.selfie_key) if a.selfie_key else None,
+            "reference_selfie_url": storage.url_for(ref_key) if ref_key else None,
+        }
+        for a, name, emp_id, dept, ref_key in rows
     ]
 
 

@@ -10,12 +10,14 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { submitForm } from "@/src/api/endpoints";
+import { aiGaugeRead, submitForm } from "@/src/api/endpoints";
 import type { FormDefinitionItem, FormFieldDef } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
 import { FieldWrapper } from "@/src/forms/FieldWrapper";
+import { VoiceFillButton } from "@/src/forms/VoiceFillButton";
 import { clearDraft, isLocalUri, loadDraft, saveDraft } from "@/src/forms/draft";
+import { AnprTextInput } from "@/src/forms/fields/AnprTextInput";
 import { DateTimeFieldInput } from "@/src/forms/fields/DateTimeFieldInput";
 import { GpsFieldInput, type GpsValue } from "@/src/forms/fields/GpsFieldInput";
 import { NumberFieldInput } from "@/src/forms/fields/NumberFieldInput";
@@ -46,6 +48,8 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [aiFilled, setAiFilled] = useState<Record<string, number | true>>({});
+  const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Record<string, number>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,7 +87,63 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
       delete next[key];
       return next;
     });
+    // manual edit removes the AI marker — auto-fill never locks the field
+    setAiFilled((prev) => {
+      if (prev[key] === undefined) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
+
+  const applyAiValue = (key: string, v: unknown, confidence?: number) => {
+    if (v !== undefined) setValues((prev) => ({ ...prev, [key]: v }));
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setAiFilled((prev) => ({ ...prev, [key]: confidence ?? true }));
+  };
+
+  const markAiLoading = (key: string, loading: boolean) =>
+    setAiLoading((prev) => ({ ...prev, [key]: loading }));
+
+  /** gauge_read photo captured → upload → AI read → auto-fill the linked number field. */
+  const runGaugeAi = async (photoField: FormFieldDef, uri: string) => {
+    const target = fields.find((f) => f.type === "number");
+    if (!target) return;
+    markAiLoading(target.key, true);
+    try {
+      const uploaded = await uploadFile(uri, `${photoField.key}.jpg`);
+      const result = await aiGaugeRead(
+        uploaded.key,
+        target.validation?.min,
+        target.validation?.max,
+      );
+      if (result.value !== null) {
+        applyAiValue(target.key, result.value, result.confidence);
+        if (result.in_range === false) showToast(t("ai.outOfRange"), "info");
+      }
+    } catch {
+      // silent fallback to manual entry — no error popup
+    } finally {
+      markAiLoading(target.key, false);
+    }
+  };
+
+  /** voice-fill result → prefill returned fields with AI chips (user reviews before submit). */
+  const applyVoiceFill = (filled: Record<string, unknown>) => {
+    const byKey = new Map(fields.map((f) => [f.key, f]));
+    for (const [k, v] of Object.entries(filled)) {
+      if (byKey.has(k)) applyAiValue(k, v);
+    }
+  };
+
+  const fillableCount = fields.filter((f) =>
+    ["text", "number", "select", "toggle"].includes(f.type),
+  ).length;
 
   const validate = (): Record<string, string> => {
     const errs: Record<string, string> = {};
@@ -232,7 +292,10 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           <PhotoFieldInput
             label={tri(f as unknown as Record<string, unknown>, "label")}
             value={typeof v === "string" ? v : undefined}
-            onChange={(uri) => setValue(f.key, uri)}
+            onChange={(uri) => {
+              setValue(f.key, uri);
+              if (f.ai_hook === "gauge_read") void runGaugeAi(f, uri);
+            }}
             error={err}
             testID={testID}
           />
@@ -269,6 +332,19 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           />
         );
       default:
+        if (f.ai_hook === "anpr") {
+          return (
+            <AnprTextInput
+              label={tri(f as unknown as Record<string, unknown>, "label")}
+              value={typeof v === "string" ? v : ""}
+              onChange={(txt) => setValue(f.key, txt)}
+              onAiFilled={(conf) => applyAiValue(f.key, undefined, conf)}
+              onAiLoading={(loading) => markAiLoading(f.key, loading)}
+              error={err}
+              testID={testID}
+            />
+          );
+        }
         return (
           <TextFieldInput
             value={typeof v === "string" ? v : ""}
@@ -293,6 +369,8 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
             key={f.key}
             field={f}
             error={errors[f.key]}
+            aiFilled={aiFilled[f.key]}
+            aiLoading={aiLoading[f.key]}
             onLayout={(e) => {
               positions.current[f.key] = e.nativeEvent.layout.y;
             }}
@@ -309,7 +387,15 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           loading={submitting}
           onPress={() => void submit()}
         />
+        {fillableCount >= 2 ? <View style={{ height: 72 }} /> : null}
       </ScrollView>
+      {fillableCount >= 2 ? (
+        <VoiceFillButton
+          formDefinitionId={definition.id}
+          onFilled={applyVoiceFill}
+          testID="voice-fill-fab"
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

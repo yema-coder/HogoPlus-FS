@@ -28,6 +28,7 @@ def _out(i: Incident) -> dict:
         "voice_note_key": i.voice_note_key,
         "status": i.status,
         "severity": i.severity,
+        "severity_reason": i.severity_reason,
         "assigned_manager_id": str(i.assigned_manager_id) if i.assigned_manager_id else None,
         "escalated_to": str(i.escalated_to) if i.escalated_to else None,
         "escalated_at": i.escalated_at.isoformat() if i.escalated_at else None,
@@ -95,6 +96,15 @@ async def create_incident(
     await write_audit(session, employee.id, "incident.created", "incident", str(incident.id), {"category": body.category})
     await session.commit()
     await session.refresh(incident)
+
+    # AI severity classification runs AFTER commit in Celery — never delays creation.
+    try:
+        from app.tasks import classify_incident_severity
+
+        classify_incident_severity.delay(str(incident.id))
+    except Exception:
+        pass
+
     return _out(incident)
 
 

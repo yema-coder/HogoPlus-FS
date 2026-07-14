@@ -45,12 +45,27 @@ class WhatsAppSender(OTPSender):
         raise NotConfigured("WhatsApp OTP delivery not yet configured")
 
 
+class SMSGatewayHubSender(OTPSender):
+    """Stub: real SMSGatewayHub wiring arrives when SMSGATEWAYHUB_API_KEY is provided."""
+
+    def __init__(self) -> None:
+        if not settings.smsgatewayhub_api_key or not settings.smsgatewayhub_sender_id:
+            raise NotConfigured("SMSGATEWAYHUB_API_KEY / SMSGATEWAYHUB_SENDER_ID not configured")
+
+    async def send(self, phone: str, otp: str) -> None:
+        # Placeholder for httpx call to the SMSGatewayHub SendSMS API using
+        # settings.smsgatewayhub_api_key and settings.smsgatewayhub_sender_id.
+        raise NotConfigured("SMSGatewayHub delivery not yet wired — set OTP_MODE=demo")
+
+
 def get_otp_sender() -> OTPSender:
     mode = settings.otp_mode.lower()
     if mode == "demo":
         return DemoSender()
     if mode == "msg91":
         return MSG91Sender()
+    if mode == "smsgatewayhub":
+        return SMSGatewayHubSender()
     if mode == "whatsapp":
         return WhatsAppSender()
     raise NotConfigured(f"Unknown OTP_MODE '{settings.otp_mode}'")

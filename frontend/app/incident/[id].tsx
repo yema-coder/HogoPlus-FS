@@ -19,6 +19,7 @@ import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { SeverityChip } from "@/src/components/SeverityChip";
 import { showToast } from "@/src/components/Toast";
 import { StatusChip } from "@/src/components/StatusChip";
 import { categoryDef } from "@/src/constants/categories";
@@ -53,6 +54,13 @@ export default function IncidentDetailScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // AI severity classification lands async — one light re-poll if it hasn't yet
+  useEffect(() => {
+    if (!detail || detail.severity_reason) return;
+    const timer = setTimeout(() => void load(), 8000);
+    return () => clearTimeout(timer);
+  }, [detail, load]);
 
   const act = async (status: string, actionNote?: string) => {
     if (!id || acting) return;
@@ -111,8 +119,18 @@ export default function IncidentDetailScreen() {
               <Text style={styles.catTitle}>{def ? t(def.tKey) : detail.category}</Text>
               <Text style={styles.meta}>{formatDateTime(detail.created_at)}</Text>
             </View>
-            <StatusChip status={detail.status} />
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <StatusChip status={detail.status} />
+              <SeverityChip severity={detail.severity} testID="incident-severity-chip" />
+            </View>
           </View>
+
+          {detail.severity_reason ? (
+            <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
+              <Text style={styles.sectionLabel}>{t("severity.aiReason")}</Text>
+              <Text style={styles.desc}>{detail.severity_reason}</Text>
+            </View>
+          ) : null}
 
           {detail.description ? (
             <View style={styles.card}>

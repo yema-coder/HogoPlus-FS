@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { LogOut } from "lucide-react-native";
+import { ChevronRight, LogOut, MessageCircleQuestion } from "lucide-react-native";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -91,6 +91,22 @@ export default function ProfileScreen() {
         </View>
 
         <Text style={styles.note}>{t("profile.memberNote")}</Text>
+
+        <Pressable
+          testID="sahayak-entry"
+          accessibilityRole="button"
+          onPress={() => router.push("/sahayak")}
+          style={({ pressed }) => [styles.sahayakCard, pressed && { opacity: 0.85 }]}
+        >
+          <View style={styles.sahayakIcon}>
+            <MessageCircleQuestion size={26} color={colors.onPrimary} strokeWidth={2.2} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.sahayakTitle}>{t("sahayak.title")}</Text>
+            <Text style={styles.sahayakSub}>{t("profile.sahayak")}</Text>
+          </View>
+          <ChevronRight size={24} color={colors.muted} strokeWidth={2.2} />
+        </Pressable>
 
         <BigButton
           testID="logout-button"
@@ -184,4 +200,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.md,
   },
+  sahayakCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    minHeight: 76,
+  },
+  sahayakIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sahayakTitle: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  sahayakSub: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
 });

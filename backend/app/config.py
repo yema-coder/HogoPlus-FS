@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_bucket: str = "hogoplus-fs"
     file_storage_mode: str = "local"  # local | s3
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "ap-south-1"
+    emergent_llm_key: str = ""
+    smsgatewayhub_api_key: str = ""
+    smsgatewayhub_sender_id: str = ""
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_cache_dir: str = str(ROOT_DIR / ".fastembed_cache")
+    ai_cache_ttl: int = 86400
+    backup_keep_last: int = 14
     demo_otp_enabled: bool = True
     demo_otp: str = "123456"
     escalation_hours: int = 48

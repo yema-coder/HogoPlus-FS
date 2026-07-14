@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.schemas import (
     EmployeePatchIn,
     FormDefCreateIn,
     FormDefPatchIn,
+    GenerateReportIn,
     RejectIn,
     SettingsPatchIn,
 )
@@ -168,6 +169,14 @@ async def approve_employee(
     if emp.onboarding_status not in ("pending_approval", "self_registered"):
         raise HTTPException(status_code=409, detail=f"Employee is {emp.onboarding_status}")
     emp.onboarding_status = "approved"
+    # self-registered workers: the approved registration selfie becomes the face reference
+    if emp.selfie_url and not emp.reference_selfie_key:
+        emp.reference_selfie_key = emp.selfie_url.rsplit("/", 1)[-1]
+        emp.reference_selfie_set_at = now_ist()
+        await write_audit(
+            session, actor.id, "employee.reference_selfie_from_registration",
+            "employee", str(emp.id), {"selfie_key": emp.reference_selfie_key},
+        )
     await write_audit(session, actor.id, "employee.approved", "employee", str(emp.id), {})
     title, body = template("registration_approved", emp.full_name)
     await dispatcher.notify(session, emp.id, "registration_approved", title, body, "employee", str(emp.id))
@@ -375,3 +384,161 @@ async def patch_form(
     from app.routers.forms import _def_out
 
     return _def_out(form)
+
+
+# ---------------- Phase 4: face reference, backups, SOP docs, AI usage, reports ----------------
+
+
+@router.post("/employees/{employee_id}/reset-reference-selfie")
+async def reset_reference_selfie(
+    employee_id: uuid.UUID,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Clears the face reference; the employee's NEXT punch-in selfie re-bootstraps it."""
+    await _require_time_office_or_top(session, actor)
+    emp = await session.get(Employee, employee_id)
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    old_key = emp.reference_selfie_key
+    emp.reference_selfie_key = None
+    emp.reference_selfie_set_at = None
+    await write_audit(
+        session, actor.id, "employee.reference_selfie_reset", "employee",
+        str(emp.id), {"previous_key": old_key},
+    )
+    await session.commit()
+    return {"id": str(emp.id), "reference_selfie_key": None, "message": "Next punch-in selfie will become the new reference"}
+
+
+@router.post("/backup-now")
+async def backup_now(
+    actor: Employee = Depends(require_role(2)),
+):
+    """Manual DB backup trigger (CGM/MD only) — pg_dump → gzip → R2, keep last 14."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app.tasks import run_backup_sync
+
+    try:
+        result = await run_in_threadpool(run_backup_sync)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Backup failed: {type(e).__name__}")
+    return result
+
+
+MAX_SOP_SIZE = 20 * 1024 * 1024
+
+
+@router.post("/sop-docs")
+async def upload_sop_doc(
+    file: UploadFile,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """SOP PDF upload (CGM/MD only) → R2 → Celery: extract, chunk, embed into pgvector."""
+    from app.models import SopDoc
+    from app.storage import get_storage
+
+    content = await file.read()
+    if not content.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+    if len(content) > MAX_SOP_SIZE:
+        raise HTTPException(status_code=413, detail="PDF exceeds 20 MB limit")
+    key = await get_storage().save(content, "pdf")
+    doc = SopDoc(
+        title=(file.filename or "SOP document").rsplit(".", 1)[0][:300],
+        file_key=key,
+        status="pending",
+        uploaded_by=actor.id,
+    )
+    session.add(doc)
+    await write_audit(session, actor.id, "sop_doc.uploaded", "sop_doc", str(doc.id), {"title": doc.title})
+    await session.commit()
+    await session.refresh(doc)
+    try:
+        from app.tasks import sop_ingest_task
+
+        sop_ingest_task.delay(str(doc.id))
+    except Exception:
+        pass
+    return _sop_doc_out(doc)
+
+
+def _sop_doc_out(d) -> dict:
+    return {
+        "id": str(d.id),
+        "title": d.title,
+        "file_key": d.file_key,
+        "page_count": d.page_count,
+        "chunk_count": d.chunk_count,
+        "status": d.status,
+        "error": d.error,
+        "created_at": d.created_at.isoformat() if d.created_at else None,
+    }
+
+
+@router.get("/sop-docs")
+async def list_sop_docs(
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    from app.models import SopDoc
+
+    docs = (
+        (await session.execute(select(SopDoc).order_by(SopDoc.created_at.desc()))).scalars().all()
+    )
+    return [_sop_doc_out(d) for d in docs]
+
+
+@router.delete("/sop-docs/{doc_id}")
+async def delete_sop_doc(
+    doc_id: uuid.UUID,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    from starlette.concurrency import run_in_threadpool
+
+    from app.models import SopDoc
+    from app.storage import get_storage
+
+    doc = await session.get(SopDoc, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        await run_in_threadpool(get_storage().delete, doc.file_key)
+    except Exception:
+        pass  # storage object removal is best-effort
+    await write_audit(session, actor.id, "sop_doc.deleted", "sop_doc", str(doc.id), {"title": doc.title})
+    await session.delete(doc)  # sop_chunks cascade via FK ondelete
+    await session.commit()
+    return {"deleted": str(doc_id)}
+
+
+@router.get("/ai-usage")
+async def ai_usage(
+    date: str | None = None,
+    actor: Employee = Depends(require_role(2)),
+):
+    """Daily AI call counters by type (CGM/MD only)."""
+    from app import ai_core
+
+    target = date or now_ist().date().isoformat()
+    return await ai_core.usage_for_date(target)
+
+
+@router.post("/generate-report")
+async def generate_report(
+    body: GenerateReportIn,
+    actor: Employee = Depends(require_role(2)),
+):
+    """Manual factory-report trigger for demos (CGM/MD only)."""
+    from datetime import timedelta
+
+    from app.tasks import generate_report_async
+
+    target = body.date or (now_ist().date() - timedelta(days=1))
+    try:
+        return await generate_report_async(target)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Report generation failed: {type(e).__name__}")

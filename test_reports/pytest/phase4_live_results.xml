@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="10" time="6.955" timestamp="2026-07-14T17:56:21.065476+00:00" hostname="agent-env-dfc2cf3a-57cf-4364-87fc-51516562f774"><testcase classname="tests.live_phase4_smoke" name="test_flagged_face_mismatch_row_with_presigned_urls" time="0.687"><failure message="AssertionError: send-otp failed for +918308829567: 429 {&quot;detail&quot;:&quot;Too many OTP requests. Try again in 10 minutes.&quot;}&#10;assert 429 == 200&#10; +  where 429 = &lt;Response [429]&gt;.status_code">tests/live_phase4_smoke.py:43: in test_flagged_face_mismatch_row_with_presigned_urls
+    r = requests.get(f"{API}/attendance/flagged", headers=H(PHONES["time_mgr"]), timeout=30)
+                                                          ^^^^^^^^^^^^^^^^^^^^^
+tests/live_phase4_smoke.py:37: in H
+    return {"Authorization": f"Bearer {_login(phone)}"}
+                                       ^^^^^^^^^^^^^
+tests/live_phase4_smoke.py:28: in _login
+    assert r.status_code == 200, f"send-otp failed for {phone}: {r.status_code} {r.text}"
+E   AssertionError: send-otp failed for +918308829567: 429 {"detail":"Too many OTP requests. Try again in 10 minutes."}
+E   assert 429 == 200
+E    +  where 429 = &lt;Response [429]&gt;.status_code</failure></testcase><testcase classname="tests.live_phase4_smoke" name="test_ai_usage_worker_forbidden" time="0.555" /><testcase classname="tests.live_phase4_smoke" name="test_ai_usage_cgm_ok" time="0.497" /><testcase classname="tests.live_phase4_smoke" name="test_backup_now_cgm" time="1.298" /><testcase classname="tests.live_phase4_smoke" name="test_sop_docs_list_has_boiler" time="0.194" /><testcase classname="tests.live_phase4_smoke" name="test_ai_chat_boiler_pressure_grounded" time="2.518" /><testcase classname="tests.live_phase4_smoke" name="test_anpr_no_token_401" time="0.231" /><testcase classname="tests.live_phase4_smoke" name="test_anpr_nonexistent_photo_404" time="0.428" /><testcase classname="tests.live_phase4_smoke" name="test_gauge_no_token_401" time="0.133" /><testcase classname="tests.live_phase4_smoke" name="test_gauge_nonexistent_photo_404" time="0.343" /></testsuite></testsuites>

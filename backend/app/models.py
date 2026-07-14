@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -101,6 +102,10 @@ class Employee(TimestampMixin, Base):
         ONBOARDING_STATUS, default="approved", nullable=False
     )
     selfie_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    reference_selfie_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    reference_selfie_set_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     expo_push_token: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -220,6 +225,7 @@ class Incident(TimestampMixin, Base):
     voice_note_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(INCIDENT_STATUS, default="submitted", nullable=False)
     severity: Mapped[str] = mapped_column(INCIDENT_SEVERITY, default="normal", nullable=False)
+    severity_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
     assigned_manager_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
     )
@@ -269,6 +275,8 @@ class Attendance(TimestampMixin, Base):
     )
     is_late: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     flagged_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    face_match_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_verified: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
     )
@@ -338,6 +346,50 @@ class Notification(Base):
     entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(60), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SopDoc(TimestampMixin, Base):
+    __tablename__ = "sop_docs"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    file_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False
+    )
+
+
+class SopChunk(Base):
+    __tablename__ = "sop_chunks"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    doc_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sop_docs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    page: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding = mapped_column(Vector(384), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(10), nullable=False)  # user | assistant
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citations: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

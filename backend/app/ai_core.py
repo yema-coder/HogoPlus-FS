@@ -1,0 +1,170 @@
+"""Universal-Key AI helpers: vision extraction, text LLM (JSON), Whisper STT,
+plus Redis result-cache and daily usage counters.
+
+Cost discipline: identical calls cached 24h by (endpoint, photo_key); every call
+increments ai:usage:{YYYY-MM-DD}:{kind}.
+"""
+import base64
+import json
+import logging
+import re
+import tempfile
+import uuid
+from pathlib import Path
+
+from app.config import settings
+from app.redis_client import redis_client
+from app.shift_logic import now_ist
+
+logger = logging.getLogger("hogo.ai")
+
+VISION_PROVIDER, VISION_MODEL = "gemini", "gemini-2.5-flash"
+TEXT_PROVIDER, TEXT_MODEL = "gemini", "gemini-2.5-flash"
+CHAT_PROVIDER, CHAT_MODEL = "gemini", "gemini-2.5-flash"
+
+
+class AiError(Exception):
+    pass
+
+
+def _parse_json(raw: str) -> dict:
+    """LLM responses sometimes wrap JSON in ``` fences — strip and parse."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                pass
+    raise AiError(f"Model did not return valid JSON: {raw[:200]}")
+
+
+async def vision_json(prompt: str, image_bytes: bytes) -> dict:
+    """Temperature-0 vision extraction returning parsed JSON."""
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
+
+    chat = (
+        LlmChat(
+            api_key=settings.emergent_llm_key,
+            session_id=f"vision-{uuid.uuid4().hex[:12]}",
+            system_message="You are a precise visual extraction engine. Respond ONLY with valid JSON, no prose.",
+        )
+        .with_model(VISION_PROVIDER, VISION_MODEL)
+        .with_params(temperature=0)
+    )
+    msg = UserMessage(
+        text=prompt,
+        file_contents=[ImageContent(base64.b64encode(image_bytes).decode())],
+    )
+    raw = await chat.send_message(msg)
+    return _parse_json(raw)
+
+
+async def text_json(system: str, prompt: str) -> dict:
+    """Temperature-0 text task returning parsed JSON."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    chat = (
+        LlmChat(
+            api_key=settings.emergent_llm_key,
+            session_id=f"text-{uuid.uuid4().hex[:12]}",
+            system_message=system,
+        )
+        .with_model(TEXT_PROVIDER, TEXT_MODEL)
+        .with_params(temperature=0)
+    )
+    raw = await chat.send_message(UserMessage(text=prompt))
+    return _parse_json(raw)
+
+
+async def chat_answer(system: str, prompt: str) -> str:
+    """Grounded RAG answer — plain text."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+    chat = (
+        LlmChat(
+            api_key=settings.emergent_llm_key,
+            session_id=f"chat-{uuid.uuid4().hex[:12]}",
+            system_message=system,
+        )
+        .with_model(CHAT_PROVIDER, CHAT_MODEL)
+        .with_params(temperature=0.2)
+    )
+    return (await chat.send_message(UserMessage(text=prompt))).strip()
+
+
+WHISPER_LANG_MAP = {"marathi": "mr", "hindi": "hi", "english": "en"}
+
+
+async def transcribe_audio(audio_bytes: bytes, ext: str) -> tuple[str, str]:
+    """Whisper STT with auto language detection → (transcript, lang_code mr/hi/en)."""
+    from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
+
+    stt = OpenAISpeechToText(api_key=settings.emergent_llm_key)
+    suffix = f".{ext}" if not ext.startswith(".") else ext
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(audio_bytes)
+        tmp_path = tmp.name
+    try:
+        with open(tmp_path, "rb") as f:
+            resp = await stt.transcribe(
+                f,
+                model="whisper-1",
+                response_format="verbose_json",
+                # Devanagari-context prompt: biases Whisper toward mr/hi in Devanagari
+                # script instead of Urdu/Arabic script for Indian factory speech.
+                prompt="मराठी किंवा हिंदी: स्टेशन, ब्रिक्स, वजन, शिफ्ट, मशीन, शेरा, फॉर्म भरा.",
+            )
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+    transcript = getattr(resp, "text", "") or ""
+    language_raw = (getattr(resp, "language", "") or "").lower()
+    lang = WHISPER_LANG_MAP.get(language_raw, language_raw[:2] if language_raw else "hi")
+    if lang not in ("mr", "hi", "en"):
+        lang = "hi"
+    return transcript, lang
+
+
+# ---------------- Redis cache + usage counters ----------------
+
+def _cache_key(endpoint: str, resource_key: str) -> str:
+    return f"ai:cache:{endpoint}:{resource_key}"
+
+
+async def cache_get(endpoint: str, resource_key: str) -> dict | None:
+    raw = await redis_client.get(_cache_key(endpoint, resource_key))
+    if raw:
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+async def cache_set(endpoint: str, resource_key: str, payload: dict) -> None:
+    await redis_client.set(
+        _cache_key(endpoint, resource_key), json.dumps(payload), ex=settings.ai_cache_ttl
+    )
+
+
+async def incr_usage(kind: str) -> None:
+    key = f"ai:usage:{now_ist().date().isoformat()}:{kind}"
+    n = await redis_client.incr(key)
+    if n == 1:
+        await redis_client.expire(key, 8 * 86400)
+
+
+async def usage_for_date(date_str: str) -> dict:
+    counts: dict[str, int] = {}
+    async for key in redis_client.scan_iter(f"ai:usage:{date_str}:*"):
+        kind = key.rsplit(":", 1)[-1]
+        val = await redis_client.get(key)
+        counts[kind] = int(val or 0)
+    failures = await redis_client.get(f"rekognition:failures:{date_str}")
+    return {"date": date_str, "counts": counts, "rekognition_failures": int(failures or 0)}

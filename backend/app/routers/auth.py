@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
@@ -118,6 +119,30 @@ async def register(
     ).scalar_one_or_none()
     if dept is None or not dept.is_active:
         raise HTTPException(status_code=404, detail="Department not found")
+
+    # DetectFaces gate: garbage references must never enter the system.
+    # Infra failures never block registration (fail open).
+    if settings.aws_access_key_id and not os.environ.get("TESTING"):
+        from starlette.concurrency import run_in_threadpool
+
+        from app.aws import RekognitionUnavailable, detect_faces_count
+        from app.storage import get_storage
+
+        try:
+            selfie_bytes = await run_in_threadpool(get_storage().get, body.selfie_key)
+            face_count = await run_in_threadpool(detect_faces_count, selfie_bytes)
+        except (RekognitionUnavailable, Exception):
+            face_count = None
+        if face_count == 0:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "no_face_detected",
+                    "en": "Face not clearly visible. Please take the photo again.",
+                    "hi": "चेहरा साफ नहीं दिख रहा। कृपया दोबारा फोटो लें।",
+                    "mr": "चेहरा स्पष्ट दिसत नाही. कृपया पुन्हा फोटो काढा.",
+                },
+            )
 
     max_num = (
         await session.execute(

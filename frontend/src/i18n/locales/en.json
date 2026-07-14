@@ -162,7 +162,11 @@
     "zoneChecking": "Checking zone…",
     "review": "Attendance Review",
     "reasonGps": "No GPS",
-    "reasonGeofence": "Outside factory"
+    "reasonGeofence": "Outside factory",
+    "reasonFace": "Face mismatch",
+    "faceScore": "Face match {{s}}%",
+    "refPhoto": "Reference",
+    "punchPhoto": "Punch selfie"
   },
   "notif": {
     "title": "Alerts",
@@ -177,7 +181,8 @@
     "shift": "Today's shift",
     "language": "Language",
     "logout": "Log out",
-    "memberNote": "Contact Time Office to change details"
+    "memberNote": "Contact Time Office to change details",
+    "sahayak": "SOP assistant — ask anything"
   },
   "shift": {
     "title": "My Shift",
@@ -283,5 +288,31 @@
     "approved": "Approved",
     "rejected": "Rejected",
     "youGet": "You get"
+  },
+  "ai": {
+    "reading": "AI reading…",
+    "scanPlate": "Scan plate",
+    "voiceFill": "Fill by voice",
+    "voiceListening": "Speak now… {{s}}s",
+    "voiceProcessing": "Understanding…",
+    "voiceApplied": "{{n}} field(s) filled — please check",
+    "voiceNone": "Couldn't catch that. Fill manually.",
+    "voiceHint": "Say the values — e.g. station, reading, remarks",
+    "outOfRange": "Reading looks out of range — please check"
+  },
+  "sahayak": {
+    "title": "Sahayak",
+    "placeholder": "Ask about SOPs…",
+    "empty": "Ask anything about factory SOPs",
+    "emptyHint": "e.g. What is the boiler set pressure?",
+    "page": "p.",
+    "error": "Could not answer. Try again.",
+    "thinking": "Sahayak is thinking…"
+  },
+  "severity": {
+    "normal": "Normal",
+    "high": "High",
+    "critical": "Critical",
+    "aiReason": "AI assessment"
   }
 }

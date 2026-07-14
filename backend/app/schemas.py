@@ -1,4 +1,5 @@
 """Pydantic v2 request models."""
+import datetime as _datetime
 import uuid
 from datetime import date
 
@@ -177,3 +178,29 @@ class BeaconPatchIn(BaseModel):
     zone_label_mr: str | None = None
     department_code: str | None = None
     is_active: bool | None = None
+
+
+# ---------------- Phase 4: AI ----------------
+
+class AnprIn(BaseModel):
+    photo_key: str = Field(min_length=1, max_length=500)
+
+
+class GaugeReadIn(BaseModel):
+    photo_key: str = Field(min_length=1, max_length=500)
+    expected_min: float | None = None
+    expected_max: float | None = None
+
+
+class VoiceFillIn(BaseModel):
+    audio_key: str = Field(min_length=1, max_length=500)
+    form_definition_id: uuid.UUID
+
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+    conversation_id: uuid.UUID | None = None
+
+
+class GenerateReportIn(BaseModel):
+    date: _datetime.date | None = None

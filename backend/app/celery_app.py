@@ -20,4 +20,9 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.nightly_backup",
         "schedule": crontab(hour=21, minute=0),
     },
+    # 06:00 IST == 00:30 UTC
+    "nightly-factory-report": {
+        "task": "app.tasks.nightly_report",
+        "schedule": crontab(hour=0, minute=30),
+    },
 }

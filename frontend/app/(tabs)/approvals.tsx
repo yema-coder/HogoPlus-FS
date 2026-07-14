@@ -40,6 +40,7 @@ import type {
 import { BigButton } from "@/src/components/BigButton";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { SeverityChip } from "@/src/components/SeverityChip";
 import { showToast } from "@/src/components/Toast";
 import { StatusChip } from "@/src/components/StatusChip";
 import { categoryDef } from "@/src/constants/categories";
@@ -106,10 +107,14 @@ export default function ApprovalsScreen() {
     ]);
     setRegs(reg.status === "fulfilled" ? reg.value : []);
     setSwaps(swp.status === "fulfilled" ? swp.value : []);
-    setIncidents([
+    const incItems = [
       ...(incSub.status === "fulfilled" ? incSub.value : []),
       ...(incEsc.status === "fulfilled" ? incEsc.value : []),
-    ]);
+    ];
+    // critical first, then high, then normal
+    const sevRank: Record<string, number> = { critical: 0, high: 1, normal: 2 };
+    incItems.sort((a, b) => (sevRank[a.severity] ?? 2) - (sevRank[b.severity] ?? 2));
+    setIncidents(incItems);
     setFlagged(att.status === "fulfilled" ? (att.value as FlaggedAttendance[]) : []);
     setLoading(false);
     void refreshCounts(showAttendance);
@@ -349,20 +354,33 @@ export default function ApprovalsScreen() {
               {deptName(inc.department_code)} · {formatDateTime(inc.created_at)}
             </Text>
           </View>
-          <StatusChip status={inc.status} />
+          <View style={{ alignItems: "flex-end", gap: 4 }}>
+            <StatusChip status={inc.status} />
+            {inc.severity !== "normal" ? (
+              <SeverityChip severity={inc.severity} testID={`severity-${inc.id}`} />
+            ) : null}
+          </View>
         </Pressable>
       );
     }
     const rec = item as FlaggedAttendance;
-    const reasonText = rec.flagged_reason?.includes("gps_missing")
-      ? t("att.reasonGps")
-      : rec.flagged_reason?.includes("outside_geofence")
-        ? t("att.reasonGeofence")
-        : (rec.flagged_reason ?? "");
+    const isFaceMismatch = rec.flagged_reason === "face_mismatch";
+    const reasonText = isFaceMismatch
+      ? t("att.reasonFace")
+      : rec.flagged_reason?.includes("gps_missing")
+        ? t("att.reasonGps")
+        : rec.flagged_reason?.includes("outside_geofence")
+          ? t("att.reasonGeofence")
+          : (rec.flagged_reason ?? "");
     return (
       <View style={styles.regCard} testID={`approval-att-${rec.id}`}>
         <View style={styles.regTop}>
-          <Image source={{ uri: resolveUri(rec.selfie_key) }} style={styles.attSelfie} />
+          {!isFaceMismatch ? (
+            <Image
+              source={{ uri: rec.selfie_url ? resolveUri(rec.selfie_url) : resolveUri(rec.selfie_key) }}
+              style={styles.attSelfie}
+            />
+          ) : null}
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.cardTitle} numberOfLines={1}>
               {rec.employee_name} · {rec.emp_id}
@@ -376,6 +394,35 @@ export default function ApprovalsScreen() {
             </View>
           </View>
         </View>
+        {isFaceMismatch ? (
+          <View testID={`face-compare-${rec.id}`}>
+            <View style={styles.faceRow}>
+              <View style={styles.faceCol}>
+                {rec.reference_selfie_url ? (
+                  <Image source={{ uri: resolveUri(rec.reference_selfie_url) }} style={styles.faceImg} />
+                ) : (
+                  <View style={[styles.faceImg, styles.faceImgEmpty]} />
+                )}
+                <Text style={styles.faceLabel}>{t("att.refPhoto")}</Text>
+              </View>
+              <View style={styles.faceCol}>
+                {rec.selfie_url ? (
+                  <Image source={{ uri: resolveUri(rec.selfie_url) }} style={styles.faceImg} />
+                ) : (
+                  <View style={[styles.faceImg, styles.faceImgEmpty]} />
+                )}
+                <Text style={styles.faceLabel}>{t("att.punchPhoto")}</Text>
+              </View>
+            </View>
+            {rec.face_match_score !== null ? (
+              <View style={styles.scoreChip} testID={`face-score-${rec.id}`}>
+                <Text style={styles.scoreChipText}>
+                  {t("att.faceScore", { s: Math.round(rec.face_match_score) })}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <BigButton
           testID={`att-approve-${rec.id}`}
           label={t("approvals.approve")}
@@ -605,6 +652,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceTertiary,
   },
+  faceRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.sm },
+  faceCol: { flex: 1, alignItems: "center", gap: 4 },
+  faceImg: {
+    width: "100%",
+    aspectRatio: 1,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceTertiary,
+  },
+  faceImgEmpty: { borderWidth: 1, borderColor: colors.border },
+  faceLabel: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  scoreChip: {
+    alignSelf: "center",
+    backgroundColor: "#FDE3E7",
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  scoreChipText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.danger },
   actionRow: { flexDirection: "row", gap: spacing.md },
   swapRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   swapSide: { flex: 1, alignItems: "center", gap: spacing.xs },

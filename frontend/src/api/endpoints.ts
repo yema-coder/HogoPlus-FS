@@ -1,10 +1,13 @@
 import { api } from "@/src/api/client";
 import type {
+  AnprResult,
   AttendanceRecord,
+  ChatResult,
   DepartmentItem,
   EmployeeProfile,
   FlaggedAttendance,
   FormDefinitionItem,
+  GaugeResult,
   Incident,
   IncidentDetail,
   NotificationList,
@@ -16,6 +19,7 @@ import type {
   SwapRequest,
   TokenPair,
   VerifyOtpResponse,
+  VoiceFillResult,
 } from "@/src/api/types";
 
 export const sendOtp = (phone: string) =>
@@ -146,3 +150,26 @@ export const flaggedAttendance = (date?: string) =>
 
 export const approveAttendance = (id: string) =>
   api<AttendanceRecord>(`/attendance/${id}/approve`, { method: "POST" });
+
+// ---------- Phase 4: AI services ----------
+
+export const aiAnpr = (photoKey: string) =>
+  api<AnprResult>("/ai/anpr", { method: "POST", body: { photo_key: photoKey } });
+
+export const aiGaugeRead = (photoKey: string, expectedMin?: number, expectedMax?: number) =>
+  api<GaugeResult>("/ai/gauge-read", {
+    method: "POST",
+    body: { photo_key: photoKey, expected_min: expectedMin ?? null, expected_max: expectedMax ?? null },
+  });
+
+export const aiVoiceFill = (audioKey: string, formDefinitionId: string) =>
+  api<VoiceFillResult>("/ai/voice-fill", {
+    method: "POST",
+    body: { audio_key: audioKey, form_definition_id: formDefinitionId },
+  });
+
+export const aiChat = (message: string, conversationId?: string | null) =>
+  api<ChatResult>("/ai/chat", {
+    method: "POST",
+    body: { message, conversation_id: conversationId ?? null },
+  });
