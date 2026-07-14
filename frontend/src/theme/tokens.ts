@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export const colors = {
   primary: "#0B4F6C",
   accent: "#3A5DAE",
@@ -62,13 +64,16 @@ export const type = {
 } as const;
 
 export const shadow = {
-  card: {
-    shadowColor: "#28251D",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
+  card: Platform.select({
+    web: { boxShadow: "0px 2px 6px rgba(40, 37, 29, 0.08)" },
+    default: {
+      shadowColor: "#28251D",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 6,
+      elevation: 2,
+    },
+  }) as object,
 } as const;
 
 export const statusColors: Record<string, string> = {

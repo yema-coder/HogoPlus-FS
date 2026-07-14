@@ -267,7 +267,7 @@ export default function IncidentCapture() {
     return (
       <View style={styles.fill} testID="incident-capture-screen">
         <CameraView ref={cameraRef} style={styles.fill} facing="back" />
-        <SafeAreaView style={styles.cameraOverlay} pointerEvents="box-none">
+        <SafeAreaView style={styles.cameraOverlay}>
           <View style={styles.cameraTop}>
             <View style={styles.catChip}>
               <CatIcon size={18} color="#FFFFFF" strokeWidth={2.4} />
@@ -407,7 +407,11 @@ export default function IncidentCapture() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   fill: { flex: 1, backgroundColor: "#000000" },
-  cameraOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: "space-between" },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "space-between",
+    pointerEvents: "box-none",
+  },
   cameraTop: {
     flexDirection: "row",
     justifyContent: "space-between",

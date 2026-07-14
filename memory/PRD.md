@@ -74,3 +74,40 @@ Phases 2–4 (later): mobile app (Expo, trilingual), AI hooks (gauge_read/anpr/h
 - P1: MSG91 OTP wiring (needs MSG91_AUTH_KEY), Cloudflare R2 creds, real factory geofence coords,
   MD account creation, Expo push delivery (replace NoopPushSender)
 - P2: AI hooks (gauge_read, anpr, headcount), pgvector features, BLE beacon enrollment UX
+
+## Phase 2 Part 1 — Mobile App (completed 2026-06, fork session)
+Expo SDK 54 + Expo Router v6, TypeScript strict, Zustand, react-i18next (en/hi/mr, mr default),
+Baloo 2 loaded via expo-font (raw .ttf in assets/fonts — no fonttools needed; earlier failure was
+just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
+
+### Implemented & tested
+- Auth: language → phone → OTP (auto-submit at 6 digits) → home; unknown phone → register
+  (name → department FROM GET /api/departments, 13 trilingual entries → selfie → pending w/ polling).
+- Tabs: Home / Reports / Alerts (unread badge) / Profile. Role-aware: rank≤3 gets Approvals tile
+  (coming-soon toast) + Mine/Department toggle on Reports.
+- Home: red incident tile (P0), attendance card (not-punched → punch-in / on-duty → punch-out w/
+  confirm modal / day-complete), today-shift chip, grid tiles.
+- Incident 3-tap: category grid → back camera + contextual GPS (chip: searching/ok/none/blocked→settings)
+  → preview with watermark overlay (HOGO PLUS · category · timestamp · GPS · name/emp_id) burned in via
+  react-native-view-shot captureRef (max dim 1600, compress 0.7 → ~300-500KB; web falls back to plain
+  compressed photo) → dept selector modal + optional description → SUBMIT. Offline (ApiError 0) →
+  outbox enqueue → queued success screen. Success auto-returns home in 4s.
+- Incident detail: photo, status chip, timeline (trilingual), manager actions seen→in_progress→resolve+note.
+- Attendance: SelfieCamera → steps UI (GPS→BLE zone→upload) → punch-in → result screen
+  (Verified+/Verified/Flagged + late chip); 409 → toast; offline → outbox. History screen w/ month nav.
+- Shift screen (8 days), Alerts (optimistic read, deep-link to incident), Profile (lang switcher w/
+  PATCH /employees/me, logout confirm).
+- EAS: eas.json (development/preview/production), app.json → name "Hogo Plus", ids com.hogoplus.fs,
+  Android perms CAMERA/LOCATION/BLUETOOTH_SCAN/CONNECT, iOS infoPlist descriptions, expo-camera/
+  expo-location/ble-plx plugins. BLE isolated behind BleScanner (noop on Expo Go/web — never crashes).
+
+### Testing (iteration_2)
+- Testing agent: all UI flows pass in all 3 languages, zero i18n key leaks, registration walked to selfie.
+- Camera-gated flows validated via exact-payload API sequence (incident create w/ upload → manager
+  triage → notifications; punch-in verified inside geofence → punch-out → duplicate 409).
+- Known device-only validations: real camera capture + view-shot watermark + BLE verified_plus require
+  Expo Go / dev build (documented for user).
+
+### Phase 2 Part 2 backlog
+- Forms engine renderer (schema_json), manager approval screens (registrations/forms/swaps),
+  shift swap flow, Time Office flagged-attendance approval, dept attendance dashboard.

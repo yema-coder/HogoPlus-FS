@@ -99,7 +99,7 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
   return (
     <View style={styles.fill} testID={`${testIDPrefix}-camera`}>
       <CameraView ref={cameraRef} style={styles.fill} facing="front" />
-      <View pointerEvents="none" style={styles.overlay}>
+      <View style={styles.overlay}>
         <View style={styles.faceGuide} />
         <Text style={styles.guideText}>{hint}</Text>
       </View>
@@ -123,6 +123,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+    pointerEvents: "none",
   },
   faceGuide: {
     width: 260,
