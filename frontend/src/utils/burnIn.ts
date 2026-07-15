@@ -47,3 +47,18 @@ export async function burnInAndCompress(
   );
   return out.uri;
 }
+
+/** Never-throwing variant: worst case returns the raw camera photo untouched. */
+export async function burnInSafe(
+  ref: React.RefObject<View | null>,
+  shotUri: string,
+  shotW: number,
+  shotH: number,
+): Promise<string> {
+  try {
+    return await burnInAndCompress(ref, shotUri, shotW, shotH);
+  } catch (e) {
+    console.warn("burnIn failed, submitting raw photo:", e);
+    return shotUri;
+  }
+}

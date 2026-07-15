@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { useI18n } from "../i18n";
+import logo from "../logo.png";
 
 export default function Login() {
   const { t } = useI18n();
@@ -45,7 +46,8 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>🏭 {t("brand")} — {t("commandCenter")}</h1>
+        <img src={logo} alt="HogoPlus-FS" style={{ width: 110, display: "block", margin: "0 auto 4px" }} />
+        <h1 style={{ textAlign: "center" }}>HogoPlus-FS — {t("commandCenter")}</h1>
         {stage === "phone" ? (
           <>
             <label style={{ fontWeight: 600 }}>{t("phone")}</label>

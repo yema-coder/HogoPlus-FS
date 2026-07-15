@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Hogo Plus",
+    "name": "HogoPlus-FS",
     "slug": "frontend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0B4F6C"
+        "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hogoplus.fs",
@@ -51,7 +51,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0B4F6C"
+          "backgroundColor": "#FFFFFF"
         }
       ],
       [

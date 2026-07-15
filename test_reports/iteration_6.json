@@ -1,0 +1,38 @@
+{
+  "summary": "Fix Pack 1 (branding + camera close + upload fix + native perm-primer) verified on WEB PREVIEW at https://hogo-backend-phase1.preview.emergentagent.com/ (390x800 mobile viewport). ALL 7 review-request items GREEN. (1) Language screen: [data-testid='language-logo'] renders logo.png (src=/assets/?unstable_path=./assets/images/logo.png) + 'HogoPlus-FS' text visible + eye logo visually confirmed. (2) Phone/login screen: [data-testid='login-logo'] + 'HogoPlus-FS' + 'Factory work, made simple' welcome — visually confirmed. (3) Home screen post-login as CGM +918483029039 / OTP 123456: teal brand header with centered [data-testid='home-brand'] (logo image + 'HogoPlus-FS' text), [data-testid='home-avatar'] top-right showing initials 'AG', second row 'Hello, Amey Ghadge' + '15/07/2026 · Administration'; NO [data-testid='today-shift-chip'] (correct — CGM is not shift-eligible); [data-testid='report-incident-tile'] visible; [data-testid='attendance-card'] with [data-testid='punch-in-button'] visible; [data-testid='home-tile-reports'], [data-testid='home-tile-alerts'], [data-testid='home-tile-approvals'] (rank<=3) all present. Bottom tabs Home/Dept/Reports/Approvals/Alerts/Profile all rendered. (4) Avatar tap navigates to /profile URL, [data-testid='profile-screen'] renders (Profile tab highlighted), Profile shows Employee ID 0001, Department Administration, Role Chief General Manager, [data-testid='logout-button'] + language switcher (मराठी / हिं / English). (5) NO [data-testid='permissions-screen'] anywhere on web in either EN or MR flow — confirms `Platform.OS !== 'web'` gate in app/index.tsx:22 works. (6) Marathi smoke: language-option-mr → phone screen shows 'तुमचा मोबाईल क्रमांक', home shows 'नमस्कार, Amey Ghadge', 'प्रशासन', 'घटना नोंदवा' (Report Incident), 'हजेरी' (Attendance), 'पंच इन', 'माझ्या नोंदी', 'सूचना', 'मंजुऱ्या' — full localization confirmed; brand 'HogoPlus-FS' remains untranslated as expected. (7) Web dashboard /api/dash/ login page loads with new eye logo (assets/logo-BTirgaGs.png) + 'HogoPlus-FS — Command Center' title — out-of-scope smoke passes. BACKEND: pytest 118/118 PASSED (14.94s; ignored live_phase4_smoke.py and phase5_scope_smoke.py which require live infra). UPLOAD API RE-VERIFIED via curl: (a) POST /api/files/upload with real 150-byte JPEG (magic bytes FFD8FFE0) → 200 {key,url with R2 signed URL}; (b) same endpoint with empty file → 400 {detail:'Empty file'} — root cause fix (native FileSystem.uploadAsync vs RN FormData empty payload) is validated at the API layer. NO backend/frontend issues found. Camera close buttons + BLE + FileSystem.uploadAsync + permission priming are NATIVE-ONLY and cannot be tested on web per review-request note — flagged for user device verification.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iter6_backend.xml — pytest 118/118 PASSED",
+    "/tmp/test_upload_api.sh — reusable upload API regression script (real JPEG 200 + empty 400)",
+    "/tmp/lang_screen.png — Language picker with eye logo + HogoPlus-FS",
+    "/tmp/phone_screen.png — Phone entry with login-logo + 'HogoPlus-FS' + 'Factory work, made simple'",
+    "/tmp/home_cgm.png — CGM Home in English: teal header, brand centered, avatar 'AG', Hello Amey Ghadge, 15/07/2026 · Administration, Report Incident tile, Attendance card with Punch In, tiles, bottom tabs",
+    "/tmp/profile_after_avatar.png — Avatar tap navigates to Profile tab (Employee ID 0001, CGM role, language switcher)",
+    "/tmp/home_marathi.png — Home fully localized in Marathi (नमस्कार, घटना नोंदवा, हजेरी, पंच इन, माझ्या नोंदी, सूचना, मंजुऱ्या; brand remains HogoPlus-FS)",
+    "/tmp/dash_login.png — /api/dash/ login page with new eye logo + 'HogoPlus-FS — Command Center'"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "app/index.tsx:22 correctly gates permission-primer with Platform.OS !== 'web' — web users go straight to /(tabs)/home. Verified empirically on both EN and MR flows.",
+    "app/(auth)/otp.tsx uses a single hidden TextInput (testID='otp-input') with 6 visual boxes; auto-submits on 6th digit — verified that home loads without needing to click verify-otp-button when OTP is typed via keyboard.",
+    "home.tsx renders brand row via SafeAreaView + View with paddingHorizontal=screenPadding + centered logo (36x30) + 'HogoPlus-FS' bold text + avatar (44x44 pressable, min touch target OK) on the right. Layout adapts on 390px width without truncation.",
+    "phone.tsx and language.tsx both use `require('@/assets/images/logo.png')` — asset resolved by Metro to /assets/?unstable_path=... URL on web (verified).",
+    "Upload API: /api/files/upload rejects empty multipart with 400 'Empty file' — matches the trilingual error mapping added in client.ts. Real JPEG returns R2 signed URL as expected."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% — 118/118 pytest + upload API multipart contract (200 real jpeg / 400 empty) verified end-to-end via public URL",
+    "frontend": "100% — all 7 review items verified on web with screenshots (branding EN+MR, home layout, avatar→profile navigation, tabs, no perm-primer on web, dash login logo)"
+  },
+  "seed_data_creation": "None. Cleared redis 'otp:*' and 'rate:*' keys 3x between Playwright runs to avoid the 3-send/10-min OTP rate-limit.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Web preview is stable. OTP auto-submits on the 6th typed digit — do NOT click verify-otp-button after keyboard.type('123456'); just wait for home-screen. To retest full flow: `redis-cli -n 0 --scan --pattern 'otp:*' | xargs -r redis-cli -n 0 DEL` first (3-send rate-limit). Reusable upload API regression: `bash /tmp/test_upload_api.sh`. Native-only items (camera ✕ close, BLE, FileSystem.uploadAsync, permissions-screen) are OUT-OF-SCOPE for web and must be validated by user on a device. Backend pytest ignores /app/backend/tests/live_phase4_smoke.py and /app/backend/tests/phase5_scope_smoke.py (they hit external URL / live infra); the 118-passed unit count stated in review-request excludes those two.",
+  "rca_of_issue": "N/A — no bugs found. All Fix Pack 1 items behave as designed on web."
+}

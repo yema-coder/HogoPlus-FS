@@ -10,6 +10,7 @@ import Department from "./screens/Department";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
 import Reports from "./screens/Reports";
+import logo from "./logo.png";
 
 function Layout() {
   const { user, booting, logout } = useAuth();
@@ -31,7 +32,13 @@ function Layout() {
   return (
     <div className="layout">
       <nav className="sidebar">
-        <div className="brand">🏭 {t("brand")}<div style={{ fontSize: 12, opacity: 0.7 }}>{t("commandCenter")}</div></div>
+        <div className="brand" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img src={logo} alt="HogoPlus-FS" style={{ width: 40, height: 33 }} />
+          <div>
+            HogoPlus-FS
+            <div style={{ fontSize: 12, opacity: 0.7 }}>{t("commandCenter")}</div>
+          </div>
+        </div>
         <NavLink to="/" end>{t("nav_overview")}</NavLink>
         <NavLink to="/approvals">{t("nav_approvals")}</NavLink>
         <NavLink to="/attendance">{t("nav_attendance")}</NavLink>

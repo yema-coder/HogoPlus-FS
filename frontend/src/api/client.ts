@@ -156,18 +156,57 @@ export async function uploadFile(
 ): Promise<{ key: string; url: string }> {
   const ext = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "jpg";
   const mime = MIME_BY_EXT[ext] ?? "image/jpeg";
-  const fd = new FormData();
   if (Platform.OS === "web") {
+    const fd = new FormData();
     const blob = await (await fetch(uri)).blob();
     fd.append("file", blob, name);
-  } else {
-    fd.append("file", { uri, name, type: mime } as unknown as Blob);
+    return api<{ key: string; url: string }>("/files/upload", {
+      method: "POST",
+      formData: fd,
+      tokenOverride,
+    });
   }
-  return api<{ key: string; url: string }>("/files/upload", {
-    method: "POST",
-    formData: fd,
-    tokenOverride,
-  });
+  // Native: RN's fetch + FormData can post an EMPTY file part on Android (Expo Go),
+  // which the backend rejects with 400 "Empty file". expo-file-system's native
+  // uploader streams the file reliably on both platforms.
+  const FileSystem = await import("expo-file-system/legacy");
+  const doUpload = (token: string | null) =>
+    FileSystem.uploadAsync(`${API_BASE}/files/upload`, uri, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      fieldName: "file",
+      mimeType: mime,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  let res: { status: number; body: string };
+  try {
+    res = await doUpload(tokenOverride ?? accessToken);
+  } catch {
+    throw new ApiError(0, "network");
+  }
+  if (res.status === 401 && !tokenOverride && refreshToken) {
+    const ok = await tryRefresh();
+    if (!ok) {
+      await clearTokens();
+      sessionExpiredHandler?.();
+      throw new ApiError(401, "session_expired");
+    }
+    try {
+      res = await doUpload(accessToken);
+    } catch {
+      throw new ApiError(0, "network");
+    }
+  }
+  if (res.status >= 400) {
+    let detail: unknown = res.body;
+    try {
+      detail = (JSON.parse(res.body) as { detail?: unknown }).detail ?? res.body;
+    } catch {
+      // keep raw body
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return JSON.parse(res.body) as { key: string; url: string };
 }
 
 export function fileUrl(key: string): string {

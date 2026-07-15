@@ -1,7 +1,6 @@
 import { useRouter } from "expo-router";
-import { Languages } from "lucide-react-native";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -25,10 +24,13 @@ export default function LanguagePicker() {
   return (
     <SafeAreaView style={styles.safe} testID="language-picker-screen">
       <View style={styles.top}>
-        <View style={styles.logoCircle}>
-          <Languages size={44} color={colors.onPrimary} strokeWidth={2} />
-        </View>
-        <Text style={styles.appName}>Hogo Plus</Text>
+        <Image
+          source={require("@/assets/images/logo.png")}
+          style={styles.logoImg}
+          resizeMode="contain"
+          testID="language-logo"
+        />
+        <Text style={styles.appName}>HogoPlus-FS</Text>
         <Text style={styles.title}>{t("lang.title")}</Text>
         <Text style={styles.subtitle}>{t("lang.subtitle")}</Text>
       </View>
@@ -61,13 +63,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxxl,
     gap: spacing.sm,
   },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+  logoImg: {
+    width: 140,
+    height: 114,
     marginBottom: spacing.md,
   },
   appName: {

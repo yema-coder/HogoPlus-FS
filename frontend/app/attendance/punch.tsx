@@ -12,10 +12,11 @@ import type { AttendanceRecord } from "@/src/api/types";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
-import { getBleScanner } from "@/src/ble/BleScanner";
+import { getBleScanner, ensureBlePermissions } from "@/src/ble/BleScanner";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
+import { storage } from "@/src/utils/storage";
 
 type StepState = "pending" | "running" | "ok" | "skip";
 
@@ -44,7 +45,18 @@ export default function PunchInScreen() {
     setStep("zone", "running");
     let ble = null;
     try {
-      ble = await getBleScanner().scan(3000);
+      const scanner = getBleScanner();
+      if (scanner.isReal) {
+        const asked = await storage.getItem<boolean>("hogo.bleAsked", false);
+        if (!asked) {
+          showToast(t("perm.bleExplain"), "info");
+          await storage.setItem("hogo.bleAsked", true);
+        }
+        const allowed = await ensureBlePermissions();
+        ble = allowed ? await scanner.scan(3000) : null;
+      } else {
+        ble = await scanner.scan(3000);
+      }
     } catch {
       ble = null;
     }
@@ -97,6 +109,10 @@ export default function PunchInScreen() {
           photoField: "selfie_key",
         });
         router.replace({ pathname: "/attendance/result", params: { queued: "1", level: "", zone: "", late: "0", time: "" } });
+      } else if (e instanceof ApiError && (e.status === 400 || e.status === 413)) {
+        const extra = typeof e.detail === "string" ? ` (${e.detail})` : "";
+        showToast(`${t("errors.uploadRejected")}${extra}`, "error");
+        setSteps(null);
       } else {
         showToast(t("errors.server"), "error");
         setSteps(null);
@@ -128,12 +144,15 @@ export default function PunchInScreen() {
               <Text style={styles.stepLabel}>{s.label}</Text>
             </View>
           ))}
-          <Text style={styles.hint}>{t("att.locationPermissionBody")}</Text>
+          <Text style={styles.hint}>
+            {steps.gps === "skip" ? t("perm.gpsOffNote") : t("att.locationPermissionBody")}
+          </Text>
         </View>
       ) : (
         <SelfieCamera
           hint={t("att.faceGuide")}
           onUse={(uri) => void run(uri)}
+          onClose={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
           testIDPrefix="punch-selfie"
         />
       )}

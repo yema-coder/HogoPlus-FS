@@ -19,7 +19,7 @@
     "today": "Today",
     "tomorrow": "Tomorrow",
     "openSettings": "Open Settings",
-    "close": "Close",
+    "close": "Close camera",
     "confirm": "Confirm",
     "home": "Go Home"
   },
@@ -216,7 +216,8 @@
     "sessionExpired": "Session expired. Log in again.",
     "cameraDenied": "Camera permission needed. Allow it in Settings.",
     "locationDenied": "Location permission needed. Allow it in Settings.",
-    "uploadFailed": "Upload failed"
+    "uploadFailed": "Upload failed",
+    "uploadRejected": "Photo was rejected by the server. Retake and try again."
   },
   "week": {
     "d0": "Su",
@@ -314,5 +315,18 @@
     "high": "High",
     "critical": "Critical",
     "aiReason": "AI assessment"
+  },
+  "perm": {
+    "title": "Allow app permissions",
+    "subtitle": "Hogo Plus needs these to work at the factory",
+    "cameraTitle": "Camera",
+    "cameraBody": "For incident photos and attendance selfie",
+    "locationTitle": "Location",
+    "locationBody": "To confirm you are at the factory for attendance",
+    "notifTitle": "Notifications",
+    "notifBody": "For approvals, shift and incident alerts",
+    "allow": "Allow",
+    "bleExplain": "Nearby devices permission helps detect your factory zone",
+    "gpsOffNote": "Location is off — punch will be saved but flagged for review"
   }
 }

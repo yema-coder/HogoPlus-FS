@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
-import { Phone } from "lucide-react-native";
 import React, { useState } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -57,10 +57,13 @@ export default function PhoneEntry() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.hero}>
-            <View style={styles.iconCircle}>
-              <Phone size={36} color={colors.onPrimary} strokeWidth={2.2} />
-            </View>
-            <Text style={styles.appName}>Hogo Plus</Text>
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.logoImg}
+              resizeMode="contain"
+              testID="login-logo"
+            />
+            <Text style={styles.appName}>HogoPlus-FS</Text>
             <Text style={styles.welcome}>{t("auth.welcome")}</Text>
           </View>
 
@@ -102,15 +105,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: sizes.screenPadding, flexGrow: 1 },
   hero: { alignItems: "center", marginVertical: spacing.xxl, gap: spacing.xs },
-  iconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
+  logoImg: { width: 120, height: 98, marginBottom: spacing.md },
   appName: { fontFamily: fonts.bold, fontSize: type.xxl, color: colors.primary },
   welcome: { fontFamily: fonts.regular, fontSize: type.base, color: colors.muted },
   label: {

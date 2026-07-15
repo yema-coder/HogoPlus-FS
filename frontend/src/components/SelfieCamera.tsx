@@ -13,10 +13,12 @@ interface Props {
   busy?: boolean;
   busyLabel?: string;
   testIDPrefix: string;
+  /** Renders a ✕ button over the camera that abandons capture. */
+  onClose?: () => void;
 }
 
 /** Front-camera selfie capture with face guide, permission contract and preview. */
-export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefix }: Props) {
+export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefix, onClose }: Props) {
   const { t } = useTranslation();
   const [permission, requestPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -103,6 +105,17 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
         <View style={styles.faceGuide} />
         <Text style={styles.guideText}>{hint}</Text>
       </View>
+      {onClose ? (
+        <Pressable
+          testID={`${testIDPrefix}-close-button`}
+          accessibilityRole="button"
+          accessibilityLabel={t("common.close")}
+          onPress={onClose}
+          style={styles.closeBtn}
+        >
+          <Text style={styles.closeText}>✕</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.shutterRow}>
         <Pressable
           testID={`${testIDPrefix}-shutter-button`}
@@ -197,6 +210,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   preview: { flex: 1 },
+  closeBtn: {
+    position: "absolute",
+    top: spacing.md,
+    left: spacing.md,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeText: { fontFamily: fonts.bold, fontSize: 24, color: "#FFFFFF" },
   previewActions: {
     flexDirection: "row",
     gap: spacing.md,

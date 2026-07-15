@@ -75,7 +75,7 @@ export function PhotoCaptureModal({ visible, label, onClose, onCaptured, testIDP
     }
   };
 
-  const usePhoto = async () => {
+  const acceptPhoto = async () => {
     if (!shot || busy) return;
     setBusy(true);
     try {
@@ -184,7 +184,7 @@ export function PhotoCaptureModal({ visible, label, onClose, onCaptured, testIDP
             label={t("reg.usePhoto")}
             variant="primary"
             loading={busy}
-            onPress={() => void usePhoto()}
+            onPress={() => void acceptPhoto()}
             style={{ flex: 2 }}
           />
         </View>
@@ -211,6 +211,8 @@ export function PhotoCaptureModal({ visible, label, onClose, onCaptured, testIDP
         <SafeAreaView style={styles.closeWrap} edges={["top"]}>
           <Pressable
             testID={`${testIDPrefix}-close`}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.close")}
             onPress={() => {
               reset();
               onClose();
@@ -232,7 +234,7 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     padding: sizes.screenPadding,
-    paddingRight: 72,
+    paddingLeft: 76,
   },
   labelChip: {
     backgroundColor: "rgba(0,0,0,0.6)",
@@ -309,15 +311,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 5,
   },
-  closeWrap: { position: "absolute", top: 0, right: 0 },
+  closeWrap: { position: "absolute", top: 0, left: 0 },
   closeBtn: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
     margin: spacing.sm,
-    borderRadius: 26,
+    borderRadius: 28,
     backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
-  closeText: { fontFamily: fonts.bold, fontSize: 22, color: "#FFFFFF" },
+  closeText: { fontFamily: fonts.bold, fontSize: 24, color: "#FFFFFF" },
 });

@@ -43,7 +43,7 @@ import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { burnInAndCompress } from "@/src/utils/burnIn";
+import { burnInSafe } from "@/src/utils/burnIn";
 import { acquireGps, type GpsFix } from "@/src/utils/gps";
 
 interface Shot {
@@ -111,10 +111,10 @@ export default function IncidentCapture() {
     }
   };
 
-  /** Burn watermark into pixels via view-shot, then compress to ~300-500 KB. */
+  /** Burn watermark into pixels via view-shot, then compress. Never throws for a valid shot. */
   const buildFinalImage = async (): Promise<string> => {
     if (!shot) throw new Error("no shot");
-    return burnInAndCompress(watermarkRef, shot.uri, shot.width, shot.height);
+    return burnInSafe(watermarkRef, shot.uri, shot.width, shot.height);
   };
 
   const submit = async () => {
@@ -131,7 +131,8 @@ export default function IncidentCapture() {
     let finalUri: string;
     try {
       finalUri = await buildFinalImage();
-    } catch {
+    } catch (err) {
+      console.warn("buildFinalImage failed:", err);
       showToast(t("errors.generic"), "error");
       setSubmitting(false);
       return;
@@ -153,6 +154,10 @@ export default function IncidentCapture() {
         router.replace({ pathname: "/incident/success", params: { queued: "1" } });
       } else if (e instanceof ApiError && e.status === 401) {
         showToast(t("errors.sessionExpired"), "error");
+      } else if (e instanceof ApiError && (e.status === 400 || e.status === 413)) {
+        const extra = typeof e.detail === "string" ? ` (${e.detail})` : "";
+        showToast(`${t("errors.uploadRejected")}${extra}`, "error");
+        setSubmitting(false);
       } else {
         showToast(t("errors.server"), "error");
         setSubmitting(false);
@@ -388,6 +393,15 @@ const styles = StyleSheet.create({
     padding: sizes.screenPadding,
     gap: spacing.sm,
   },
+  cameraClose: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraCloseText: { fontFamily: fonts.bold, fontSize: 24, color: "#FFFFFF" },
   catChip: {
     flexDirection: "row",
     alignItems: "center",

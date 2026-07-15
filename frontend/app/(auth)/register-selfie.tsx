@@ -67,6 +67,7 @@ export default function RegisterSelfie() {
       <SelfieCamera
         hint={t("reg.selfieHint")}
         onUse={(uri) => void finish(uri)}
+        onClose={() => (router.canGoBack() ? router.back() : router.replace("/(auth)/phone"))}
         busy={busy}
         busyLabel={t("reg.creating")}
         testIDPrefix="register-selfie"

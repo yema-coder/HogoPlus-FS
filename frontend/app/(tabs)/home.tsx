@@ -12,7 +12,7 @@ import {
   LogOut,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -142,29 +142,41 @@ export default function HomeScreen() {
     );
   };
 
+  const initials = (profile?.full_name ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]} testID="home-screen">
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            onRefresh={() => {
-              void att.refresh();
-              void shifts.refresh();
-              void notifs.refresh();
-            }}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        <View style={styles.header}>
+      <View style={styles.brandHeader}>
+        <View style={styles.brandRow}>
+          <View style={styles.brandSpacer} />
+          <View style={styles.brandCenter} testID="home-brand">
+            <Image
+              source={require("@/assets/images/logo.png")}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.brandName}>HogoPlus-FS</Text>
+          </View>
+          <Pressable
+            testID="home-avatar"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/profile")}
+            style={styles.avatar}
+          >
+            <Text style={styles.avatarText}>{initials || "?"}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.subRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.hello}>{t("home.hello")},</Text>
-            <Text style={styles.name} numberOfLines={1}>
-              {profile?.full_name}
+            <Text style={styles.headerName} numberOfLines={1}>
+              {t("home.hello")}, {profile?.full_name}
             </Text>
-            <Text style={styles.sub} numberOfLines={1}>
+            <Text style={styles.headerSub} numberOfLines={1}>
               {dayjs().format("DD/MM/YYYY")}
               {profile?.department ? ` · ${tri(profile.department as unknown as Record<string, unknown>, "name")}` : ""}
             </Text>
@@ -178,7 +190,22 @@ export default function HomeScreen() {
             </View>
           ) : null}
         </View>
-
+      </View>
+      <ScrollView
+        style={styles.scrollBg}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={() => {
+              void att.refresh();
+              void shifts.refresh();
+              void notifs.refresh();
+            }}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <Pressable
           testID="report-incident-tile"
           accessibilityRole="button"
@@ -288,17 +315,38 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: colors.primary },
+  scrollBg: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: sizes.screenPadding, gap: spacing.lg, paddingBottom: spacing.xxl },
-  header: {
+  brandHeader: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: sizes.screenPadding,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  brandRow: { flexDirection: "row", alignItems: "center" },
+  brandSpacer: { width: 44 },
+  brandCenter: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    marginBottom: spacing.xs,
+    justifyContent: "center",
+    gap: spacing.sm,
   },
-  hello: { fontFamily: fonts.regular, fontSize: type.base, color: colors.muted },
-  name: { fontFamily: fonts.bold, fontSize: type.xl, color: colors.text },
-  sub: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  brandLogo: { width: 36, height: 30 },
+  brandName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.onPrimary },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.onPrimary },
+  subRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  headerName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.onPrimary },
+  headerSub: { fontFamily: fonts.medium, fontSize: type.sm, color: "rgba(255,255,255,0.8)" },
   shiftChip: {
     backgroundColor: colors.brandTertiary,
     borderRadius: radius.md,

@@ -19,6 +19,7 @@ interface AuthState {
   registrationToken: string | null;
   pendingPhone: string | null;
   langPicked: boolean;
+  permsPrimed: boolean;
   hydrate: () => Promise<void>;
   setSession: (
     tokens: { access_token: string; refresh_token: string },
@@ -27,6 +28,7 @@ interface AuthState {
   refreshProfile: () => Promise<EmployeeProfile | null>;
   setRegistration: (token: string | null, phone: string | null) => void;
   markLangPicked: () => Promise<void>;
+  markPermsPrimed: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   registrationToken: null,
   pendingPhone: null,
   langPicked: false,
+  permsPrimed: false,
 
   hydrate: async () => {
     setSessionExpiredHandler(() => {
@@ -100,6 +103,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   markLangPicked: async () => {
     await storage.setItem("hogo.langPicked", true);
     set({ langPicked: true });
+  },
+
+  markPermsPrimed: async () => {
+    await storage.setItem("hogo.permsPrimed", true);
+    set({ permsPrimed: true });
   },
 
   logout: async () => {

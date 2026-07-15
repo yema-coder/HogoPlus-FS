@@ -1,5 +1,5 @@
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
 
 export interface BleBeaconHit {
   beaconId: string;
@@ -98,4 +98,24 @@ export function getBleScanner(): BleScanner {
   }
   cached = new NoopBleScanner();
   return cached;
+}
+
+/**
+ * Lazily request Android 12+ Nearby-devices permissions right before the first
+ * real BLE scan (not at onboarding). Returns true when scanning is allowed.
+ * Denial is graceful: the punch flow simply skips the zone step.
+ */
+export async function ensureBlePermissions(): Promise<boolean> {
+  if (Platform.OS !== "android") return true;
+  if (!getBleScanner().isReal) return true; // Expo Go noop scanner — nothing to ask
+  if (Number(Platform.Version) < 31) return true; // pre-Android-12: location covers BLE
+  try {
+    const res = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    ]);
+    return Object.values(res).every((v) => v === PermissionsAndroid.RESULTS.GRANTED);
+  } catch {
+    return false;
+  }
 }
