@@ -8,9 +8,18 @@ from app.storage import LocalStorage, get_storage
 router = APIRouter(tags=["files"])
 
 MAX_SIZE = 10 * 1024 * 1024
-ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "m4a", "mp3", "pdf"}
+MAX_VIDEO_SIZE = 40 * 1024 * 1024  # incident videos: hard cap 40MB
+ALLOWED_EXT = {"jpg", "jpeg", "png", "webp", "m4a", "mp3", "pdf", "mp4", "mov"}
+VIDEO_EXT = {"mp4", "mov"}
 EXT_ALIASES = {"jpeg": "jpg"}
 UPLOADS_PER_HOUR = 20
+
+VIDEO_TOO_LARGE = {
+    "code": "video_too_large",
+    "en": "Video is too big (max 40 MB). Record a shorter clip.",
+    "hi": "वीडियो बहुत बड़ा है (अधिकतम 40 MB)। छोटा वीडियो लें।",
+    "mr": "व्हिडिओ खूप मोठा आहे (कमाल 40 MB). लहान व्हिडिओ घ्या.",
+}
 
 
 def _magic_ok(ext: str, content: bytes) -> bool:
@@ -21,7 +30,7 @@ def _magic_ok(ext: str, content: bytes) -> bool:
         return content.startswith(b"\x89PNG\r\n\x1a\n")
     if ext == "webp":
         return len(content) > 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
-    if ext == "m4a":
+    if ext in ("m4a", "mp4", "mov"):
         return len(content) > 11 and content[4:8] == b"ftyp"
     if ext == "mp3":
         return content.startswith(b"ID3") or (
@@ -54,7 +63,10 @@ async def upload_file(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
-    if len(content) > MAX_SIZE:
+    if ext in VIDEO_EXT:
+        if len(content) > MAX_VIDEO_SIZE:
+            raise HTTPException(status_code=413, detail=VIDEO_TOO_LARGE)
+    elif len(content) > MAX_SIZE:
         raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
     if not _magic_ok(ext, content):
         raise HTTPException(status_code=400, detail=f"File content does not match .{ext} format")

@@ -17,6 +17,7 @@ import { showToast } from "@/src/components/Toast";
 import { FieldWrapper } from "@/src/forms/FieldWrapper";
 import { VoiceFillButton } from "@/src/forms/VoiceFillButton";
 import { clearDraft, isLocalUri, loadDraft, saveDraft } from "@/src/forms/draft";
+import { reverseGeocode } from "@/src/utils/geocode";
 import { AnprTextInput } from "@/src/forms/fields/AnprTextInput";
 import { DateTimeFieldInput } from "@/src/forms/fields/DateTimeFieldInput";
 import { GpsFieldInput, type GpsValue } from "@/src/forms/fields/GpsFieldInput";
@@ -216,11 +217,14 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
         data[file.field] = uploaded.key;
         if (file.kind === "photo") photoKeys.push(uploaded.key);
       }
+      // Part D: geocode before sending (never blocks — null on failure)
+      const addressText = gpsLat != null && gpsLng != null ? await reverseGeocode(gpsLat, gpsLng) : null;
       const res = await submitForm(definition.id, {
         data_json: data,
         photos: photoKeys,
         gps_lat: gpsLat,
         gps_lng: gpsLng,
+        address_text: addressText,
       });
       await clearDraft(definition.id);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -230,9 +234,17 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
         // offline: strip local file values from data (outbox re-uploads them)
         const queuedData = { ...data };
         for (const file of localFiles) delete queuedData[file.field];
+        const addressText =
+          gpsLat != null && gpsLng != null ? await reverseGeocode(gpsLat, gpsLng) : null;
         await enqueue({
           type: "form",
-          payload: { definition_id: definition.id, data_json: queuedData, gps_lat: gpsLat, gps_lng: gpsLng },
+          payload: {
+            definition_id: definition.id,
+            data_json: queuedData,
+            gps_lat: gpsLat,
+            gps_lng: gpsLng,
+            address_text: addressText,
+          },
           photoUri: null,
           photoName: "",
           photoField: "",

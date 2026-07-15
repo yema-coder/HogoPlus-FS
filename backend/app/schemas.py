@@ -3,7 +3,7 @@ import datetime as _datetime
 import uuid
 from datetime import date
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 PHONE_REGEX = r"^\+91[6-9]\d{9}$"
 
@@ -40,6 +40,20 @@ class ConfirmRoutingIn(BaseModel):
     severity: str | None = None
 
 
+class PasswordLoginIn(BaseModel):
+    emp_id: str = Field(min_length=1, max_length=20)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class SetPasswordIn(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordIn(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class RefreshIn(BaseModel):
     refresh_token: str
 
@@ -67,6 +81,7 @@ class FormSubmitIn(BaseModel):
     photos: list[str] = Field(default_factory=list)
     gps_lat: float | None = None
     gps_lng: float | None = None
+    address_text: str | None = Field(default=None, max_length=300)
 
 
 class RejectIn(BaseModel):
@@ -97,12 +112,20 @@ class FormDefPatchIn(BaseModel):
 class IncidentCreateIn(BaseModel):
     category: str
     department_code: str
-    photo_key: str = Field(min_length=1)
+    photo_key: str | None = None
+    video_key: str | None = None
     gps_lat: float | None = None
     gps_lng: float | None = None
+    address_text: str | None = Field(default=None, max_length=300)
     description: str | None = None
     voice_note_key: str | None = None
     severity: str = "normal"
+
+    @model_validator(mode="after")
+    def _media_required(self):
+        if not self.photo_key and not self.video_key:
+            raise ValueError("photo_key or video_key is required")
+        return self
 
     @field_validator("category")
     @classmethod

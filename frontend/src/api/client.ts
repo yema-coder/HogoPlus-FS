@@ -146,6 +146,8 @@ const MIME_BY_EXT: Record<string, string> = {
   webp: "image/webp",
   m4a: "audio/m4a",
   mp3: "audio/mpeg",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
   pdf: "application/pdf",
 };
 

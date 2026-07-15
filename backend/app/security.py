@@ -15,6 +15,24 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 ALGORITHM = "HS256"
 
+# ---- Password auth (webdash MD/CGM only) — passlib bcrypt ----
+from passlib.context import CryptContext  # noqa: E402
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(plain: str) -> str:
+    return pwd_context.hash(plain)
+
+
+def verify_password(plain: str, hashed: str | None) -> bool:
+    if not hashed:
+        return False
+    try:
+        return pwd_context.verify(plain, hashed)
+    except ValueError:
+        return False
+
 
 def create_token_pair(employee: Employee) -> dict:
     now = datetime.now(timezone.utc)

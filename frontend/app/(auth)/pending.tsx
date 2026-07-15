@@ -21,7 +21,7 @@ export default function PendingApproval() {
     const fresh = await refreshProfile();
     if (fresh && fresh.onboarding_status === "approved") {
       showToast(t("common.done"), "success");
-      router.replace("/(tabs)/home");
+      router.replace("/"); // via index gate → permission primer runs after approval
     }
   }, [refreshProfile, router, t]);
 

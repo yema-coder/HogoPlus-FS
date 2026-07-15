@@ -74,9 +74,12 @@ export interface Incident {
   reported_by: string;
   department_code: string;
   category: IncidentCategory;
-  photo_key: string;
+  photo_key: string | null;
+  video_key: string | null;
+  video_url: string | null;
   gps_lat: number | null;
   gps_lng: number | null;
+  address_text: string | null;
   description: string | null;
   voice_note_key: string | null;
   status: IncidentStatus;

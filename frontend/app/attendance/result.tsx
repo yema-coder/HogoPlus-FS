@@ -13,12 +13,14 @@ import { formatTime } from "@/src/utils/format";
 export default function PunchResultScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { queued, level, zone, late, time } = useLocalSearchParams<{
+  const { queued, level, zone, late, time, addr, coords } = useLocalSearchParams<{
     queued: string;
     level: string;
     zone: string;
     late: string;
     time: string;
+    addr: string;
+    coords: string;
   }>();
 
   const isQueued = queued === "1";
@@ -101,6 +103,14 @@ export default function PunchResultScreen() {
             </Text>
           </View>
         ) : null}
+        {!isQueued && (zone || addr || coords) ? (
+          <View style={styles.locationBlock} testID="punch-location-block">
+            <Text style={styles.locationLabel}>📍 {t("common.location")}</Text>
+            {zone ? <Text style={styles.locationZone}>{zone}</Text> : null}
+            {addr ? <Text style={styles.locationAddr}>{addr}</Text> : null}
+            {coords ? <Text style={styles.locationCoords}>{coords}</Text> : null}
+          </View>
+        ) : null}
       </View>
       <BigButton
         testID="result-home-button"
@@ -122,6 +132,22 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  locationBlock: {
+    alignItems: "center",
+    gap: 2,
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignSelf: "stretch",
+  },
+  locationLabel: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.muted },
+  locationZone: { fontFamily: fonts.bold, fontSize: type.base, color: colors.primary },
+  locationAddr: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.text, textAlign: "center" },
+  locationCoords: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
   circle: {
     width: 140,
     height: 140,

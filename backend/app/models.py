@@ -91,6 +91,8 @@ class Employee(TimestampMixin, Base):
     emp_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     department_code: Mapped[str | None] = mapped_column(
         String(30), ForeignKey("departments.code"), nullable=True
     )
@@ -195,6 +197,7 @@ class FormSubmission(TimestampMixin, Base):
     data_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     photos: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     detected_plates: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    address_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(SUBMISSION_STATUS, default="submitted", nullable=False)
@@ -219,9 +222,11 @@ class Incident(TimestampMixin, Base):
         String(30), ForeignKey("departments.code"), nullable=False
     )
     category: Mapped[str] = mapped_column(INCIDENT_CATEGORY, nullable=False)
-    photo_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    video_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    address_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_note_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(INCIDENT_STATUS, default="submitted", nullable=False)

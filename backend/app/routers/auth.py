@@ -17,7 +17,15 @@ from app.models import Department, Employee, OtpAttempt, ShiftAssignment
 from app.notify import dispatcher, template
 from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
-from app.schemas import RefreshIn, RegisterIn, SendOtpIn, UpdateMeIn, VerifyOtpIn
+from app.schemas import (
+    ChangePasswordIn,
+    PasswordLoginIn,
+    RefreshIn,
+    RegisterIn,
+    SendOtpIn,
+    UpdateMeIn,
+    VerifyOtpIn,
+)
 from app.security import (
     create_registration_token,
     create_token_pair,
@@ -25,6 +33,8 @@ from app.security import (
     employee_profile,
     get_access_or_registration_payload,
     get_current_employee,
+    hash_password,
+    verify_password,
 )
 from app.shift_logic import now_ist
 
@@ -193,6 +203,79 @@ async def register(
     await session.refresh(employee)
     tokens = create_token_pair(employee)
     return {**tokens, "employee": employee_profile(employee)}
+
+
+# ---- Password login (WEB DASHBOARD only, MD/CGM = rank <= 2). Mobile stays phone+OTP. ----
+
+PW_MAX_ATTEMPTS = 5
+PW_WINDOW_SECONDS = 15 * 60
+
+PW_LOCKOUT_DETAIL = {
+    "code": "password_login_locked",
+    "en": "Too many wrong attempts. Try again after 15 minutes.",
+    "hi": "बहुत बार गलत पासवर्ड। 15 मिनट बाद फिर कोशिश करें।",
+    "mr": "खूप वेळा चुकीचा पासवर्ड. 15 मिनिटांनी पुन्हा प्रयत्न करा.",
+}
+
+
+def _pw_fail_key(emp_id: str) -> str:
+    return f"pwlogin:fail:{emp_id}"
+
+
+@router.post("/auth/password-login")
+async def password_login(body: PasswordLoginIn, session: AsyncSession = Depends(get_session)):
+    fail_key = _pw_fail_key(body.emp_id)
+    fails = int(await redis_client.get(fail_key) or 0)
+    if fails >= PW_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail=PW_LOCKOUT_DETAIL)
+
+    employee = (
+        await session.execute(select(Employee).where(Employee.emp_id == body.emp_id))
+    ).scalar_one_or_none()
+
+    async def _record_fail():
+        count = await redis_client.incr(fail_key)
+        if count == 1:
+            await redis_client.expire(fail_key, PW_WINDOW_SECONDS)
+
+    if employee is None or not employee.is_active or not employee.password_hash:
+        await _record_fail()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(body.password, employee.password_hash):
+        await _record_fail()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    # role gate AFTER credential check but before token issue: only MD/CGM may
+    # password-login, even if a password somehow got set for someone else.
+    if employee.role.rank > 2:
+        raise HTTPException(status_code=403, detail="Password login is for MD/CGM only")
+
+    await redis_client.delete(fail_key)
+    await write_audit(session, employee.id, "auth.password_login", "employee", str(employee.id), {})
+    await session.commit()
+    tokens = create_token_pair(employee)
+    return {
+        **tokens,
+        "employee": employee_profile(employee),
+        "must_change_password": employee.must_change_password,
+    }
+
+
+@router.post("/auth/change-password")
+async def change_password(
+    body: ChangePasswordIn,
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    if not employee.password_hash:
+        raise HTTPException(status_code=400, detail="Password login is not enabled for this account")
+    if not verify_password(body.current_password, employee.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    employee.password_hash = hash_password(body.new_password)
+    employee.must_change_password = False
+    await write_audit(session, employee.id, "auth.password_changed", "employee", str(employee.id), {})
+    await session.commit()
+    await redis_client.delete(_pw_fail_key(employee.emp_id))
+    return {"status": "password_changed"}
 
 
 @router.post("/auth/refresh")

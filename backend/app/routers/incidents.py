@@ -22,8 +22,12 @@ def _out(i: Incident) -> dict:
         "department_code": i.department_code,
         "category": i.category,
         "photo_key": i.photo_key,
+        "photo_url": f"/api/files/{i.photo_key}" if i.photo_key else None,
+        "video_key": i.video_key,
+        "video_url": f"/api/files/{i.video_key}" if i.video_key else None,
         "gps_lat": i.gps_lat,
         "gps_lng": i.gps_lng,
+        "address_text": i.address_text,
         "description": i.description,
         "voice_note_key": i.voice_note_key,
         "status": i.status,
@@ -82,8 +86,10 @@ async def create_incident(
         department_code=body.department_code,
         category=body.category,
         photo_key=body.photo_key,
+        video_key=body.video_key,
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
+        address_text=body.address_text,
         description=body.description,
         voice_note_key=body.voice_note_key,
         severity=body.severity,
@@ -109,11 +115,13 @@ async def create_incident(
     await session.refresh(incident)
 
     # AI classification (category+dept+severity) + opportunistic ANPR run AFTER commit.
+    # Video incidents: classifier uses text+audio only (no video AI); ANPR only for photos.
     try:
         from app.tasks import classify_incident_severity, detect_plate_task
 
         classify_incident_severity.delay(str(incident.id))
-        detect_plate_task.delay("incident", str(incident.id))
+        if incident.photo_key:
+            detect_plate_task.delay("incident", str(incident.id))
     except Exception:
         pass
 

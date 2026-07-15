@@ -14,7 +14,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Take photos to report factory incidents",
         "NSLocationWhenInUseUsageDescription": "Confirms your attendance location at the factory",
-        "NSBluetoothAlwaysUsageDescription": "Detects factory zone beacons for attendance"
+        "NSBluetoothAlwaysUsageDescription": "Detects factory zone beacons for attendance",
+        "NSMicrophoneUsageDescription": "Record voice notes and complaint video sound"
       }
     },
     "android": {
@@ -30,7 +31,8 @@
         "ACCESS_COARSE_LOCATION",
         "BLUETOOTH_SCAN",
         "BLUETOOTH_CONNECT",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "RECORD_AUDIO"
       ]
     },
     "locales": {
@@ -64,7 +66,7 @@
         "expo-camera",
         {
           "cameraPermission": "Take photos to report factory incidents",
-          "microphonePermission": false
+          "microphonePermission": "Record sound while capturing complaint videos"
         }
       ],
       [
@@ -80,7 +82,8 @@
           "neverForLocation": true
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

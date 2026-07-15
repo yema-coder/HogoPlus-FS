@@ -1,7 +1,9 @@
 import dayjs from "dayjs";
-import { CameraView, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
+import { useVideoPlayer, VideoView } from "expo-video";
+import NetInfo from "@react-native-community/netinfo";
 import {
   Camera as CameraIcon,
   ChevronDown,
@@ -9,6 +11,7 @@ import {
   MapPinOff,
   RefreshCcw,
   Settings,
+  Video as VideoIcon,
   X,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
@@ -40,11 +43,12 @@ import { showToast } from "@/src/components/Toast";
 import { departmentIcon } from "@/src/constants/departments";
 import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
-import { tri } from "@/src/i18n";
+import i18n, { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { burnInSafe } from "@/src/utils/burnIn";
+import { reverseGeocode } from "@/src/utils/geocode";
 import { acquireGps, type GpsFix } from "@/src/utils/gps";
 
 interface Shot {
@@ -54,6 +58,14 @@ interface Shot {
 }
 
 type GpsStatus = "searching" | "ok" | "none" | "blocked";
+
+/** Inline video preview for the detail card (expo-video). */
+function VideoPreviewCard({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls contentFit="cover" />;
+}
 
 /** Photo-first complaint flow: camera opens immediately, GPS acquired in
  * parallel, then one detail screen (photo, description, voice note) → submit.
@@ -66,10 +78,17 @@ export default function IncidentCapture() {
   const { width: windowW } = useWindowDimensions();
 
   const [permission, requestPermission] = useCameraPermissions();
+  const [micPerm, requestMicPerm] = useMicrophonePermissions();
+  const [mode, setMode] = useState<"picture" | "video">("picture");
+  const [online, setOnline] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [recordLeft, setRecordLeft] = useState(30);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const [shot, setShot] = useState<Shot | null>(null);
   const [capturedAt, setCapturedAt] = useState<number>(0);
   const [capturing, setCapturing] = useState(false);
   const [gps, setGps] = useState<GpsFix | null>(null);
+  const [address, setAddress] = useState<string | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("searching");
   const [dept, setDept] = useState(profile?.department_code ?? "PRODUCTION");
   const [desc, setDesc] = useState("");
@@ -78,6 +97,7 @@ export default function IncidentCapture() {
   const [submitting, setSubmitting] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const watermarkRef = useRef<View>(null);
+  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
   const selectedDept = departments.data?.find((d) => d.code === dept) ?? null;
@@ -89,13 +109,38 @@ export default function IncidentCapture() {
       if (!active) return;
       setGps(res.fix);
       setGpsStatus(res.fix ? "ok" : res.blocked ? "blocked" : "none");
+      if (res.fix) {
+        // Part D: reverse-geocode on-device AT CAPTURE TIME (works for offline queueing too)
+        const addr = await reverseGeocode(res.fix.lat, res.fix.lng);
+        if (active) setAddress(addr);
+      }
     })();
     return () => {
       active = false;
     };
   }, []);
 
-  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  // Part A offline rule: video capture requires network
+  useEffect(() => {
+    const sub = NetInfo.addEventListener((state) => {
+      const ok = state.isConnected !== false;
+      setOnline(ok);
+      if (!ok) setMode("picture");
+    });
+    return () => sub();
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (recordTimer.current) clearInterval(recordTimer.current);
+    },
+    [],
+  );
+
+  const close = () => {
+    if (recording) cameraRef.current?.stopRecording();
+    return router.canGoBack() ? router.back() : router.replace("/");
+  };
 
   const capture = async () => {
     if (!cameraRef.current || capturing) return;
@@ -114,6 +159,45 @@ export default function IncidentCapture() {
     }
   };
 
+  const startRecording = async () => {
+    if (!cameraRef.current || recording) return;
+    if (micPerm && !micPerm.granted && micPerm.canAskAgain) {
+      await requestMicPerm(); // contextual: first video attempt (recording continues muted if denied)
+    }
+    setRecording(true);
+    setRecordLeft(30);
+    recordTimer.current = setInterval(() => {
+      setRecordLeft((s) => {
+        if (s <= 1) cameraRef.current?.stopRecording(); // 30s auto-stop
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+    try {
+      const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
+      if (video?.uri) {
+        setVideoUri(video.uri);
+        setCapturedAt(Date.now());
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
+      }
+    } catch {
+      showToast(t("errors.generic"), "error");
+    } finally {
+      if (recordTimer.current) clearInterval(recordTimer.current);
+      setRecording(false);
+      setRecordLeft(30);
+    }
+  };
+
+  const onShutter = () => {
+    if (mode === "picture") {
+      void capture();
+    } else if (recording) {
+      cameraRef.current?.stopRecording();
+    } else {
+      void startRecording();
+    }
+  };
+
   /** Burn watermark into pixels via view-shot, then compress. Never throws for a valid shot. */
   const buildFinalImage = async (): Promise<string> => {
     if (!shot) throw new Error("no shot");
@@ -121,16 +205,56 @@ export default function IncidentCapture() {
   };
 
   const submit = async () => {
-    if (!shot || submitting) return;
+    if ((!shot && !videoUri) || submitting) return;
     setSubmitting(true);
     const payload: Record<string, unknown> = {
       category: "other", // AI suggests the real category post-submit
       department_code: dept,
       gps_lat: gps?.lat ?? null,
       gps_lng: gps?.lng ?? null,
+      address_text: address,
       description: desc.trim() || null,
       severity: "normal",
     };
+
+    // ---- video path (network required; no outbox for videos) ----
+    if (videoUri) {
+      try {
+        const FileSystem = await import("expo-file-system/legacy");
+        const info = await FileSystem.getInfoAsync(videoUri);
+        if (info.exists && (info.size ?? 0) > 40 * 1024 * 1024) {
+          showToast(t("incident.videoTooLarge"), "error");
+          setSubmitting(false);
+          return;
+        }
+      } catch {
+        // size check best-effort; server enforces the 40MB cap anyway
+      }
+      try {
+        if (voiceUri) {
+          const audio = await uploadFile(voiceUri, "voice_note.m4a").catch(() => null);
+          if (audio) payload.voice_note_key = audio.key;
+        }
+        const uploaded = await uploadFile(videoUri, "incident.mp4");
+        const incident = await createIncident({ ...payload, video_key: uploaded.key }) as Incident;
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+        router.replace({ pathname: "/incident/success", params: { queued: "0", rid: incident.id } });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 413) {
+          const d = e.detail as Record<string, string> | string;
+          const lang = (i18n.language || "en") as "en" | "hi" | "mr";
+          showToast(typeof d === "object" && d?.en ? (d[lang] ?? d.en) : t("incident.videoTooLarge"), "error");
+        } else if (e instanceof ApiError && e.status === 0) {
+          showToast(t("incident.videoNeedsNet"), "error");
+        } else {
+          showToast(t("errors.server"), "error");
+        }
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ---- photo path (full outbox support) ----
     let finalUri: string;
     try {
       finalUri = await buildFinalImage();
@@ -251,10 +375,16 @@ export default function IncidentCapture() {
   }
 
   // ---- Tap 1: camera opens immediately ----
-  if (!shot) {
+  if (!shot && !videoUri) {
     return (
       <View style={styles.fill} testID="incident-capture-screen">
-        <CameraView ref={cameraRef} style={styles.fill} facing="back" />
+        <CameraView
+          ref={cameraRef}
+          style={styles.fill}
+          facing="back"
+          mode={mode}
+          videoQuality="720p"
+        />
         <SafeAreaView style={styles.cameraOverlay}>
           <View style={styles.cameraTop}>
             <Pressable
@@ -269,14 +399,61 @@ export default function IncidentCapture() {
             {gpsChip()}
           </View>
           <View style={styles.shutterRow}>
-            <Text style={styles.shutterHint}>{t("incident.captureHint")}</Text>
+            {!recording ? (
+              <View style={styles.modeRow}>
+                <Pressable
+                  testID="mode-photo-button"
+                  onPress={() => setMode("picture")}
+                  style={[styles.modeChip, mode === "picture" && styles.modeChipActive]}
+                >
+                  <CameraIcon size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  <Text style={styles.modeChipText}>{t("incident.photoMode")}</Text>
+                </Pressable>
+                <Pressable
+                  testID="mode-video-button"
+                  disabled={!online}
+                  onPress={() => setMode("video")}
+                  style={[
+                    styles.modeChip,
+                    mode === "video" && styles.modeChipActive,
+                    !online && { opacity: 0.4 },
+                  ]}
+                >
+                  <VideoIcon size={18} color="#FFFFFF" strokeWidth={2.4} />
+                  <Text style={styles.modeChipText}>{t("incident.videoMode")}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {!online ? (
+              <Text style={styles.offlineNote} testID="video-offline-note">
+                {t("incident.videoNeedsNet")}
+              </Text>
+            ) : null}
+            <Text style={styles.shutterHint}>
+              {recording
+                ? t("incident.recordingLeft", { s: recordLeft })
+                : mode === "video"
+                  ? t("incident.videoHint")
+                  : t("incident.captureHint")}
+            </Text>
             <Pressable
               testID="incident-shutter-button"
               accessibilityRole="button"
-              onPress={() => void capture()}
-              style={({ pressed }) => [styles.shutter, { opacity: pressed || capturing ? 0.7 : 1 }]}
+              onPress={onShutter}
+              style={({ pressed }) => [
+                styles.shutter,
+                recording && styles.shutterRecording,
+                { opacity: pressed || capturing ? 0.7 : 1 },
+              ]}
             >
-              <View style={styles.shutterInner} />
+              {recording ? (
+                <>
+                  <View style={styles.shutterStop} />
+                  <Text style={styles.shutterCount}>{recordLeft}</Text>
+                </>
+              ) : (
+                <View style={[styles.shutterInner, mode === "video" && { borderRadius: 8 }]} />
+              )}
             </Pressable>
           </View>
         </SafeAreaView>
@@ -286,7 +463,9 @@ export default function IncidentCapture() {
 
   // ---- Tap 2: details + submit ----
   const displayW = windowW - sizes.screenPadding * 2;
-  const displayH = Math.round((displayW * shot.height) / shot.width);
+  const displayH = shot
+    ? Math.round((displayW * shot.height) / shot.width)
+    : Math.round(displayW * 0.75);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-preview-screen">
@@ -296,25 +475,44 @@ export default function IncidentCapture() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
-          <View
-            ref={watermarkRef}
-            collapsable={false}
-            style={[styles.shotWrap, { width: displayW, height: displayH }]}
-          >
-            <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-            <View style={styles.watermark} testID="incident-watermark">
-              <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")}</Text>
-              <Text style={styles.wmLine2}>
-                {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
-                {gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone")}
-              </Text>
-              <Text style={styles.wmLine2}>
-                {profile?.full_name ?? ""}{profile?.emp_id ? ` · ${profile.emp_id}` : ""}
-              </Text>
+          {videoUri ? (
+            <View style={[styles.shotWrap, { width: displayW, height: displayH }]} testID="incident-video-card">
+              <VideoPreviewCard uri={videoUri} />
+              <View style={styles.watermark}>
+                <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")} · 🎬</Text>
+                <Text style={styles.wmLine2}>
+                  {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
+                  {address ?? (gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone"))}
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View
+              ref={watermarkRef}
+              collapsable={false}
+              style={[styles.shotWrap, { width: displayW, height: displayH }]}
+            >
+              <Image source={{ uri: shot!.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={styles.watermark} testID="incident-watermark">
+                <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")}</Text>
+                <Text style={styles.wmLine2}>
+                  {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
+                  {gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone")}
+                </Text>
+                {address ? <Text style={styles.wmLine2} numberOfLines={1}>{address}</Text> : null}
+                <Text style={styles.wmLine2}>
+                  {profile?.full_name ?? ""}{profile?.emp_id ? ` · ${profile.emp_id}` : ""}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.chipRow}>{gpsChip()}</View>
+          {address ? (
+            <Text style={styles.addressLine} testID="capture-address-line" numberOfLines={2}>
+              📍 {address}
+            </Text>
+          ) : null}
 
           <Text style={styles.fieldLabel}>{t("incident.aboutDept")}</Text>
           <Pressable
@@ -353,7 +551,10 @@ export default function IncidentCapture() {
               icon={RefreshCcw}
               variant="muted"
               disabled={submitting}
-              onPress={() => setShot(null)}
+              onPress={() => {
+                setShot(null);
+                setVideoUri(null);
+              }}
               style={{ flex: 1 }}
             />
             <BigButton
@@ -438,6 +639,30 @@ const styles = StyleSheet.create({
   },
   gpsChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
   shutterRow: { alignItems: "center", paddingBottom: spacing.xl, gap: spacing.md },
+  modeRow: { flexDirection: "row", gap: spacing.sm },
+  modeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 2,
+    borderColor: "transparent",
+    paddingHorizontal: spacing.lg,
+    minHeight: 44,
+  },
+  modeChipActive: { borderColor: "#FFFFFF" },
+  modeChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
+  offlineNote: {
+    fontFamily: fonts.medium,
+    fontSize: type.sm,
+    color: "#FFD9A0",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+  },
   shutterHint: {
     fontFamily: fonts.semiBold,
     fontSize: type.base,
@@ -462,6 +687,26 @@ const styles = StyleSheet.create({
     height: sizes.cameraShutter - 20,
     borderRadius: (sizes.cameraShutter - 20) / 2,
     backgroundColor: colors.danger,
+  },
+  shutterRecording: { borderColor: colors.danger },
+  shutterStop: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: colors.danger,
+  },
+  shutterCount: {
+    position: "absolute",
+    bottom: -30,
+    fontFamily: fonts.bold,
+    fontSize: type.lg,
+    color: "#FFFFFF",
+  },
+  addressLine: {
+    fontFamily: fonts.medium,
+    fontSize: type.sm,
+    color: colors.muted,
+    marginTop: spacing.xs,
   },
   permissionWrap: {
     flex: 1,

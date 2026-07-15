@@ -109,6 +109,7 @@ export const submitForm = (
     photos: string[];
     gps_lat?: number | null;
     gps_lng?: number | null;
+    address_text?: string | null;
   },
 ) => api<SubmissionItem>(`/forms/${definitionId}/submit`, { method: "POST", body });
 

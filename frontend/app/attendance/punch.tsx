@@ -16,6 +16,7 @@ import { getBleScanner, ensureBlePermissions } from "@/src/ble/BleScanner";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
+import { reverseGeocode } from "@/src/utils/geocode";
 import { storage } from "@/src/utils/storage";
 
 type StepState = "pending" | "running" | "ok" | "skip";
@@ -41,6 +42,7 @@ export default function PunchInScreen() {
 
     const { fix } = await acquireGps(8000);
     setStep("gps", fix ? "ok" : "skip");
+    const address = fix ? await reverseGeocode(fix.lat, fix.lng) : null;
 
     setStep("zone", "running");
     let ble = null;
@@ -94,6 +96,8 @@ export default function PunchInScreen() {
           zone: record.ble_zone ?? "",
           late: record.is_late ? "1" : "0",
           time: record.punch_in_at ?? "",
+          addr: address ?? "",
+          coords: fix ? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : "",
         },
       });
     } catch (e) {

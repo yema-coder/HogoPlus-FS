@@ -44,6 +44,7 @@ def _sub_out(s: FormSubmission, form_code: str | None = None) -> dict:
         "photos": s.photos,
         "detected_plates": s.detected_plates,
         "gps_lat": s.gps_lat,
+        "address_text": s.address_text,
         "gps_lng": s.gps_lng,
         "status": s.status,
         "approver_id": str(s.approver_id) if s.approver_id else None,
@@ -102,6 +103,7 @@ async def submit_form(
         photos=body.photos,
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
+        address_text=body.address_text,
         status="submitted" if definition.requires_approval else "approved",
     )
     session.add(submission)

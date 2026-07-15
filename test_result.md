@@ -190,3 +190,26 @@ notes:
   - Voice note recording does not work on web preview reliably (expo-audio native); do not fail the flow on web for it.
   - Camera on web preview uses webcam emulation; watermark burn-in skipped on web BY DESIGN.
   - New registrations get department_code NULL until Time Office approval — expected.
+
+## Prompt 7 — VIDEO + PASSWORD LOGIN + POLISH PACK (2026-07 fork)
+Part A: Incident camera has photo/video toggle (video max 30s, 720p, expo-camera recordAsync),
+  40MB server cap (trilingual 413), mp4/mov upload allowed with ftyp magic check, offline disables
+  video toggle (NetInfo), playback via expo-video (mobile) + HTML5 video (webdash feed).
+Part B: employees.password_hash + must_change_password; POST /api/admin/employees/{id}/set-password
+  (rank<=2 only); POST /api/auth/password-login (emp_id+password, MD/CGM only, redis lockout 5/15min);
+  POST /api/auth/change-password; webdash login has OTP/Password tabs + forced-change screen +
+  sidebar Change password (top mgmt).
+Part C: GET /api/dashboard/plates/search?q= (rank<=3; manager scoped to own dept) + webdash
+  Vehicles screen + client-side filter box on Overview live feed.
+Part D: address_text on incidents + form_submissions; on-device reverseGeocode at capture time
+  (capture.tsx, FormRenderer, punch.tsx); location blocks on incident detail (mobile+dash feed) and
+  attendance result (zone > address > coords hierarchy).
+Part E: root causes fixed — otp.tsx/pending.tsx now replace to "/" (index gate → primer),
+  authStore.hydrate restores hogo.permsPrimed, and re-shows primer ONCE if camera/location still
+  undetermined (hogo.permsReprimed guard). acquireGps already requests permission inline (defense in depth).
+Backend: 136/136 pytest green (tests/test_prompt7.py added). Live verified: ANPR MH14GH7777 detected
+  via real Rekognition on photo-first flow; mp4 presign content-type video/mp4; password login E2E
+  (set → temp login → forced change → re-login) done via API and via webdash browser.
+Credentials: CGM dashboard password login emp_id 0001 / Hogo@2026Cgm (see memory/test_credentials.md).
+NOTE: video recording NOT testable on web preview (expo-camera recordAsync is native-only) — verify
+  video capture on device/APK. Do not fail web tests on video recording.

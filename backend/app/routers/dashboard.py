@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func as safunc, select
+from sqlalchemy import func as safunc, select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -16,6 +16,7 @@ from app.models import (
     AuditEvent,
     Department,
     Employee,
+    FormDefinition,
     FormSubmission,
     Incident,
     ShiftSwapRequest,
@@ -25,6 +26,64 @@ from app.shift_logic import now_ist
 from app.storage import get_storage
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+
+@router.get("/plates/search")
+async def plate_search(
+    q: str = Query(min_length=2, max_length=20),
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Vehicle plate search across incidents + form submissions (partial, case-insensitive).
+    Manager (rank 3) sees only own-department results; CGM/MD see all."""
+    rank = employee.role.rank
+    if rank > 3:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    needle = f"%{q.upper().replace(' ', '')}%"
+
+    inc_q = select(Incident).where(Incident.detected_plate.ilike(needle))
+    sub_q = (
+        select(FormSubmission, FormDefinition.title_en)
+        .join(FormDefinition, FormSubmission.form_definition_id == FormDefinition.id)
+        .where(
+            sa_text(
+                "EXISTS (SELECT 1 FROM jsonb_array_elements_text(form_submissions.detected_plates) AS p "
+                "WHERE p ILIKE :needle)"
+            ).bindparams(needle=needle)
+        )
+    )
+    if rank == 3:
+        inc_q = inc_q.where(Incident.department_code == employee.department_code)
+        sub_q = sub_q.where(FormSubmission.department_code == employee.department_code)
+
+    incidents = (await session.execute(inc_q.order_by(Incident.created_at.desc()).limit(50))).scalars().all()
+    subs = (await session.execute(sub_q.order_by(FormSubmission.created_at.desc()).limit(50))).all()
+
+    results = [
+        {
+            "type": "incident",
+            "id": str(i.id),
+            "plate": i.detected_plate,
+            "label": i.category,
+            "department_code": i.department_code,
+            "status": i.status,
+            "created_at": i.created_at.isoformat() if i.created_at else None,
+        }
+        for i in incidents
+    ] + [
+        {
+            "type": "submission",
+            "id": str(s.id),
+            "plate": next((p for p in (s.detected_plates or []) if q.upper().replace(" ", "") in p.upper()), None),
+            "label": title,
+            "department_code": s.department_code,
+            "status": s.status,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s, title in subs
+    ]
+    results.sort(key=lambda r: r["created_at"] or "", reverse=True)
+    return {"query": q, "results": results}
 
 SEV_RANK = {"critical": 0, "high": 1, "normal": 2}
 
@@ -184,6 +243,8 @@ async def overview(
                 "reporter_name": name, "status": i.status, "severity": i.severity,
                 "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
                 "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
+                "video_url": storage.url_for(i.video_key) if i.video_key else None,
+                "address_text": i.address_text,
                 "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
             }
             for i, name in rows

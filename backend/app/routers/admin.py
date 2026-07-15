@@ -27,10 +27,17 @@ from app.schemas import (
     FormDefPatchIn,
     GenerateReportIn,
     RejectIn,
+    SetPasswordIn,
     SettingsPatchIn,
     TestSmsIn,
 )
-from app.security import employee_profile, get_approved_employee, is_dept_manager, require_role
+from app.security import (
+    employee_profile,
+    get_approved_employee,
+    hash_password,
+    is_dept_manager,
+    require_role,
+)
 from app.shift_logic import now_ist
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -204,6 +211,29 @@ async def approve_employee(
     await session.commit()
     await session.refresh(emp)
     return employee_profile(emp)
+
+
+@router.post("/employees/{employee_id}/set-password")
+async def set_employee_password(
+    employee_id: uuid.UUID,
+    body: SetPasswordIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """CGM/MD only: set a TEMPORARY dashboard password (must be changed on first login)."""
+    if actor.role.rank > 2:
+        raise HTTPException(status_code=403, detail="Only CGM/MD can set passwords")
+    emp = await session.get(Employee, employee_id)
+    if emp is None:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    emp.password_hash = hash_password(body.password)
+    emp.must_change_password = True
+    await write_audit(
+        session, actor.id, "employee.password_set", "employee", str(emp.id),
+        {"set_by": actor.emp_id},
+    )
+    await session.commit()
+    return {"status": "temporary_password_set", "emp_id": emp.emp_id, "must_change_password": True}
 
 
 @router.post("/employees/{employee_id}/reject")

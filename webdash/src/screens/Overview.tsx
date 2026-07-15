@@ -12,6 +12,7 @@ export default function Overview() {
   const nav = useNavigate();
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("");
 
   const load = () => api("/dashboard/overview").then(setData).catch((e) => setErr(e.message));
   useEffect(() => {
@@ -23,6 +24,14 @@ export default function Overview() {
   if (err) return <div className="card" style={{ color: "var(--danger)" }}>{err}</div>;
   if (!data) return <Loading />;
   const { kpis, departments, incidents } = data;
+  const q = filter.trim().toLowerCase().replace(/\s/g, "");
+  const shownIncidents = q
+    ? incidents.filter((i: any) =>
+        [i.detected_plate, i.category, i.department_code, i.reporter_name, i.address_text]
+          .filter(Boolean)
+          .some((v: string) => v.toLowerCase().replace(/\s/g, "").includes(q)),
+      )
+    : incidents;
 
   return (
     <div>
@@ -77,13 +86,23 @@ export default function Overview() {
 
         <div className="card">
           <h2>{t("liveIncidents")}</h2>
-          {incidents.length === 0 && <div style={{ color: "var(--muted)" }}>{t("noData")}</div>}
-          {incidents.map((i: any) => (
+          <input
+            data-testid="incident-search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder={t("searchIncidents")}
+            style={{ marginBottom: 10 }}
+          />
+          {shownIncidents.length === 0 && <div style={{ color: "var(--muted)" }}>{t("noData")}</div>}
+          {shownIncidents.map((i: any) => (
             <div key={i.id} className="feed-item" onClick={() => nav(`/dept/${i.department_code}`)}>
-              {i.photo_url ? <img src={i.photo_url} alt="" /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>⚠️</div>}
+              {i.video_url ? (
+                <video src={i.video_url} style={{ width: 52, height: 52, borderRadius: 8, objectFit: "cover" }} muted preload="metadata" />
+              ) : i.photo_url ? <img src={i.photo_url} alt="" /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>⚠️</div>}
               <div style={{ flex: 1 }}>
-                <div className="t">{i.category} · {i.department_code}</div>
+                <div className="t">{i.category} · {i.department_code}{i.video_url ? " · 🎬" : ""}</div>
                 <div className="m">{i.reporter_name} · {i.status}{i.detected_plate ? <> · <b style={{ color: "var(--primary, #1a6b3c)" }}>🚗 {i.detected_plate}</b></> : null}</div>
+                {i.address_text ? <div className="m">📍 {i.address_text}</div> : null}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                 <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>

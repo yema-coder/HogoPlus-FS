@@ -21,7 +21,8 @@
     "openSettings": "सेटिंग्ज उघडा",
     "close": "कॅमेरा बंद करा",
     "confirm": "नक्की करा",
-    "home": "होमवर जा"
+    "home": "होमवर जा",
+    "location": "ठिकाण"
   },
   "lang": {
     "title": "तुमची भाषा निवडा",
@@ -113,7 +114,13 @@
     "aiChange": "बदला",
     "aiRouted": "{{dept}} कडे पाठवले",
     "aiLater": "काही मिनिटांत आपोआप पाठवली जाईल",
-    "detectedPlate": "गाडी नंबर"
+    "detectedPlate": "गाडी नंबर",
+    "photoMode": "फोटो",
+    "videoMode": "व्हिडिओ",
+    "videoHint": "व्हिडिओ घ्या (कमाल 30 सेकंद)",
+    "recordingLeft": "रेकॉर्डिंग… {{s}} सेकंद बाकी",
+    "videoNeedsNet": "व्हिडिओसाठी नेटवर्क हवे — आत्ता फोटो वापरा",
+    "videoTooLarge": "व्हिडिओ खूप मोठा आहे (कमाल 40 MB). लहान व्हिडिओ घ्या."
   },
   "status": {
     "submitted": "पाठवले",

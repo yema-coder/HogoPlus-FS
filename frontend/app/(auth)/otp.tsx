@@ -54,7 +54,7 @@ export default function OtpEntry() {
         res.employee,
       );
       if (res.employee.onboarding_status !== "approved") router.replace("/(auth)/pending");
-      else router.replace("/(tabs)/home");
+      else router.replace("/"); // via index gate → permission primer runs on first login
     } catch (e) {
       setOtp("");
       submittedFor.current = null;

@@ -1,5 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
-import { Camera as CameraIcon, Car, CircleDot } from "lucide-react-native";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { Camera as CameraIcon, Car, CircleDot, MapPin } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,6 +29,14 @@ import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, statusColors, type } from "@/src/theme/tokens";
 import { formatDateTime } from "@/src/utils/format";
+
+/** Playback for video complaints (expo-video, presigned URL via /api/files). */
+function IncidentVideo({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  return <VideoView player={player} style={styles.photo} nativeControls contentFit="contain" testID="incident-video" />;
+}
 
 export default function IncidentDetailScreen() {
   const { t } = useTranslation();
@@ -125,12 +134,16 @@ export default function IncidentDetailScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Image
-            source={{ uri: fileUrl(detail.photo_key) }}
-            style={styles.photo}
-            resizeMode="cover"
-            testID="incident-photo"
-          />
+          {detail.video_key ? (
+            <IncidentVideo uri={fileUrl(detail.video_key)} />
+          ) : detail.photo_key ? (
+            <Image
+              source={{ uri: fileUrl(detail.photo_key) }}
+              style={styles.photo}
+              resizeMode="cover"
+              testID="incident-photo"
+            />
+          ) : null}
           <View style={styles.headRow}>
             <View style={[styles.catIcon, { backgroundColor: `${def?.tint ?? colors.muted}18` }]}>
               <CatIcon size={26} color={def?.tint ?? colors.muted} strokeWidth={2.2} />
@@ -150,6 +163,23 @@ export default function IncidentDetailScreen() {
               <Car size={18} color={colors.primary} strokeWidth={2.4} />
               <Text style={styles.plateLabel}>{t("incident.detectedPlate")}</Text>
               <Text style={styles.plateText}>{detail.detected_plate}</Text>
+            </View>
+          ) : null}
+
+          {detail.address_text || detail.gps_lat != null ? (
+            <View style={styles.locationBlock} testID="incident-location-block">
+              <View style={styles.locationRow}>
+                <MapPin size={18} color={colors.primary} strokeWidth={2.4} />
+                <Text style={styles.locationLabel}>{t("common.location")}</Text>
+              </View>
+              {detail.address_text ? (
+                <Text style={styles.locationAddress}>{detail.address_text}</Text>
+              ) : null}
+              {detail.gps_lat != null && detail.gps_lng != null ? (
+                <Text style={styles.locationCoords}>
+                  {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
+                </Text>
+              ) : null}
             </View>
           ) : null}
 
@@ -354,6 +384,18 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   photoRequiredHint: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.warning },
+  locationBlock: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 4,
+  },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  locationLabel: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.muted },
+  locationAddress: { fontFamily: fonts.medium, fontSize: type.base, color: colors.text },
+  locationCoords: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
   noteInput: {
     minHeight: 64,
     borderRadius: radius.md,

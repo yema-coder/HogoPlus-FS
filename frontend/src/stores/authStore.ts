@@ -11,6 +11,34 @@ import type { EmployeeProfile } from "@/src/api/types";
 import i18n from "@/src/i18n";
 import { storage } from "@/src/utils/storage";
 
+/** Fix (Prompt 7 Part E): permsPrimed was never restored on cold start, and on
+ * existing installs the primer could be marked "seen" while core permissions were
+ * still undetermined. Restore the flag AND re-show the primer ONCE if camera or
+ * location is still undetermined (native only). */
+async function resolvePermsPrimed(): Promise<boolean> {
+  const { Platform } = await import("react-native");
+  if (Platform.OS === "web") return true;
+  const primed = Boolean(await storage.getItem<boolean>("hogo.permsPrimed", false));
+  if (!primed) return false;
+  const reprimed = Boolean(await storage.getItem<boolean>("hogo.permsReprimed", false));
+  if (reprimed) return true;
+  try {
+    const [{ Camera }, Location] = await Promise.all([
+      import("expo-camera"),
+      import("expo-location"),
+    ]);
+    const cam = await Camera.getCameraPermissionsAsync();
+    const loc = await Location.getForegroundPermissionsAsync();
+    if (cam.status === "undetermined" || loc.status === "undetermined") {
+      await storage.setItem("hogo.permsReprimed", true);
+      return false; // re-show the primer once for this install
+    }
+  } catch {
+    // permission modules unavailable (e.g. web bundle) — keep primed
+  }
+  return true;
+}
+
 export type AuthStatus = "loading" | "unauthenticated" | "authenticated";
 
 interface AuthState {
@@ -53,6 +81,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const langPicked = Boolean(await storage.getItem<boolean>("hogo.langPicked", false));
     const lang = await storage.getItem<string>("hogo.lang", "");
     if (lang && i18n.language !== lang) await i18n.changeLanguage(lang);
+    const permsPrimed = await resolvePermsPrimed();
+    set({ permsPrimed });
     const hasTokens = await hydrateTokens();
     if (!hasTokens) {
       set({ status: "unauthenticated", langPicked });

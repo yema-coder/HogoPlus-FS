@@ -21,7 +21,8 @@
     "openSettings": "Open Settings",
     "close": "Close camera",
     "confirm": "Confirm",
-    "home": "Go Home"
+    "home": "Go Home",
+    "location": "Location"
   },
   "lang": {
     "title": "Choose your language",
@@ -113,7 +114,13 @@
     "aiChange": "Change",
     "aiRouted": "Sent to {{dept}}",
     "aiLater": "We will route it automatically in a few minutes",
-    "detectedPlate": "Vehicle number"
+    "detectedPlate": "Vehicle number",
+    "photoMode": "Photo",
+    "videoMode": "Video",
+    "videoHint": "Record a video (max 30 sec)",
+    "recordingLeft": "Recording… {{s}}s left",
+    "videoNeedsNet": "Video needs internet — use photo for now",
+    "videoTooLarge": "Video is too big (max 40 MB). Record a shorter clip."
   },
   "status": {
     "submitted": "Sent",
