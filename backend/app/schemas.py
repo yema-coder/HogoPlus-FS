@@ -12,6 +12,10 @@ class SendOtpIn(BaseModel):
     phone: str = Field(pattern=PHONE_REGEX)
 
 
+class TestSmsIn(BaseModel):
+    phone: str = Field(pattern=PHONE_REGEX)
+
+
 class VerifyOtpIn(BaseModel):
     phone: str = Field(pattern=PHONE_REGEX)
     otp: str = Field(min_length=4, max_length=8)

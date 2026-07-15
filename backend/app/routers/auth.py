@@ -15,7 +15,7 @@ from app.config import settings
 from app.database import get_session
 from app.models import Department, Employee, OtpAttempt, ShiftAssignment
 from app.notify import dispatcher, template
-from app.otp import NotConfigured, get_otp_sender
+from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
 from app.schemas import RefreshIn, RegisterIn, SendOtpIn, UpdateMeIn, VerifyOtpIn
 from app.security import (
@@ -60,6 +60,8 @@ async def send_otp(body: SendOtpIn, session: AsyncSession = Depends(get_session)
         await get_otp_sender().send(phone, otp)
     except NotConfigured as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+    except SMSDeliveryError as exc:
+        raise HTTPException(status_code=502, detail=f"SMS delivery failed: {exc}")
     return {"message": "OTP sent", "otp_mode": settings.otp_mode, "expires_in": OTP_TTL_SECONDS}
 
 

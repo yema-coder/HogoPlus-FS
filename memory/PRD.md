@@ -212,3 +212,20 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - README rewritten: DR steps + LAUNCH DAY RUNBOOK (deploy→secrets→health→geofence→managers→
   phones→MD→SOPs).
 
+
+### SMS integration — SMSGatewayHub (post-Phase-5 add-on)
+- Keys in backend/.env: SMSGATEWAYHUB_API_KEY / SENDER_ID / DLT_TEMPLATE_ID + OTP_TEMPLATE_TEXT
+  (exact DLT template, {#var#} x2). NEVER log/echo values.
+- app/otp.py SMSGatewayHubSender fully wired: GET https://www.smsgatewayhub.com/api/mt/SendSMS,
+  params APIKey/senderid/channel=2/DCS=0/flashsms=0/number(no +)/text/route=1/dlttemplateid
+  (+EntityId only if configured). build_message(): 1st {#var#}=OTP, 2nd {#var#}="5" (TTL min),
+  no other text altered (DLT scrubbing). Success = ErrorCode "000"/"0".
+- send() fallback: on any provider error → logger.error; if DEMO_OTP_ENABLED (non-prod) log
+  fallback demo OTP and DON'T raise; in prod raise SMSDeliveryError → auth send-otp returns 502.
+- OTP_MODE still "demo". POST /api/admin/test-sms {phone} (rank≤2) sends a REAL OTP via the
+  provider (stores hash in redis so it's usable) and returns raw provider JSON; 502 on error.
+- Tests: tests/test_sms_sender.py (7 mocked: template substitution, payload shape, error code,
+  demo fallback, prod raise, mode selection, endpoint auth). TOTAL NOW **118 passed**.
+- README runbook secrets corrected: OTP_MODE=smsgatewayhub (+ SMSGATEWAYHUB_* / OTP_TEMPLATE_TEXT),
+  with test-sms verification step before flipping mode.
+

@@ -27,6 +27,7 @@ from app.schemas import (
     GenerateReportIn,
     RejectIn,
     SettingsPatchIn,
+    TestSmsIn,
 )
 from app.security import employee_profile, get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import now_ist
@@ -447,6 +448,40 @@ async def backup_now(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Backup failed: {type(e).__name__}")
     return result
+
+
+@router.post("/test-sms")
+async def test_sms(
+    body: TestSmsIn,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Send a REAL OTP SMS via SMSGatewayHub (regardless of OTP_MODE) and return the
+    provider's raw response JSON so delivery can be verified before switching modes.
+    CGM/MD only."""
+    import secrets
+
+    from app.otp import NotConfigured, SMSDeliveryError, SMSGatewayHubSender
+    from app.redis_client import redis_client
+    from app.routers.auth import OTP_TTL_SECONDS, _hash
+
+    try:
+        sender = SMSGatewayHubSender()
+    except NotConfigured as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    otp = f"{secrets.randbelow(10**6):06d}"
+    # store like the real login flow so the delivered OTP is actually usable
+    await redis_client.setex(f"otp:code:{body.phone}", OTP_TTL_SECONDS, _hash(otp))
+    await write_audit(session, actor.id, "admin.test_sms", "employee", str(actor.id), {"phone": body.phone})
+    await session.commit()
+    try:
+        raw = await sender.send_raw(body.phone, otp)
+    except SMSDeliveryError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Provider call failed: {type(e).__name__}: {e}")
+    return {"sent": True, "otp_mode": "smsgatewayhub", "provider_response": raw}
 
 
 MAX_SOP_SIZE = 20 * 1024 * 1024

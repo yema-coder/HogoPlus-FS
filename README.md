@@ -48,7 +48,7 @@ then run the restore script.
 ## LAUNCH DAY RUNBOOK (do these in order)
 
 1. **Deploy** the app (Publish button) and wait for it to go live.
-2. **Add all secrets** in Deployment → Secrets: `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `JWT_SECRET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `FILE_STORAGE_MODE=s3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `EMERGENT_LLM_KEY`, `MSG91_AUTH_KEY`, `MSG91_OTP_TEMPLATE_ID`, `OTP_MODE=msg91`, `DEMO_OTP_ENABLED=false`.
+2. **Add all secrets** in Deployment → Secrets: `DATABASE_URL`, `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `JWT_SECRET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, `FILE_STORAGE_MODE=s3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `EMERGENT_LLM_KEY`, `SMSGATEWAYHUB_API_KEY`, `SMSGATEWAYHUB_SENDER_ID`, `SMSGATEWAYHUB_DLT_TEMPLATE_ID`, `OTP_TEMPLATE_TEXT`, `OTP_MODE=smsgatewayhub`, `DEMO_OTP_ENABLED=false`. Before flipping `OTP_MODE`, verify real delivery with `POST /api/admin/test-sms {"phone": "+91…"}` (CGM only) — it returns the provider's raw response.
 3. **Verify health**: open `https://<domain>/api/health` → must show `"db_seeded": true`. If false, run the DISASTER RECOVERY steps above first.
 4. **Set the geofence**: log in to `https://<domain>/api/dash/` as CGM → Admin → Factory geofence → enter the real factory latitude / longitude / radius → Save.
 5. **Assign the 7 department managers** (ACCOUNTS, AGRICULTURE, CANE_YARD, CIVIL, DISTILLERY, GODOWN, STORE currently route to CGM): Admin → Assign department manager → pick department → search employee → Assign.
