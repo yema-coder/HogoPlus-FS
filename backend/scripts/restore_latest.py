@@ -97,7 +97,7 @@ def main() -> None:
 
     if not args.target:  # only migrate the real DB, not scratch drills
         print("Running alembic upgrade head …")
-        subprocess.run(["python", "-m", "alembic", "upgrade", "head"], check=True,
+        subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"], check=True,
                        cwd=str(Path(__file__).resolve().parent.parent))
 
     out = subprocess.run(

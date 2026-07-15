@@ -257,3 +257,22 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - NOTE: pod was RESET mid-session again (PG/redis wiped) → re-ran full DR (PGDG apt install,
   role/DB create, restore_latest.py from R2, 401 employees). This is the 2nd reset; DR is routine.
 
+
+### Deployment failure analysis (mongo_cluster_setup) — RESOLVED in sandbox
+- Deploy failed at v3.InitialDeploy.MongoClusterSetup "list source databases" exit 1: the deployer
+  snapshots the SANDBOX's local MongoDB, but the pod had been reset (3rd time) — supervisord +
+  mongod + postgres/redis packages wiped → local mongo unreachable → step failed.
+- Fixed: created idempotent /app/scripts/sandbox_recover.sh (PGDG install, role/DB create, R2
+  restore via restore_latest.py, supervisord + all services). Run with `sudo bash` after any reset.
+- Code fix: restore_latest.py now uses sys.executable for the alembic subprocess (was bare
+  "python" which lacks alembic under sudo/root PATH).
+- Gotcha learned: NEVER SIGTERM/pkill postgres while supervisord manages it — smart shutdown hangs
+  in "database system is shutting down"; recover with supervisorctl stop postgresql + pkill -9 +
+  rm postmaster.pid + start.
+- PRODUCTION REQUIREMENTS (unchanged, per runbook): Emergent deploy only provisions managed Mongo
+  (unused by this app). App needs Deployment→Secrets: DATABASE_URL (external managed Postgres
+  WITH pgvector, e.g. Neon/Supabase), REDIS_URL/CELERY_BROKER_URL/CELERY_RESULT_BACKEND (e.g.
+  Upstash), + R2/AWS/LLM/SMS keys. Startup is non-fatal if DB unreachable (health db_seeded:false).
+- deployment_agent flags Postgres/Redis as platform "blockers" — expected; resolved via external
+  managed services through secrets, NOT by migrating to Mongo (architecture decision across 5 phases).
+
