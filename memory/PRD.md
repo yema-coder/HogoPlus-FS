@@ -276,3 +276,33 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - deployment_agent flags Postgres/Redis as platform "blockers" — expected; resolved via external
   managed services through secrets, NOT by migrating to Mongo (architecture decision across 5 phases).
 
+
+## Prompt 6 Part 2/3 — UX Pack Mobile UI + Opportunistic ANPR (2026-07 fork) — DONE
+- 2.1 Photo-first complaint flow: home/pending tile → /incident/capture opens CAMERA immediately
+  (safe-area ✕ close, GPS chip in parallel); detail screen = watermarked photo + dept selector +
+  description + 60s expo-audio voice note (reused VoiceFieldInput) → submit as category='other'.
+  incident/category.tsx DELETED (no category pre-pick).
+- 2.2 AI confirmation card: success.tsx polls incident detail (3s × 12) for ai_suggested_*;
+  card shows category+dept+confidence with Accept (confirm-routing {}) / Change (scrollable modal:
+  category chips + dept list → confirm-routing {category, department_code}). ai_timeout path
+  (10-min auto-apply) demonstrated live on Neon: sweep set ai_confirmed_by='ai_timeout'.
+- 2.3 Grievance→Complaint rename trilingual (mobile locales + webdash i18n). 2.4 SelfieCamera ✕
+  now uses useSafeAreaInsets. 2.5 swap/new.tsx searchable colleague picker (name/emp_id filter).
+- 2.6 Onboarding: register-name → register-selfie (register-department.tsx DELETED; register body
+  has no department_code). Approvals>Registrations Approve opens assignment modal (dept list +
+  role chips Worker/Staff/Clerk/Manager + emp_id input) → POST /admin/employees/{id}/approve body.
+- 2.7 Resolve flow requires resolution photo (PhotoCaptureModal; confirm disabled w/o photo);
+  incident detail shows resolution photo + detected_plate chip (ANPR). Webdash Overview/Department
+  feeds show 🚗 plate; dashboard.py serializes detected_plate.
+- 2.8 punch-out reminder already existed (celery beat 15-min, redis once-per-day guard, mocked
+  clock test) — verified registered after celery restart.
+- BUGFIX: aws.py had DUPLICATE detect_text defs (2nd list[dict] shadowed 1st list[str]) →
+  removed str version; tasks.extract_plate now handles dict/str lines. Celery worker restarted
+  (was running stale code without detect_plate/punchout/ai_timeout tasks — remember to restart
+  celery after tasks.py changes!).
+- i18n: +9 new keys ×3 (incident.captureHint/voiceNote/aiCardTitle/aiWaiting/aiAccept/aiChange/
+  aiRouted/aiLater/detectedPlate, reports.resolutionPhoto*, approvals.assign*/empId/approveTitle/
+  newJoinee, swap.search). Parity GREEN en/hi/mr.
+- Tests: backend 126/126 green; testing_agent iteration_7 ALL GREEN (1 LOW modal-overflow issue →
+  fixed: edit modal content in ScrollView, maxHeight 75%, actions pinned). Reusable live suite:
+  /app/backend/tests/live_ux_pack_spotcheck.py.

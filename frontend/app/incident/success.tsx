@@ -4,7 +4,6 @@ import { CheckCircle2, CloudOff, Home, Sparkles } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -235,36 +234,34 @@ export default function IncidentSuccess() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet} testID="ai-edit-modal">
-            <Text style={styles.modalTitle}>{t("incident.chooseCategory")}</Text>
-            <View style={styles.catGrid}>
-              {INCIDENT_CATEGORIES.map((c) => {
-                const Icon = c.icon;
-                const active = editCat === c.code;
-                return (
-                  <Pressable
-                    key={c.code}
-                    testID={`edit-cat-${c.code}`}
-                    onPress={() => setEditCat(c.code)}
-                    style={[styles.catChip, active && styles.catChipActive]}
-                  >
-                    <Icon size={22} color={active ? colors.primary : c.tint} strokeWidth={2.2} />
-                    <Text style={[styles.catChipText, active && { color: colors.primary }]}>
-                      {t(c.tKey)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text style={styles.modalTitle}>{t("incident.aboutDept")}</Text>
-            <FlatList
-              data={departments.data ?? []}
-              keyExtractor={(d) => d.code}
-              style={{ maxHeight: 220 }}
-              renderItem={({ item }) => {
+            <ScrollView style={styles.modalScroll} nestedScrollEnabled>
+              <Text style={styles.modalTitle}>{t("incident.chooseCategory")}</Text>
+              <View style={styles.catGrid}>
+                {INCIDENT_CATEGORIES.map((c) => {
+                  const Icon = c.icon;
+                  const active = editCat === c.code;
+                  return (
+                    <Pressable
+                      key={c.code}
+                      testID={`edit-cat-${c.code}`}
+                      onPress={() => setEditCat(c.code)}
+                      style={[styles.catChip, active && styles.catChipActive]}
+                    >
+                      <Icon size={22} color={active ? colors.primary : c.tint} strokeWidth={2.2} />
+                      <Text style={[styles.catChipText, active && { color: colors.primary }]}>
+                        {t(c.tKey)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <Text style={styles.modalTitle}>{t("incident.aboutDept")}</Text>
+              {(departments.data ?? []).map((item) => {
                 const Icon = departmentIcon(item.code);
                 const active = item.code === editDept;
                 return (
                   <Pressable
+                    key={item.code}
                     testID={`edit-dept-${item.code}`}
                     onPress={() => setEditDept(item.code)}
                     style={[styles.deptRow, active && styles.deptRowActive]}
@@ -275,8 +272,8 @@ export default function IncidentSuccess() {
                     </Text>
                   </Pressable>
                 );
-              }}
-            />
+              })}
+            </ScrollView>
             <View style={styles.aiActions}>
               <BigButton
                 testID="ai-edit-cancel-button"
@@ -377,9 +374,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     padding: sizes.screenPadding,
-    maxHeight: "88%",
-    gap: spacing.sm,
+    maxHeight: "75%",
+    gap: spacing.md,
   },
+  modalScroll: { flexGrow: 0 },
   modalTitle: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text, marginTop: spacing.xs },
   catGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   catChip: {
