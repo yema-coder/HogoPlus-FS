@@ -55,14 +55,17 @@ def nightly_backup() -> dict:
 
 
 def run_backup_sync() -> dict:
-    """Shared by the nightly beat task and POST /api/admin/backup-now."""
+    """pg_dump → gzip → R2 backups/YYYY-MM-DD/HHMM.sql.gz (IST clock).
+    Retention: keep everything from the last 48h + the 00:30 daily for 14 days."""
     if settings.file_storage_mode != "s3":
         logger.info("FILE_STORAGE_MODE=local — skipping DB backup upload")
         return {"skipped": True, "reason": "local storage mode"}
 
+    from app.shift_logic import now_ist
+
     parsed = urlparse(settings.database_url.replace("+asyncpg", ""))
-    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    key = f"backups/{date_str}.sql.gz"
+    ist_now = now_ist()
+    key = f"backups/{ist_now.strftime('%Y-%m-%d')}/{ist_now.strftime('%H%M')}.sql.gz"
     with tempfile.NamedTemporaryFile(suffix=".sql") as tmp:
         cmd = [
             "pg_dump",
@@ -83,16 +86,43 @@ def run_backup_sync() -> dict:
     s3.client.put_object(Bucket=s3.bucket, Key=key, Body=compressed)
     logger.info("Uploaded DB backup to %s", key)
 
-    # retention: keep the newest N backups
+    deleted = _apply_backup_retention(s3, ist_now)
+    return {"uploaded": key, "deleted": deleted}
+
+
+def _parse_backup_key(key: str):
+    """→ (datetime IST-naive, is_daily) or None. Supports backups/YYYY-MM-DD/HHMM.sql.gz
+    and the legacy backups/YYYY-MM-DD.sql.gz (treated as the daily)."""
+    import re as _re
+
+    m = _re.match(r"^backups/(\d{4}-\d{2}-\d{2})/(\d{2})(\d{2})\.sql\.gz$", key)
+    if m:
+        dt = datetime.strptime(f"{m.group(1)} {m.group(2)}:{m.group(3)}", "%Y-%m-%d %H:%M")
+        return dt, (m.group(2), m.group(3)) == ("00", "30")
+    m = _re.match(r"^backups/(\d{4}-\d{2}-\d{2})\.sql\.gz$", key)
+    if m:
+        return datetime.strptime(m.group(1), "%Y-%m-%d"), True
+    return None
+
+
+def _apply_backup_retention(s3, ist_now) -> list[str]:
     resp = s3.client.list_objects_v2(Bucket=s3.bucket, Prefix="backups/")
-    keys = sorted((o["Key"] for o in resp.get("Contents", [])), reverse=True)
+    now_naive = ist_now.replace(tzinfo=None)
     deleted = []
-    for old in keys[settings.backup_keep_last:]:
-        s3.client.delete_object(Bucket=s3.bucket, Key=old)
-        deleted.append(old)
+    for obj in resp.get("Contents", []):
+        key = obj["Key"]
+        parsed = _parse_backup_key(key)
+        if parsed is None:
+            continue  # unknown format — never delete blindly
+        dt, is_daily = parsed
+        age_h = (now_naive - dt).total_seconds() / 3600
+        keep = age_h <= 48 or (is_daily and age_h <= 14 * 24)
+        if not keep:
+            s3.client.delete_object(Bucket=s3.bucket, Key=key)
+            deleted.append(key)
     if deleted:
-        logger.info("Backup retention: deleted %s old backup(s)", len(deleted))
-    return {"uploaded": key, "kept": min(len(keys), settings.backup_keep_last), "deleted": deleted}
+        logger.info("Backup retention: deleted %s object(s)", len(deleted))
+    return deleted
 
 
 # ---------------- Phase 4 Part B: face verification ----------------
@@ -116,10 +146,14 @@ async def _verify_face_async(attendance_id: str) -> dict:
             if emp is None:
                 return {"error": "employee not found"}
 
-            # bootstrap rule: first punch selfie becomes the reference (seeded employees)
+            # bootstrap rule: first punch selfie becomes the reference (seeded employees).
+            # It lands in the Time Office queue as 'reference_bootstrap' — a human must
+            # confirm the reference face belongs to this employee.
             if not emp.reference_selfie_key:
                 emp.reference_selfie_key = att.selfie_key
                 emp.reference_selfie_set_at = datetime.now(timezone.utc)
+                att.verification_level = "flagged"
+                att.flagged_reason = "reference_bootstrap"
                 await write_audit(
                     session, None, "employee.reference_selfie_bootstrap", "employee",
                     str(emp.id), {"attendance_id": str(att.id), "selfie_key": att.selfie_key},

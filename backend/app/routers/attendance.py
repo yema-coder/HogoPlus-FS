@@ -271,6 +271,39 @@ async def approve_flagged(
     return _out(record)
 
 
+@router.post("/attendance/{attendance_id}/reject")
+async def reject_flagged(
+    attendance_id: uuid.UUID,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reject a flagged punch. For reference_bootstrap rows this ALSO clears the
+    just-set reference selfie so the next punch re-bootstraps under supervision."""
+    if not await is_dept_manager(session, employee, "TIME_OFFICE"):
+        raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+    record = await session.get(Attendance, attendance_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    if record.verification_level != "flagged" or record.approved_by is not None:
+        raise HTTPException(status_code=409, detail="Only pending flagged records can be rejected")
+    record.approved_by = employee.id
+    record.face_verified = False
+    cleared_reference = False
+    if record.flagged_reason == "reference_bootstrap":
+        worker = await session.get(Employee, record.employee_id)
+        if worker and worker.reference_selfie_key == record.selfie_key:
+            worker.reference_selfie_key = None
+            worker.reference_selfie_set_at = None
+            cleared_reference = True
+    await write_audit(
+        session, employee.id, "attendance.rejected", "attendance", str(record.id),
+        {"cleared_reference": cleared_reference},
+    )
+    await session.commit()
+    await session.refresh(record)
+    return {**_out(record), "rejected": True, "cleared_reference": cleared_reference}
+
+
 @router.get("/dashboard/attendance-summary")
 async def attendance_summary(
     date: str | None = Query(default=None),

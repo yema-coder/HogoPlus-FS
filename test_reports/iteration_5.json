@@ -1,0 +1,48 @@
+{
+  "summary": "Phase 5 (MD Command Center web dashboard at /api/dash/) FULLY VERIFIED. Backend: pytest 111/111 GREEN (cd /app/backend && python -m pytest tests/ -q) — no regressions from Phase 4. NEW live scope suite tests/phase5_scope_smoke.py 14/14 GREEN against external EXPO_PUBLIC_BACKEND_URL — proves role scoping: (a) CGM +918483029039 → GET /api/dashboard/overview returns 13 departments; (b) ENG Manager +919834705825 → same endpoint returns EXACTLY 1 department [ENGINEERING]; (c) ENG Manager → GET /api/dashboard/department/PRODUCTION returns 403, /api/dashboard/reports 403, /api/dashboard/audit 403, /api/admin/employees 403; (d) CGM → same endpoints all 200; (e) Worker +917972540971 → GET /api/dashboard/overview returns 403. Frontend (Playwright desktop 1920x800, /api/dash/ SPA): every DoD checkpoint met with a screenshot. CRITICAL EVIDENCE: (1) CGM login lands on Overview showing 13 dept tiles [ACCOUNTS,ADMIN,AGRICULTURE,CANE_YARD,CIVIL,DISTILLERY,ENGINEERING,GODOWN,PRODUCTION,PURCHASE,SECURITY,STORE,TIME_OFFICE]; Attendance <select data-testid='attendance-dept-select'> has 13 options; sidebar Admin link present; Approvals loads. (2) Manager +919834705825 (Mhaske Sanjay ENGINEERING) login shows EXACTLY 1 tile 'Engineering' — no other departments visible on Overview; Attendance has NO dept-select, only an ENGINEERING chip (VerifChip tone=blue); NO Admin nav link in sidebar; direct navigation to /api/dash/dept/PRODUCTION renders the exact backend error 'Managers can only view their own department — Back' (403 in network console — from api.ts error unwrap); Reports screen shows ONLY the Sahayak chat (no data-testid='reports-table', no data-testid='generate-report' button — top mgmt gated via isTopMgmt in Reports.tsx). (3) Worker +917972540971 hits full-page 'Access restricted' card 'The Command Center is for Managers, CGM and MD only.' with just a Logout button — canUseDashboard(rank>3) false. (4) Dept drill-down as CGM (clicked dept-tile-PRODUCTION → /dept/PRODUCTION): 14-day trends dual-axis chart with 07-02→07-15 x-axis, Attendance register table, Form submissions card, Open incidents card showing 1 critical 'fire' incident, date picker data-testid='dept-date' with value 2026-07-15 visible top-right, header 'Manager: Mane Arjun Dashrath · 47 employees'. (5) Approvals aging as CGM: 'Pending by manager' summary tile for 'Mane Arjun Dashrath' shows Pending=1, Oldest(hrs)=16; items table with 1 row Type=Incident, Department=PRODUCTION, Manager=Mane Arjun Dashrath, Age chip=16h (amber). (6) Trilingual switcher works: EN→हिं sets Overview title 'अवलोकन — 2026-07-15' and localStorage['hogo_lang']='hi'; हिं→मरा sets sidebar to 'आढावा / मंजुरी / हजेरी / अहवाल आणि AI / प्रशासन' and localStorage['hogo_lang']='mr' — persists on reload. (7) Admin as CGM: geofence form (geo-lat=19, geo-lng=74.7, geo-radius=500) present, PATCH radius=501 → save-msg '✓ Saved' displayed, then reset to 500 saved; 'Employees without phone (6)' card lists all 6 expected rows: Thorat Somnath Vasant #0139, Jadhav Rajendra Pandharinath #0403, Anap Somnath Genuji #0470, Wagh Vikram Ganpat #0914, Kharat Amit Bhausaheb #0949, Pawar Sanjay Lahanu #1211 — each with +91… input + Save button; assign-manager dept select present (data-testid='assign-dept-select'); SOP documents card shows 'test_sop_boiler' with ready chip.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow*-style-props (mobile Expo)", "issue": "Pre-existing from iter_2/3/4 — RN-Web deprecation shadow* → boxShadow. Non-blocking. Not present in web SPA (which uses plain CSS)."},
+      {"component": "pointerEvents-prop (mobile Expo)", "issue": "Pre-existing from iter_2/3/4 — props.pointerEvents → style.pointerEvents. Non-blocking. Not present in web SPA."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/phase5_scope_smoke.py (NEW — 14 live role-scoping tests, all PASSED)",
+    "/app/test_reports/pytest/phase5_scope_results.xml (14/14 PASSED)",
+    "/app/test_reports/pytest/phase5_results.xml (111/111 unit tests PASSED — no regressions)",
+    "/tmp/p5_cgm_overview.png — CGM Overview showing 13 dept tiles + Admin sidebar link",
+    "/tmp/p5_cgm_attendance.png — CGM Attendance with 13-option dept select",
+    "/tmp/p5_cgm_approvals.png / p5_cgm_approvals_aging.png — Approvals 'Pending by manager' tile + items table with 16h age chip",
+    "/tmp/p5_cgm_admin.png — Admin geofence form + Employees without phone (6) card + SOP docs",
+    "/tmp/p5_cgm_dept_drill.png — /dept/PRODUCTION with 14-day dual-axis chart, attendance register, incidents (critical 'fire')",
+    "/tmp/p5_mgr_overview.png — Manager Overview with EXACTLY 1 Engineering tile, no Admin nav",
+    "/tmp/p5_mgr_attendance.png — Manager Attendance with ENGINEERING chip (no select)",
+    "/tmp/p5_mgr_dept_prod_403.png — Manager blocked at /dept/PRODUCTION with 'Managers can only view their own department — Back' message",
+    "/tmp/p5_mgr_reports.png — Manager Reports showing only Sahayak chat (no PDF table / AI usage)",
+    "/tmp/p5_worker_denied.png — Worker 'Access restricted' full-page card"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Role scoping is enforced at BOTH backend (dashboard.py + admin.py raise 403 for Manager on cross-dept + admin endpoints) and frontend (Overview.tsx renders only what /overview returns; App.tsx sidebar hides Admin via isTopMgmt; Attendance.tsx uses `all = isTopMgmt(user)` to render <select> vs <Chip>; Reports.tsx wraps report list/AI-usage in `top && …`; Layout.tsx returns access-denied card when !canUseDashboard). Defense-in-depth verified end-to-end.",
+    "webdash/src/api.ts error unwrap surfaces backend detail string cleanly — Manager cross-dept 403 renders as 'Managers can only view their own department' inside a red card, not a raw JSON dump.",
+    "webdash/src/i18n.tsx uses localStorage['hogo_lang'] initializer — Marathi/Hindi persist across route changes and hard reload as verified.",
+    "webdash/src/auth.tsx rankOf/isTopMgmt/canUseDashboard/canReviewAttendance are correctly composed: worker rank>3 → dashboard denied; Manager rank=3 → dashboard allowed but not top-mgmt; TIME_OFFICE Manager gets attendance-review override (canReviewAttendance) without seeing Admin.",
+    "13 dept tiles served in a deterministic ordering; dept-tile-<CODE> testIDs match backend department.code exactly (ACCOUNTS…TIME_OFFICE)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/phase5_scope_smoke.py (NEW — 14 live scope tests; reusable regression suite for role scoping)"
+  ],
+  "success_rate": {
+    "backend": "100% — 111 unit tests + 14 live scope tests (all passing). CGM/Manager/Worker role matrix fully asserted via curl-style requests against external URL.",
+    "frontend": "100% — all 9 DoD checkpoints (login, CGM overview 13 tiles, CGM admin nav, CGM attendance 13-option select, CGM approvals, Manager 1 tile only, Manager no dept-select, Manager /dept/PRODUCTION 403 message, Manager reports has ONLY chat, Worker access-denied, trilingual persist, admin geofence save 501, admin missing-phones 6, dept drill-down chart+date-picker, approvals aging tiles+age chip) verified visually with screenshots."
+  },
+  "seed_data_creation": "None. OTP sends this iteration cleared with `redis-cli -n 0 KEYS 'otp:*' | xargs -r redis-cli -n 0 DEL` before running live scope suite (3 send-otp calls in fixtures + 3 fresh logins in Playwright = 6 total, all within rate-limit after DEL).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 5 is 100% green. Web SPA is served at /api/dash/ (React Router basename); ingress forwards /api/* to backend:8001. Do NOT test /dashboard on the external URL — that hits the Expo app. The single re-usable regression file for scope is /app/backend/tests/phase5_scope_smoke.py — running it re-verifies the full CGM vs Manager vs Worker matrix in ~4s. If touching /app/webdash/src/*, rebuild with `cd /app/webdash && /usr/bin/yarn build` (plain `yarn` is shim-blocked) and restart backend to pick up the new /app/backend/webdash_dist. OTP rate-limit: still 3 sends per phone per 10min; DEL redis keys between iterations. Generate-report button on CGM Reports screen was NOT pressed (calls real LLM — skipped per review-request note to save credits).",
+  "rca_of_issue": "N/A — no bugs found. Backend 403 error 'Managers can only view their own department' surfaces cleanly through webdash api.ts unwrap into a red card. Trilingual works. Admin CRUD (geofence radius) round-trips through PATCH /api/admin/settings correctly."
+}

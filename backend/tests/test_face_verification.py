@@ -130,6 +130,9 @@ async def test_missing_reference_bootstraps(db_session, monkeypatch):
     assert emp.reference_selfie_set_at is not None
     assert att.face_match_score is None
     assert att.face_verified is None
+    # bootstrap lands in the Time Office queue for human confirmation
+    assert att.verification_level == "flagged"
+    assert att.flagged_reason == "reference_bootstrap"
 
     # audit event recorded
     row = (
@@ -201,3 +204,43 @@ async def test_flagged_queue_exposes_face_fields(client, db_session, monkeypatch
     assert row["flagged_reason"] == "face_mismatch"
     assert row["selfie_url"]
     assert row["reference_selfie_url"]
+
+
+async def test_bootstrap_approve_keeps_reference(client, db_session):
+    emp = await _set_reference(db_session, PHONES["w_att1"], None)
+    att = await _make_attendance(db_session, PHONES["w_att1"], "boot_a.jpg", day=8)
+    await _verify_face_async(str(att.id))
+
+    r = await client.post(
+        f"/api/attendance/{att.id}/approve",
+        headers=await login(client, PHONES["time_mgr"]),
+    )
+    assert r.status_code == 200
+    await db_session.refresh(emp)
+    assert emp.reference_selfie_key == "boot_a.jpg"  # human confirmed — reference stays
+
+
+async def test_bootstrap_reject_clears_reference(client, db_session):
+    emp = await _set_reference(db_session, PHONES["w_att2"], None)
+    att = await _make_attendance(db_session, PHONES["w_att2"], "boot_r.jpg", day=9)
+    await _verify_face_async(str(att.id))
+    await db_session.refresh(emp)
+    assert emp.reference_selfie_key == "boot_r.jpg"
+
+    # worker cannot reject
+    r = await client.post(
+        f"/api/attendance/{att.id}/reject",
+        headers=await login(client, PHONES["w_att2"]),
+    )
+    assert r.status_code == 403
+
+    r = await client.post(
+        f"/api/attendance/{att.id}/reject",
+        headers=await login(client, PHONES["time_mgr"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["cleared_reference"] is True
+    await db_session.refresh(emp)
+    await db_session.refresh(att)
+    assert emp.reference_selfie_key is None  # next punch re-bootstraps under supervision
+    assert att.approved_by is not None  # leaves the pending queue

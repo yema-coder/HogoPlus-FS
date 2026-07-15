@@ -179,3 +179,36 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 
 ### Phase 5 backlog (NOT started)
 - MD Web Dashboard (web app for MD role) — user will request explicitly.
+
+## Phase 5 — MD Command Center + Backup Hardening (COMPLETE)
+
+### Fix Pack 3 (backup hardening) — done in previous session, verified here
+- Celery beat pg_dump → R2 `backups/YYYY-MM-DD/HHMM.sql.gz` every 4 hours, 30-day retention.
+- Startup DB integrity check: empty employees table → CRITICAL log, /api/health db_seeded=false,
+  CGM notification. NEVER auto-restores.
+- `scripts/restore_latest.py` (--latest/--key/--target drill). REAL DR executed this session:
+  fork pod wiped PG entirely → reinstalled PG16+pgvector+redis via PGDG apt, recreated hogo role +
+  DBs, restored latest R2 backup → 401 employees verified.
+- reference_bootstrap flow (flag + reject-clears-reference) covered by
+  tests/test_face_verification.py::test_bootstrap_{approve_keeps,reject_clears}_reference.
+
+### MD Command Center web (/app/webdash → React 18 + Vite + TS + Recharts)
+- Served by FastAPI at **/api/dash/** (ingress only forwards /api/* to backend; /dashboard on the
+  backend 307-redirects there). vite base=/api/dash/, build outDir=/app/backend/webdash_dist,
+  mounted in main.py (StaticFiles for assets + index.html fallback route /api/dash{path}).
+- Rebuild: `cd /app/webdash && /usr/bin/yarn build` (plain yarn is shim-guarded; use /usr/bin/yarn).
+- Auth: same OTP endpoints, JWT in localStorage (hogo_access/hogo_refresh) w/ auto-refresh-once.
+  rank>3 → access denied screen. Manager scope enforced server-side (dashboard.py _scope).
+- Screens: Overview (KPIs, 13 dept tiles, attendance bar chart, live incident feed, 60s poll),
+  /dept/:code drill-down (14-day trends line chart, attendance/submissions/incidents), Approvals
+  aging (by-manager tiles + items table, age chips 8h/24h), Attendance register (dept+date select,
+  approve/reject flagged for TIME_OFFICE mgr + CGM/MD), Reports & AI (PDF list from R2, generate,
+  ai-usage chart — CGM/MD only; Sahayak chat for all), Admin (geofence form, assign manager,
+  missing phones, change role incl. MD creation, SOP upload, backup-now) — CGM/MD only.
+- i18n: compact web dict in src/i18n.tsx (~110 keys ×3 en/hi/mr), Baloo 2 + Noto Sans Devanagari
+  via @fontsource. Lang persisted in localStorage hogo_lang.
+- NEW backend endpoint: GET /api/admin/employees?search=&missing_phone= (rank≤2) for admin screen.
+- Tests: **111 passed** (109 + 2 new admin employee search tests).
+- README rewritten: DR steps + LAUNCH DAY RUNBOOK (deploy→secrets→health→geofence→managers→
+  phones→MD→SOPs).
+

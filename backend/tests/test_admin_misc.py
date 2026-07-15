@@ -201,3 +201,27 @@ async def test_departments_public_list(client):
     assert r.status_code == 200
     codes = {d["code"] for d in r.json()}
     assert len(codes) == 13 and "TIME_OFFICE" in codes
+
+
+async def test_admin_employee_search_cgm_only(client):
+    cgm = await login(client, PHONES["cgm"])
+    r = await client.get("/api/admin/employees", params={"search": "Worker Prod"}, headers=cgm)
+    assert r.status_code == 200
+    names = {e["full_name"] for e in r.json()}
+    assert "Worker Prod1" in names
+    # search by phone fragment
+    r = await client.get("/api/admin/employees", params={"search": PHONES["w_eng"][-6:]}, headers=cgm)
+    assert r.status_code == 200
+    assert any(e["phone"] == PHONES["w_eng"] for e in r.json())
+    # Manager (rank 3) is forbidden — CGM/MD only
+    mgr = await login(client, PHONES["prod_mgr"])
+    r = await client.get("/api/admin/employees", params={"search": "Worker"}, headers=mgr)
+    assert r.status_code == 403
+
+
+async def test_admin_employee_missing_phone_filter(client):
+    cgm = await login(client, PHONES["cgm"])
+    r = await client.get("/api/admin/employees", params={"missing_phone": "true"}, headers=cgm)
+    assert r.status_code == 200
+    assert all(e["phone"] is None for e in r.json())
+

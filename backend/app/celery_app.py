@@ -15,10 +15,10 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.escalation_sweep",
         "schedule": crontab(minute="*/30"),
     },
-    # 02:30 IST == 21:00 UTC
-    "nightly-db-backup": {
+    # every 4 hours at 00:30/04:30/08:30/12:30/16:30/20:30 IST (UTC = IST-5:30)
+    "backup-every-4h": {
         "task": "app.tasks.nightly_backup",
-        "schedule": crontab(hour=21, minute=0),
+        "schedule": crontab(hour="3,7,11,15,19,23", minute=0),
     },
     # 06:00 IST == 00:30 UTC
     "nightly-factory-report": {

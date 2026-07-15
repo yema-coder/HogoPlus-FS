@@ -223,6 +223,28 @@ async def pending_employees(
     return [employee_profile(e) for e in rows]
 
 
+@router.get("/employees")
+async def search_employees(
+    search: str | None = None,
+    missing_phone: bool = False,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Employee lookup for the MD Command Center admin screen (CGM/MD only)."""
+    query = select(Employee).where(Employee.is_active.is_(True))
+    if missing_phone:
+        query = query.where(Employee.phone.is_(None))
+    if search:
+        like = f"%{search}%"
+        query = query.where(
+            Employee.full_name.ilike(like)
+            | Employee.emp_id.ilike(like)
+            | Employee.phone.ilike(like)
+        )
+    rows = (await session.execute(query.order_by(Employee.emp_id).limit(25))).scalars().all()
+    return [employee_profile(e) for e in rows]
+
+
 # ---------------- departments ----------------
 
 @router.post("/departments/{code}/assign-manager")
@@ -520,11 +542,21 @@ async def ai_usage(
     date: str | None = None,
     actor: Employee = Depends(require_role(2)),
 ):
-    """Daily AI call counters by type (CGM/MD only)."""
+    """Daily AI call counters by type + 7-day history (CGM/MD only)."""
+    from datetime import timedelta
+
     from app import ai_core
 
     target = date or now_ist().date().isoformat()
-    return await ai_core.usage_for_date(target)
+    result = await ai_core.usage_for_date(target)
+    today = now_ist().date()
+    history = []
+    for i in range(6, -1, -1):
+        d = (today - timedelta(days=i)).isoformat()
+        day = await ai_core.usage_for_date(d)
+        history.append({"date": d, "total": sum(day["counts"].values()), "counts": day["counts"]})
+    result["history"] = history
+    return result
 
 
 @router.post("/generate-report")
