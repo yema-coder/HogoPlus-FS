@@ -229,3 +229,31 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - README runbook secrets corrected: OTP_MODE=smsgatewayhub (+ SMSGATEWAYHUB_* / OTP_TEMPLATE_TEXT),
   with test-sms verification step before flipping mode.
 
+
+### Mobile Fix Pack (real-device feedback) — 4 items (COMPLETE)
+1. BRANDING: user's eye logo processed (transparent outside, inner negative space filled WHITE per
+   user correction; blue artwork untouched) → assets/images/logo.png (+ icon/adaptive/splash/favicon
+   all on WHITE square bg per user; app.json name "HogoPlus-FS", splash+adaptive bg #FFFFFF).
+   Logo shown on: language + phone screens (Image, testIDs language-logo/login-logo), NEW teal Home
+   brand header (centered 36px logo + "HogoPlus-FS", avatar initials right → profile, greeting/dept
+   second row), webdash sidebar + login (src/logo.png, vite-env.d.ts added for png imports).
+2. CAMERA CLOSE: 56px ✕ top-left w/ t("common.close") a11y label on: incident capture camera,
+   SelfieCamera (new onClose prop; punch + register-selfie pass router.back), PhotoCaptureModal
+   (moved close to top-left, 56px). Hardware back = default stack pop / Modal onRequestClose.
+3. PHOTO SUBMIT BUG ROOT CAUSE: RN FormData on Android (Expo Go) posted an EMPTY file part →
+   backend 400 "Empty file" (seen in logs) → client collapsed non-0 status into errors.server.
+   FIX: uploadFile native path now uses expo-file-system/legacy uploadAsync MULTIPART (streams real
+   bytes) w/ 401-refresh-retry; web path unchanged (blob). burnInSafe() wrapper never throws (falls
+   back to raw photo — watermark burn-in via view-shot may fail in Expo Go/Fabric, MUST re-test
+   watermark on EAS build). 400/413 now show errors.uploadRejected(+detail); status 0 still → outbox.
+   E2E evidence: empty part→400 repro, real jpg→200→incident created "submitted".
+4. PERMISSION PRIMER: app/permissions.tsx (one-time post-login, native only — Platform gate in
+   index.tsx), 3 cards Camera/Location/Notifications + one Allow → sequential system dialogs;
+   authStore.permsPrimed (storage hogo.permsPrimed). BLE Android12+ asked LAZILY on first real scan
+   (ensureBlePermissions in BleScanner.ts + one-time toast perm.bleExplain, storage hogo.bleAsked);
+   gps skip note perm.gpsOffNote on punch steps.
+- i18n: 284 keys ×3 (was 272; +12: common.close, errors.uploadRejected, perm.*). Parity GREEN.
+- Tests: backend 118/118 (unchanged); testing_agent iteration_6 all green (web flows + regression).
+- NOTE: pod was RESET mid-session again (PG/redis wiped) → re-ran full DR (PGDG apt install,
+  role/DB create, restore_latest.py from R2, 401 employees). This is the 2nd reset; DR is routine.
+
