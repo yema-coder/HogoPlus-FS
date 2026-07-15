@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import { Camera as CameraIcon, RefreshCcw, Settings } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
@@ -20,6 +21,7 @@ interface Props {
 /** Front-camera selfie capture with face guide, permission contract and preview. */
 export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefix, onClose }: Props) {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
@@ -111,7 +113,7 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
           accessibilityRole="button"
           accessibilityLabel={t("common.close")}
           onPress={onClose}
-          style={styles.closeBtn}
+          style={[styles.closeBtn, { top: Math.max(insets.top, spacing.md) + spacing.xs }]}
         >
           <Text style={styles.closeText}>✕</Text>
         </Pressable>
@@ -212,7 +214,6 @@ const styles = StyleSheet.create({
   preview: { flex: 1 },
   closeBtn: {
     position: "absolute",
-    top: spacing.md,
     left: spacing.md,
     width: 56,
     height: 56,

@@ -65,8 +65,15 @@ async def test_manager_updates_status_with_timeline_and_audit(client, db_session
         json={"status": "resolved", "note": "fixed the belt"},
         headers=m_headers,
     )
+    assert r.status_code == 400  # resolution photo is mandatory (trust loop)
+    r = await client.post(
+        f"/api/incidents/{inc['id']}/status",
+        json={"status": "resolved", "note": "fixed the belt", "resolution_photo_key": "res.jpg"},
+        headers=m_headers,
+    )
     assert r.json()["status"] == "resolved"
     assert r.json()["resolution_note"] == "fixed the belt"
+    assert r.json()["resolution_photo_key"] == "res.jpg"
     audit = (
         await db_session.execute(
             text("SELECT COUNT(*) FROM audit_events WHERE action='incident.status_change' AND entity_id=:e"),

@@ -83,7 +83,7 @@ export default function Overview() {
               {i.photo_url ? <img src={i.photo_url} alt="" /> : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>⚠️</div>}
               <div style={{ flex: 1 }}>
                 <div className="t">{i.category} · {i.department_code}</div>
-                <div className="m">{i.reporter_name} · {i.status}</div>
+                <div className="m">{i.reporter_name} · {i.status}{i.detected_plate ? <> · <b style={{ color: "var(--primary, #1a6b3c)" }}>🚗 {i.detected_plate}</b></> : null}</div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                 <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>

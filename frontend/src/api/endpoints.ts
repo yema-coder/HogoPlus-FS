@@ -33,7 +33,7 @@ export const verifyOtp = (phone: string, otp: string) =>
   api<VerifyOtpResponse>("/auth/verify-otp", { method: "POST", body: { phone, otp }, auth: false });
 
 export const registerEmployee = (
-  body: { phone: string; full_name: string; department_code: string; selfie_key: string },
+  body: { phone: string; full_name: string; selfie_key: string },
   registrationToken: string,
 ) =>
   api<TokenPair & { employee: EmployeeProfile }>("/auth/register", {
@@ -64,8 +64,21 @@ export const listIncidents = (params: { status?: string; department_code?: strin
   return api<Incident[]>(`/incidents${qs ? `?${qs}` : ""}`);
 };
 
-export const changeIncidentStatus = (id: string, status: string, note?: string) =>
-  api<Incident>(`/incidents/${id}/status`, { method: "POST", body: { status, note } });
+export const changeIncidentStatus = (
+  id: string,
+  status: string,
+  note?: string,
+  resolutionPhotoKey?: string,
+) =>
+  api<Incident>(`/incidents/${id}/status`, {
+    method: "POST",
+    body: { status, note, resolution_photo_key: resolutionPhotoKey ?? null },
+  });
+
+export const confirmIncidentRouting = (
+  id: string,
+  body: { category?: string; department_code?: string; severity?: string } = {},
+) => api<Incident>(`/incidents/${id}/confirm-routing`, { method: "POST", body });
 
 export const punchIn = (body: Record<string, unknown>) =>
   api<AttendanceRecord>("/attendance/punch-in", { method: "POST", body });
@@ -120,8 +133,10 @@ export const rejectSubmission = (id: string, reason: string) =>
 
 export const pendingEmployees = () => api<EmployeeProfile[]>("/admin/employees/pending");
 
-export const approveEmployee = (id: string) =>
-  api<EmployeeProfile>(`/admin/employees/${id}/approve`, { method: "POST" });
+export const approveEmployee = (
+  id: string,
+  body: { department_code: string; role_code: string; emp_id: string },
+) => api<EmployeeProfile>(`/admin/employees/${id}/approve`, { method: "POST", body });
 
 export const rejectEmployee = (id: string, reason: string) =>
   api<EmployeeProfile>(`/admin/employees/${id}/reject`, { method: "POST", body: { reason } });

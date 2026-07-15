@@ -54,17 +54,17 @@
     "creating": "आपका खाता बन रहा है…",
     "pendingTitle": "मंज़ूरी का इंतज़ार",
     "pendingBody": "मैनेजर जल्द मंज़ूरी देंगे। आप अभी भी घटना रिपोर्ट कर सकते हैं।",
-    "pendingIncident": "घटना रिपोर्ट करें",
+    "pendingIncident": "शिकायत दर्ज करें",
     "checkStatus": "स्थिति देखें",
     "waitingApproval": "मंज़ूरी बाकी"
   },
   "home": {
-    "reportIncident": "घटना रिपोर्ट करें",
+    "reportIncident": "शिकायत दर्ज करें",
     "attendance": "हाज़िरी",
     "punchIn": "पंच इन",
     "punchOut": "पंच आउट",
     "onDuty": "ड्यूटी पर {{time}}",
-    "myReports": "मेरी रिपोर्टें",
+    "myReports": "मेरी शिकायतें",
     "myShift": "मेरी शिफ्ट",
     "notifications": "सूचनाएँ",
     "approvals": "मंज़ूरियाँ",
@@ -96,15 +96,24 @@
     "descriptionOptional": "और बताएं (ज़रूरी नहीं)",
     "descriptionHint": "छोटा विवरण",
     "submitIncident": "भेजें",
-    "successTitle": "रिपोर्ट भेज दी!",
+    "successTitle": "शिकायत भेजी गई!",
     "sentToManager": "मैनेजर को भेज दिया",
-    "incidentId": "रिपोर्ट ID",
+    "incidentId": "शिकायत ID",
     "queuedTitle": "सेव हो गया!",
     "queuedBody": "नेटवर्क आते ही भेज दिया जाएगा",
     "returningHome": "होम पर जा रहे हैं…",
     "cameraPermissionTitle": "कैमरा चाहिए",
-    "cameraPermissionBody": "समस्या की फोटो लेकर रिपोर्ट करें",
-    "locationHelps": "लोकेशन से मैनेजर को जगह जल्दी मिलती है"
+    "cameraPermissionBody": "शिकायत के लिए फ़ोटो लें",
+    "locationHelps": "लोकेशन से मैनेजर को जगह जल्दी मिलती है",
+    "captureHint": "समस्या की फ़ोटो लें",
+    "voiceNote": "आवाज़ संदेश (वैकल्पिक)",
+    "aiCardTitle": "क्या यह सही है?",
+    "aiWaiting": "आपकी शिकायत जाँची जा रही है…",
+    "aiAccept": "सही है",
+    "aiChange": "बदलें",
+    "aiRouted": "{{dept}} को भेजा गया",
+    "aiLater": "कुछ मिनट में अपने आप भेज दी जाएगी",
+    "detectedPlate": "गाड़ी नंबर"
   },
   "status": {
     "submitted": "भेजा गया",
@@ -117,8 +126,8 @@
     "rejected": "अस्वीकृत"
   },
   "reports": {
-    "title": "मेरी रिपोर्टें",
-    "empty": "अभी कोई रिपोर्ट नहीं",
+    "title": "मेरी शिकायतें",
+    "empty": "अभी कोई शिकायत नहीं",
     "outbox": "{{count}} भेजना बाकी",
     "waitingToSend": "भेजना बाकी",
     "timeline": "टाइमलाइन",
@@ -128,7 +137,10 @@
     "markSeen": "देखा",
     "markInProgress": "काम शुरू",
     "markResolved": "हल करें",
-    "resolutionNote": "क्या किया गया?"
+    "resolutionNote": "क्या किया गया?",
+    "resolutionPhoto": "समाधान फ़ोटो",
+    "takeResolutionPhoto": "समाधान की फ़ोटो लें",
+    "resolutionPhotoRequired": "ठीक किए गए काम की फ़ोटो ज़रूरी है"
   },
   "att": {
     "title": "हाज़िरी",
@@ -199,7 +211,7 @@
     "formsTab": "फॉर्म",
     "regsTab": "नई भर्ती",
     "swapsTab": "शिफ्ट बदली",
-    "incidentsTab": "घटनाएँ",
+    "incidentsTab": "शिकायतें",
     "attendanceTab": "हाज़िरी",
     "approve": "मंज़ूर करें",
     "reject": "अस्वीकार",
@@ -207,7 +219,12 @@
     "empty": "कुछ बाकी नहीं",
     "allDepts": "सभी",
     "wantsToJoin": "{{dept}} में आना चाहते हैं",
-    "actionDone": "हो गया"
+    "actionDone": "हो गया",
+    "assignDept": "विभाग चुनें",
+    "assignRole": "भूमिका",
+    "empId": "कर्मचारी ID",
+    "approveTitle": "{{name}} को मंज़ूरी दें",
+    "newJoinee": "नया कर्मचारी"
   },
   "errors": {
     "network": "इंटरनेट नहीं है। कनेक्शन देखें।",
@@ -230,7 +247,7 @@
   },
   "tabs": {
     "home": "होम",
-    "reports": "रिपोर्ट",
+    "reports": "शिकायतें",
     "alerts": "सूचना",
     "profile": "प्रोफ़ाइल",
     "dept": "विभाग",
@@ -288,7 +305,8 @@
     "pending_manager": "मैनेजर के जवाब का इंतज़ार",
     "approved": "मंज़ूर हुआ",
     "rejected": "अस्वीकार",
-    "youGet": "आपको मिलेगी"
+    "youGet": "आपको मिलेगी",
+    "search": "नाम या ID खोजें"
   },
   "ai": {
     "reading": "AI पढ़ रहा है…",

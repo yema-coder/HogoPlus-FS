@@ -41,7 +41,7 @@ export default function RegisterName() {
             testID="register-name-next-button"
             label={t("common.next")}
             onPress={() =>
-              router.push({ pathname: "/(auth)/register-department", params: { name: name.trim() } })
+              router.push({ pathname: "/(auth)/register-selfie", params: { name: name.trim() } })
             }
             disabled={!valid}
             height={64}

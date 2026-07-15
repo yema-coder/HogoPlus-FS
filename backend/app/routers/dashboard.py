@@ -182,7 +182,7 @@ async def overview(
             {
                 "id": str(i.id), "category": i.category, "department_code": i.department_code,
                 "reporter_name": name, "status": i.status, "severity": i.severity,
-                "severity_reason": i.severity_reason,
+                "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
                 "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
                 "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
             }
@@ -268,6 +268,7 @@ async def department_detail(
         {
             "id": str(i.id), "category": i.category, "status": i.status,
             "severity": i.severity, "created_at": i.created_at.isoformat(),
+            "detected_plate": i.detected_plate,
         }
         for i in inc_rows
     ]

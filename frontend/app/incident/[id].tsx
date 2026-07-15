@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { CircleDot } from "lucide-react-native";
+import { Camera as CameraIcon, Car, CircleDot } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,11 +13,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { ApiError, fileUrl } from "@/src/api/client";
+import { ApiError, fileUrl, uploadFile } from "@/src/api/client";
 import { changeIncidentStatus, incidentDetail } from "@/src/api/endpoints";
 import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
 import { showToast } from "@/src/components/Toast";
@@ -40,6 +41,8 @@ export default function IncidentDetailScreen() {
   const [acting, setActing] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [note, setNote] = useState("");
+  const [resolutionUri, setResolutionUri] = useState<string | null>(null);
+  const [photoModal, setPhotoModal] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -62,24 +65,41 @@ export default function IncidentDetailScreen() {
     return () => clearTimeout(timer);
   }, [detail, load]);
 
-  const act = async (status: string, actionNote?: string) => {
+  const act = async (status: string, actionNote?: string, resolutionPhotoKey?: string) => {
     if (!id || acting) return;
     setActing(true);
     try {
-      await changeIncidentStatus(id, status, actionNote);
+      await changeIncidentStatus(id, status, actionNote, resolutionPhotoKey);
       if (detail && (detail.status === "submitted" || detail.status === "escalated")) {
         adjustApprovals("incidents", -1);
       }
       setResolving(false);
       setNote("");
+      setResolutionUri(null);
       await load();
       showToast(t("common.done"), "success");
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) showToast(t("errors.generic"), "error");
-      else if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
+      else if (e instanceof ApiError && e.status === 400) {
+        showToast(t("reports.resolutionPhotoRequired"), "error");
+      } else if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
       else showToast(t("errors.server"), "error");
     } finally {
       setActing(false);
+    }
+  };
+
+  /** Resolution photo is mandatory: upload it, then mark resolved. */
+  const resolveWithPhoto = async () => {
+    if (!resolutionUri || acting) return;
+    setActing(true);
+    try {
+      const uploaded = await uploadFile(resolutionUri, "resolution.jpg");
+      setActing(false);
+      await act("resolved", note.trim() || undefined, uploaded.key);
+    } catch (e) {
+      setActing(false);
+      showToast(e instanceof ApiError && e.status === 0 ? t("errors.network") : t("errors.uploadFailed"), "error");
     }
   };
 
@@ -125,6 +145,14 @@ export default function IncidentDetailScreen() {
             </View>
           </View>
 
+          {detail.detected_plate ? (
+            <View style={styles.plateChip} testID="incident-plate-chip">
+              <Car size={18} color={colors.primary} strokeWidth={2.4} />
+              <Text style={styles.plateLabel}>{t("incident.detectedPlate")}</Text>
+              <Text style={styles.plateText}>{detail.detected_plate}</Text>
+            </View>
+          ) : null}
+
           {detail.severity_reason ? (
             <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
               <Text style={styles.sectionLabel}>{t("severity.aiReason")}</Text>
@@ -138,10 +166,18 @@ export default function IncidentDetailScreen() {
             </View>
           ) : null}
 
-          {detail.resolution_note ? (
+          {detail.resolution_note || detail.resolution_photo_key ? (
             <View style={[styles.card, { borderColor: colors.success }]}>
               <Text style={styles.sectionLabel}>{t("reports.resolutionNote")}</Text>
-              <Text style={styles.desc}>{detail.resolution_note}</Text>
+              {detail.resolution_note ? <Text style={styles.desc}>{detail.resolution_note}</Text> : null}
+              {detail.resolution_photo_key ? (
+                <Image
+                  source={{ uri: fileUrl(detail.resolution_photo_key) }}
+                  style={styles.resolutionPhoto}
+                  resizeMode="cover"
+                  testID="resolution-photo"
+                />
+              ) : null}
             </View>
           ) : null}
 
@@ -206,12 +242,32 @@ export default function IncidentDetailScreen() {
                     placeholderTextColor={colors.muted}
                     multiline
                   />
+                  <Text style={styles.sectionLabel}>{t("reports.resolutionPhoto")}</Text>
+                  {resolutionUri ? (
+                    <Image
+                      source={{ uri: resolutionUri }}
+                      style={styles.resolutionPhoto}
+                      resizeMode="cover"
+                      testID="resolution-photo-preview"
+                    />
+                  ) : (
+                    <Text style={styles.photoRequiredHint}>{t("reports.resolutionPhotoRequired")}</Text>
+                  )}
+                  <BigButton
+                    testID="take-resolution-photo-button"
+                    label={t("reports.takeResolutionPhoto")}
+                    icon={CameraIcon}
+                    variant="outline"
+                    disabled={acting}
+                    onPress={() => setPhotoModal(true)}
+                  />
                   <BigButton
                     testID="confirm-resolve-button"
                     label={t("reports.markResolved")}
                     variant="success"
                     loading={acting}
-                    onPress={() => void act("resolved", note.trim() || undefined)}
+                    disabled={!resolutionUri}
+                    onPress={() => void resolveWithPhoto()}
                   />
                 </View>
               ) : null}
@@ -219,6 +275,16 @@ export default function IncidentDetailScreen() {
           ) : null}
         </ScrollView>
       )}
+      <PhotoCaptureModal
+        visible={photoModal}
+        label={t("reports.resolutionPhoto")}
+        onClose={() => setPhotoModal(false)}
+        onCaptured={(uri) => {
+          setResolutionUri(uri);
+          setPhotoModal(false);
+        }}
+        testIDPrefix="resolution"
+      />
     </SafeAreaView>
   );
 }
@@ -266,6 +332,28 @@ const styles = StyleSheet.create({
   timelineTime: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   actions: { gap: spacing.md, marginTop: spacing.md },
   resolveBox: { gap: spacing.sm },
+  plateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    minHeight: 40,
+  },
+  plateLabel: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  plateText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.primary, letterSpacing: 1 },
+  resolutionPhoto: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceTertiary,
+    marginTop: spacing.xs,
+  },
+  photoRequiredHint: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.warning },
   noteInput: {
     minHeight: 64,
     borderRadius: radius.md,

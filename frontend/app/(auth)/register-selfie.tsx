@@ -16,14 +16,14 @@ import { colors } from "@/src/theme/tokens";
 export default function RegisterSelfie() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { name, dept } = useLocalSearchParams<{ name: string; dept: string }>();
+  const { name } = useLocalSearchParams<{ name: string }>();
   const [busy, setBusy] = useState(false);
   const registrationToken = useAuthStore((s) => s.registrationToken);
   const pendingPhone = useAuthStore((s) => s.pendingPhone);
   const setSession = useAuthStore((s) => s.setSession);
 
   const finish = async (uri: string) => {
-    if (!registrationToken || !pendingPhone || !name || !dept) {
+    if (!registrationToken || !pendingPhone || !name) {
       showToast(t("errors.sessionExpired"), "error");
       router.replace("/(auth)/phone");
       return;
@@ -40,7 +40,6 @@ export default function RegisterSelfie() {
         {
           phone: pendingPhone,
           full_name: name,
-          department_code: dept,
           selfie_key: uploaded.key,
         },
         registrationToken,

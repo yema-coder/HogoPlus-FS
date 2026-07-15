@@ -101,10 +101,20 @@ T = {
     "report_ready": {
         "title": {"en": "Daily factory report is ready", "hi": "दैनिक कारखाना रिपोर्ट तैयार", "mr": "दैनिक कारखाना अहवाल तयार"},
     },
+    "punchout_reminder": {
+        "title": {"en": "Forgot to punch out?", "hi": "पंच आउट करना भूल गए?", "mr": "पंच आउट करायला विसरलात?"},
+        "body": {
+            "en": "Your shift ended — please punch out now.",
+            "hi": "आपकी शिफ्ट खत्म हो गई — कृपया अभी पंच आउट करें।",
+            "mr": "तुमची शिफ्ट संपली — कृपया आत्ता पंच आउट करा.",
+        },
+    },
 }
 
 
 def template(type_: str, body_text: str = "") -> tuple[dict, dict]:
     t = T.get(type_, {"title": {"en": type_, "hi": type_, "mr": type_}})
+    if not body_text and "body" in t:
+        return t["title"], t["body"]
     body = {"en": body_text, "hi": body_text, "mr": body_text}
     return t["title"], body

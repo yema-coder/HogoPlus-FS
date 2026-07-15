@@ -54,7 +54,7 @@ export default function PendingApproval() {
             icon={AlertTriangle}
             variant="danger"
             height={72}
-            onPress={() => router.push("/incident/category")}
+            onPress={() => router.push("/incident/capture")}
           />
           <BigButton
             testID="pending-check-status-button"

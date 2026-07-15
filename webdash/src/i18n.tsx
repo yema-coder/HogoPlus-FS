@@ -48,13 +48,13 @@ const D: Record<string, [string, string, string]> = {
   attendancePct: ["Attendance", "उपस्थिति", "हजेरी"],
   late: ["Late", "देरी से", "उशिरा"],
   flagged: ["Flagged", "फ़्लैग किए", "फ्लॅग केलेले"],
-  openIncidents: ["Open incidents", "खुली घटनाएँ", "खुल्या घटना"],
+  openIncidents: ["Open complaints", "खुली शिकायतें", "खुल्या तक्रारी"],
   critical: ["Critical", "गंभीर", "गंभीर"],
   pendingApprovals: ["Pending approvals", "लंबित अनुमोदन", "प्रलंबित मंजुरी"],
   submissionsToday: ["Submissions today", "आज के फ़ॉर्म", "आजचे फॉर्म"],
   // Overview
   deptHealth: ["Department health", "विभाग स्थिति", "विभागांची स्थिती"],
-  liveIncidents: ["Live incident feed", "लाइव घटनाएँ", "थेट घटना"],
+  liveIncidents: ["Live complaint feed", "लाइव शिकायतें", "थेट तक्रारी"],
   attendanceByDept: ["Attendance % by department", "विभागवार उपस्थिति %", "विभागनिहाय हजेरी %"],
   employees: ["employees", "कर्मचारी", "कर्मचारी"],
   // Department
@@ -77,7 +77,7 @@ const D: Record<string, [string, string, string]> = {
   t_form_submission: ["Form", "फ़ॉर्म", "फॉर्म"],
   t_registration: ["Registration", "पंजीकरण", "नोंदणी"],
   t_shift_swap: ["Shift swap", "शिफ्ट बदली", "शिफ्ट बदली"],
-  t_incident: ["Incident", "घटना", "घटना"],
+  t_incident: ["Complaint", "शिकायत", "तक्रार"],
   // Attendance
   approve: ["Approve", "स्वीकृत करें", "मंजूर करा"],
   reject: ["Reject", "अस्वीकार करें", "नाकारा"],

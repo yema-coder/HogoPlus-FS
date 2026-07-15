@@ -54,17 +54,17 @@
     "creating": "तुमचे खाते तयार होत आहे…",
     "pendingTitle": "मंजुरीची वाट",
     "pendingBody": "व्यवस्थापक लवकरच मंजुरी देतील. तुम्ही आत्ताही घटना नोंदवू शकता.",
-    "pendingIncident": "घटना नोंदवा",
+    "pendingIncident": "तक्रार नोंदवा",
     "checkStatus": "स्थिती पहा",
     "waitingApproval": "मंजुरी बाकी"
   },
   "home": {
-    "reportIncident": "घटना नोंदवा",
+    "reportIncident": "तक्रार नोंदवा",
     "attendance": "हजेरी",
     "punchIn": "पंच इन",
     "punchOut": "पंच आउट",
     "onDuty": "कामावर {{time}}",
-    "myReports": "माझ्या नोंदी",
+    "myReports": "माझ्या तक्रारी",
     "myShift": "माझी शिफ्ट",
     "notifications": "सूचना",
     "approvals": "मंजुऱ्या",
@@ -96,15 +96,24 @@
     "descriptionOptional": "अधिक सांगा (ऐच्छिक)",
     "descriptionHint": "थोडक्यात वर्णन",
     "submitIncident": "पाठवा",
-    "successTitle": "नोंद पाठवली!",
+    "successTitle": "तक्रार पाठवली!",
     "sentToManager": "व्यवस्थापकाकडे पाठवले",
-    "incidentId": "नोंद ID",
+    "incidentId": "तक्रार ID",
     "queuedTitle": "जतन झाले!",
     "queuedBody": "नेटवर्क आल्यावर पाठवले जाईल",
     "returningHome": "होमवर जात आहोत…",
     "cameraPermissionTitle": "कॅमेरा हवा",
-    "cameraPermissionBody": "समस्येचा फोटो काढून नोंदवा",
-    "locationHelps": "लोकेशनमुळे मॅनेजरला जागा लवकर सापडते"
+    "cameraPermissionBody": "तक्रारीसाठी फोटो घ्या",
+    "locationHelps": "लोकेशनमुळे मॅनेजरला जागा लवकर सापडते",
+    "captureHint": "समस्येचा फोटो घ्या",
+    "voiceNote": "आवाज संदेश (ऐच्छिक)",
+    "aiCardTitle": "हे बरोबर आहे का?",
+    "aiWaiting": "तुमची तक्रार तपासली जात आहे…",
+    "aiAccept": "बरोबर",
+    "aiChange": "बदला",
+    "aiRouted": "{{dept}} कडे पाठवले",
+    "aiLater": "काही मिनिटांत आपोआप पाठवली जाईल",
+    "detectedPlate": "गाडी नंबर"
   },
   "status": {
     "submitted": "पाठवले",
@@ -117,8 +126,8 @@
     "rejected": "नाकारले"
   },
   "reports": {
-    "title": "माझ्या नोंदी",
-    "empty": "अजून नोंद नाही",
+    "title": "माझ्या तक्रारी",
+    "empty": "अजून तक्रार नाही",
     "outbox": "{{count}} पाठवणे बाकी",
     "waitingToSend": "पाठवणे बाकी",
     "timeline": "टाइमलाइन",
@@ -128,7 +137,10 @@
     "markSeen": "पाहिले",
     "markInProgress": "काम सुरू",
     "markResolved": "सोडवा",
-    "resolutionNote": "काय केले?"
+    "resolutionNote": "काय केले?",
+    "resolutionPhoto": "निराकरण फोटो",
+    "takeResolutionPhoto": "निराकरणाचा फोटो घ्या",
+    "resolutionPhotoRequired": "दुरुस्त केलेल्या कामाचा फोटो आवश्यक आहे"
   },
   "att": {
     "title": "हजेरी",
@@ -199,7 +211,7 @@
     "formsTab": "फॉर्म",
     "regsTab": "नवीन नोंदणी",
     "swapsTab": "शिफ्ट बदली",
-    "incidentsTab": "घटना",
+    "incidentsTab": "तक्रारी",
     "attendanceTab": "हजेरी",
     "approve": "मंजूर करा",
     "reject": "नाकारा",
@@ -207,7 +219,12 @@
     "empty": "काही प्रलंबित नाही",
     "allDepts": "सर्व",
     "wantsToJoin": "{{dept}} मध्ये येऊ इच्छितात",
-    "actionDone": "झाले"
+    "actionDone": "झाले",
+    "assignDept": "विभाग निवडा",
+    "assignRole": "भूमिका",
+    "empId": "कर्मचारी ID",
+    "approveTitle": "{{name}} ला मंजुरी द्या",
+    "newJoinee": "नवीन कर्मचारी"
   },
   "errors": {
     "network": "इंटरनेट नाही. कनेक्शन तपासा.",
@@ -230,7 +247,7 @@
   },
   "tabs": {
     "home": "होम",
-    "reports": "अहवाल",
+    "reports": "तक्रारी",
     "alerts": "सूचना",
     "profile": "प्रोफाइल",
     "dept": "विभाग",
@@ -288,7 +305,8 @@
     "pending_manager": "मॅनेजरच्या उत्तराची वाट",
     "approved": "मंजूर झाली",
     "rejected": "नाकारली",
-    "youGet": "तुम्हाला मिळेल"
+    "youGet": "तुम्हाला मिळेल",
+    "search": "नाव किंवा ID शोधा"
   },
   "ai": {
     "reading": "AI वाचत आहे…",

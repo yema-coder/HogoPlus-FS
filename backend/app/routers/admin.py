@@ -19,6 +19,7 @@ from app.models import (
 from app.notify import dispatcher, template
 from app.schemas import (
     AssignManagerIn,
+    ApproveRegistrationIn,
     BeaconIn,
     BeaconPatchIn,
     EmployeePatchIn,
@@ -155,20 +156,36 @@ async def patch_employee(
 @router.post("/employees/{employee_id}/approve")
 async def approve_employee(
     employee_id: uuid.UUID,
+    body: ApproveRegistrationIn,
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
     emp = await session.get(Employee, employee_id)
     if emp is None:
         raise HTTPException(status_code=404, detail="Employee not found")
-    # Time Office manager, the Manager of the employee's chosen department, or CGM/MD
-    allowed = await is_dept_manager(session, actor, "TIME_OFFICE") or await is_dept_manager(
-        session, actor, emp.department_code
-    )
+    # Time Office assigns everything: TIME_OFFICE manager or CGM/MD only
+    allowed = actor.role.rank <= 2 or await is_dept_manager(session, actor, "TIME_OFFICE")
     if not allowed:
         raise HTTPException(status_code=403, detail="Not allowed to approve registrations")
     if emp.onboarding_status not in ("pending_approval", "self_registered"):
         raise HTTPException(status_code=409, detail=f"Employee is {emp.onboarding_status}")
+    dept = (
+        await session.execute(select(Department).where(Department.code == body.department_code))
+    ).scalar_one_or_none()
+    if dept is None or not dept.is_active:
+        raise HTTPException(status_code=404, detail="Department not found")
+    if body.role_code not in ("Worker", "Staff", "Clerk", "Manager"):
+        raise HTTPException(status_code=422, detail="Invalid role for registration approval")
+    dup = (
+        await session.execute(
+            select(Employee).where(Employee.emp_id == body.emp_id, Employee.id != emp.id)
+        )
+    ).scalar_one_or_none()
+    if dup:
+        raise HTTPException(status_code=409, detail=f"emp_id {body.emp_id} is already taken")
+    emp.department_code = body.department_code
+    emp.role_code = body.role_code
+    emp.emp_id = body.emp_id
     emp.onboarding_status = "approved"
     # self-registered workers: the approved registration selfie becomes the face reference
     if emp.selfie_url and not emp.reference_selfie_key:
@@ -178,7 +195,10 @@ async def approve_employee(
             session, actor.id, "employee.reference_selfie_from_registration",
             "employee", str(emp.id), {"selfie_key": emp.reference_selfie_key},
         )
-    await write_audit(session, actor.id, "employee.approved", "employee", str(emp.id), {})
+    await write_audit(
+        session, actor.id, "employee.approved", "employee", str(emp.id),
+        {"department_code": body.department_code, "role_code": body.role_code, "emp_id": body.emp_id},
+    )
     title, body = template("registration_approved", emp.full_name)
     await dispatcher.notify(session, emp.id, "registration_approved", title, body, "employee", str(emp.id))
     await session.commit()
@@ -221,7 +241,16 @@ async def pending_employees(
     if actor.role.rank == 3 and not await is_dept_manager(session, actor, "TIME_OFFICE"):
         query = query.where(Employee.department_code == actor.department_code)
     rows = (await session.execute(query.order_by(Employee.created_at.desc()))).scalars().all()
-    return [employee_profile(e) for e in rows]
+    # suggest the next free numeric emp_id for the Time Office approval form
+    from sqlalchemy import Integer as SAInteger, cast, func
+
+    max_num = (
+        await session.execute(
+            select(func.max(cast(Employee.emp_id, SAInteger))).where(Employee.emp_id.op("~")(r"^\d+$"))
+        )
+    ).scalar() or 0
+    suggested = f"{max_num + 1:04d}"
+    return [{**employee_profile(e), "suggested_emp_id": suggested} for e in rows]
 
 
 @router.get("/employees")

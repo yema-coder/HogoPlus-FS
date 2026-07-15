@@ -85,6 +85,14 @@ export interface Incident {
   assigned_manager_id: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
+  resolution_photo_key: string | null;
+  resolution_photo_url: string | null;
+  ai_suggested_category: string | null;
+  ai_suggested_department: string | null;
+  ai_suggested_severity: string | null;
+  ai_confidence: number | null;
+  ai_confirmed_by: string | null;
+  detected_plate: string | null;
   created_at: string | null;
 }
 

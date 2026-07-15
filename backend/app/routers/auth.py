@@ -26,7 +26,7 @@ from app.security import (
     get_access_or_registration_payload,
     get_current_employee,
 )
-from app.shift_logic import SHIFT_A_DEPARTMENTS, now_ist
+from app.shift_logic import now_ist
 
 logger = logging.getLogger("hogo.auth")
 router = APIRouter(tags=["auth"])
@@ -116,12 +116,6 @@ async def register(
     if existing:
         raise HTTPException(status_code=409, detail="Phone already registered")
 
-    dept = (
-        await session.execute(select(Department).where(Department.code == body.department_code))
-    ).scalar_one_or_none()
-    if dept is None or not dept.is_active:
-        raise HTTPException(status_code=404, detail="Department not found")
-
     # DetectFaces gate: garbage references must never enter the system.
     # Infra failures never block registration (fail open).
     if settings.aws_access_key_id and not os.environ.get("TESTING"):
@@ -157,7 +151,7 @@ async def register(
         emp_id=emp_id,
         full_name=body.full_name,
         phone=body.phone,
-        department_code=body.department_code,
+        department_code=None,  # Time Office assigns department/role/emp_id on approval
         designation="Self Registered Worker",
         role_code="Worker",
         language_pref="mr",
@@ -169,24 +163,28 @@ async def register(
     session.add(employee)
     await session.flush()
 
-    shift_code = "A" if body.department_code in SHIFT_A_DEPARTMENTS else "GEN"
     session.add(
         ShiftAssignment(
-            employee_id=employee.id, shift_code=shift_code,
+            employee_id=employee.id, shift_code="GEN",
             effective_date=now_ist().date(), source="baseline",
         )
     )
 
-    # notify dept manager (or CGM) about the pending registration
-    approver_id = dept.manager_employee_id
-    if approver_id is None:
-        cgm = (
-            await session.execute(
-                select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
-            )
-        ).scalar_one_or_none()
-        approver_id = cgm.id if cgm else None
-    if approver_id:
+    # queue with Time Office: notify the TIME_OFFICE manager + CGM
+    approver_ids: set = set()
+    to_dept = (
+        await session.execute(select(Department).where(Department.code == "TIME_OFFICE"))
+    ).scalar_one_or_none()
+    if to_dept and to_dept.manager_employee_id:
+        approver_ids.add(to_dept.manager_employee_id)
+    cgm = (
+        await session.execute(
+            select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
+        )
+    ).scalar_one_or_none()
+    if cgm:
+        approver_ids.add(cgm.id)
+    for approver_id in approver_ids:
         title, notif_body = template("registration_pending", f"{body.full_name} ({body.phone})")
         await dispatcher.notify(session, approver_id, "registration_pending", title, notif_body, "employee", str(employee.id))
 

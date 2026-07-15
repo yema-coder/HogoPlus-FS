@@ -91,8 +91,8 @@ class Employee(TimestampMixin, Base):
     emp_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
-    department_code: Mapped[str] = mapped_column(
-        String(30), ForeignKey("departments.code"), nullable=False
+    department_code: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("departments.code"), nullable=True
     )
     designation: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     role_code: Mapped[str] = mapped_column(String(20), ForeignKey("roles.code"), nullable=False)
@@ -194,6 +194,7 @@ class FormSubmission(TimestampMixin, Base):
     )
     data_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     photos: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    detected_plates: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(SUBMISSION_STATUS, default="submitted", nullable=False)
@@ -235,6 +236,14 @@ class Incident(TimestampMixin, Base):
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution_photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ai_suggested_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ai_suggested_department: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    ai_suggested_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_confirmed_by: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    ai_suggested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    detected_plate: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
 
 class IncidentTimeline(Base):

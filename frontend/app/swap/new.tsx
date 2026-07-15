@@ -1,6 +1,6 @@
 import dayjs from "dayjs";
 import { useRouter } from "expo-router";
-import { Send, UserRound } from "lucide-react-native";
+import { Search, Send, UserRound } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,6 +32,7 @@ export default function NewSwapScreen() {
   const [candidates, setCandidates] = useState<SwapCandidate[] | null>(null);
   const [loadingCands, setLoadingCands] = useState(false);
   const [target, setTarget] = useState<SwapCandidate | null>(null);
+  const [search, setSearch] = useState("");
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -44,6 +45,7 @@ export default function NewSwapScreen() {
     setLoadingCands(true);
     setCandidates(null);
     setTarget(null);
+    setSearch("");
     void swapCandidates(date)
       .then((res) => {
         if (active) setCandidates(res.candidates);
@@ -122,7 +124,28 @@ export default function NewSwapScreen() {
               </View>
             ) : (
               <View style={{ gap: spacing.sm }}>
-                {(candidates ?? []).map((c) => {
+                <View style={styles.searchRow}>
+                  <Search size={20} color={colors.muted} strokeWidth={2.2} />
+                  <TextInput
+                    testID="swap-search-input"
+                    style={styles.searchInput}
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder={t("swap.search")}
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="none"
+                  />
+                </View>
+                {(candidates ?? [])
+                  .filter((c) => {
+                    const q = search.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      c.full_name.toLowerCase().includes(q) ||
+                      (c.emp_id ?? "").toLowerCase().includes(q)
+                    );
+                  })
+                  .map((c) => {
                   const active = target?.employee_id === c.employee_id;
                   return (
                     <Pressable
@@ -145,7 +168,7 @@ export default function NewSwapScreen() {
                       </View>
                     </Pressable>
                   );
-                })}
+                  })}
               </View>
             )}
           </>
@@ -220,6 +243,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyText: { fontFamily: fonts.medium, fontSize: type.base, color: colors.muted, textAlign: "center" },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: sizes.touchTarget,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: type.base,
+    color: colors.text,
+    minHeight: sizes.touchTarget - 4,
+  },
   candRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -24,8 +24,20 @@ class VerifyOtpIn(BaseModel):
 class RegisterIn(BaseModel):
     phone: str = Field(pattern=PHONE_REGEX)
     full_name: str = Field(min_length=2, max_length=200)
-    department_code: str
     selfie_key: str = Field(min_length=1)
+
+
+class ApproveRegistrationIn(BaseModel):
+    department_code: str
+    role_code: str = "Worker"
+    emp_id: str = Field(min_length=1, max_length=20)
+
+
+class ConfirmRoutingIn(BaseModel):
+    """Empty body = accept the AI suggestion as-is."""
+    category: str | None = None
+    department_code: str | None = None
+    severity: str | None = None
 
 
 class RefreshIn(BaseModel):
@@ -111,6 +123,7 @@ class IncidentCreateIn(BaseModel):
 class IncidentStatusIn(BaseModel):
     status: str
     note: str | None = None
+    resolution_photo_key: str | None = None
 
     @field_validator("status")
     @classmethod

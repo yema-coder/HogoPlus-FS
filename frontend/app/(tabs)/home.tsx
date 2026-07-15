@@ -211,7 +211,7 @@ export default function HomeScreen() {
           accessibilityRole="button"
           onPress={() => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
-            router.push("/incident/category");
+            router.push("/incident/capture");
           }}
           style={({ pressed }) => [styles.incidentTile, { opacity: pressed ? 0.9 : 1 }]}
         >

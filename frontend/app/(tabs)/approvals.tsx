@@ -80,6 +80,10 @@ export default function ApprovalsScreen() {
   const [rejectTarget, setRejectTarget] = useState<{ kind: "reg" | "swap"; id: string } | null>(null);
   const [reason, setReason] = useState("");
   const [acting, setActing] = useState(false);
+  const [approveTarget, setApproveTarget] = useState<EmployeeProfile | null>(null);
+  const [apDept, setApDept] = useState<string | null>(null);
+  const [apRole, setApRole] = useState("Worker");
+  const [apEmpId, setApEmpId] = useState("");
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
 
@@ -153,7 +157,12 @@ export default function ApprovalsScreen() {
     }
   };
 
-  const actReg = (emp: EmployeeProfile, approve: boolean, rejectReason?: string) =>
+  const actReg = (
+    emp: EmployeeProfile,
+    approve: boolean,
+    rejectReason?: string,
+    assignment?: { department_code: string; role_code: string; emp_id: string },
+  ) =>
     optimistic(
       "regs",
       () => {
@@ -161,8 +170,19 @@ export default function ApprovalsScreen() {
         return regs;
       },
       (snap) => setRegs(snap),
-      () => (approve ? approveEmployee(emp.id) : rejectEmployee(emp.id, rejectReason ?? "")),
+      () =>
+        approve && assignment
+          ? approveEmployee(emp.id, assignment)
+          : rejectEmployee(emp.id, rejectReason ?? ""),
     );
+
+  const confirmApprove = async () => {
+    if (!approveTarget || !apDept || apEmpId.trim().length === 0) return;
+    const emp = approveTarget;
+    const assignment = { department_code: apDept, role_code: apRole, emp_id: apEmpId.trim() };
+    setApproveTarget(null);
+    await actReg(emp, true, undefined, assignment);
+  };
 
   const actSwap = (swap: SwapRequest, approve: boolean, rejectReason?: string) =>
     optimistic(
@@ -268,7 +288,9 @@ export default function ApprovalsScreen() {
               <Text style={styles.cardTitle}>{emp.full_name}</Text>
               <Text style={styles.cardMeta}>{emp.phone}</Text>
               <Text style={styles.cardMeta}>
-                {t("approvals.wantsToJoin", { dept: deptName(emp.department_code) })}
+                {emp.department_code
+                  ? t("approvals.wantsToJoin", { dept: deptName(emp.department_code) })
+                  : t("approvals.newJoinee")}
               </Text>
             </View>
           </View>
@@ -286,7 +308,12 @@ export default function ApprovalsScreen() {
               label={t("approvals.approve")}
               variant="success"
               disabled={acting}
-              onPress={() => void actReg(emp, true)}
+              onPress={() => {
+                setApDept(emp.department_code ?? null);
+                setApRole("Worker");
+                setApEmpId(emp.emp_id ?? "");
+                setApproveTarget(emp);
+              }}
               style={{ flex: 1 }}
             />
           </View>
@@ -558,6 +585,86 @@ export default function ApprovalsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={approveTarget !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setApproveTarget(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard} testID="approvals-approve-modal">
+            <Text style={styles.modalTitle}>
+              {t("approvals.approveTitle", { name: approveTarget?.full_name ?? "" })}
+            </Text>
+
+            <Text style={styles.assignLabel}>{t("approvals.assignDept")}</Text>
+            <ScrollView style={styles.assignDeptList} nestedScrollEnabled>
+              {(departments.data ?? []).map((d) => {
+                const active = apDept === d.code;
+                return (
+                  <Pressable
+                    key={d.code}
+                    testID={`assign-dept-${d.code}`}
+                    onPress={() => setApDept(d.code)}
+                    style={[styles.assignRow, active && styles.assignRowActive]}
+                  >
+                    <Text style={[styles.assignRowText, active && { color: colors.primary }]}>
+                      {tri(d as unknown as Record<string, unknown>, "name")}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.assignLabel}>{t("approvals.assignRole")}</Text>
+            <View style={styles.roleRow}>
+              {["Worker", "Staff", "Clerk", "Manager"].map((r) => (
+                <Pressable
+                  key={r}
+                  testID={`assign-role-${r}`}
+                  onPress={() => setApRole(r)}
+                  style={[styles.deptChip, apRole === r && styles.deptChipActive]}
+                >
+                  <Text style={[styles.deptChipText, apRole === r && styles.deptChipTextActive]}>
+                    {r}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.assignLabel}>{t("approvals.empId")}</Text>
+            <TextInput
+              testID="assign-empid-input"
+              style={styles.empIdInput}
+              value={apEmpId}
+              onChangeText={setApEmpId}
+              placeholder={t("approvals.empId")}
+              placeholderTextColor={colors.muted}
+              autoCapitalize="characters"
+              maxLength={20}
+            />
+
+            <View style={styles.actionRow}>
+              <BigButton
+                testID="approvals-approve-cancel"
+                label={t("common.cancel")}
+                variant="muted"
+                onPress={() => setApproveTarget(null)}
+                style={{ flex: 1 }}
+              />
+              <BigButton
+                testID="approvals-approve-confirm"
+                label={t("approvals.approve")}
+                variant="success"
+                disabled={!apDept || apEmpId.trim().length === 0}
+                onPress={() => void confirmApprove()}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -713,6 +820,37 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   modalTitle: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  assignLabel: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.sm,
+    color: colors.muted,
+    marginTop: spacing.sm,
+  },
+  assignDeptList: {
+    maxHeight: 180,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  assignRow: {
+    minHeight: sizes.touchTarget,
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+  },
+  assignRowActive: { backgroundColor: colors.brandTertiary },
+  assignRowText: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.text },
+  roleRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  empIdInput: {
+    minHeight: sizes.touchTarget,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.lg,
+    fontFamily: fonts.semiBold,
+    fontSize: type.base,
+    color: colors.text,
+  },
   reasonInput: {
     minHeight: 72,
     borderRadius: radius.md,

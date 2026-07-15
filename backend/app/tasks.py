@@ -69,7 +69,7 @@ def run_backup_sync() -> dict:
     with tempfile.NamedTemporaryFile(suffix=".sql") as tmp:
         cmd = [
             "pg_dump",
-            "-h", parsed.hostname or "127.0.0.1",
+            "-h", (parsed.hostname or "127.0.0.1").replace("-pooler", ""),
             "-p", str(parsed.port or 5432),
             "-U", parsed.username or "postgres",
             "-d", (parsed.path or "/postgres").lstrip("/"),
@@ -220,9 +220,11 @@ def verify_face_task(attendance_id: str) -> dict:
 # ---------------- Phase 4 Part C: incident severity classification ----------------
 
 async def _classify_incident_async(incident_id: str) -> dict:
+    """Full AI classification: suggest category + department + severity with
+    confidence. Stored as ai_suggested_* — routing/notifications fire only when
+    the worker confirms (or the 10-minute timeout auto-applies)."""
     from app import ai_core
-    from app.models import Department, Employee, Incident, IncidentTimeline
-    from app.notify import dispatcher, template
+    from app.models import Department, Incident, IncidentTimeline
     from app.shift_logic import now_ist
     from app.storage import get_storage
     from sqlalchemy import select
@@ -240,11 +242,29 @@ async def _classify_incident_async(incident_id: str) -> dict:
             except Exception:
                 pass
 
+            transcript = ""
+            if inc.voice_note_key:
+                try:
+                    audio_bytes = get_storage().get(inc.voice_note_key)
+                    ext = inc.voice_note_key.rsplit(".", 1)[-1] if "." in inc.voice_note_key else "m4a"
+                    transcript, _lang = await ai_core.transcribe_audio(audio_bytes, ext)
+                except Exception as e:
+                    logger.warning("Voice transcript failed for %s: %s", incident_id, e)
+
+            depts = (
+                await session.execute(select(Department).where(Department.is_active.is_(True)))
+            ).scalars().all()
+            dept_codes = [d.code for d in depts]
             prompt = (
-                "Classify the severity of this factory incident.\n"
-                f"Category: {inc.category}\nDescription: {inc.description or '(none)'}\n"
-                'Respond ONLY with JSON {"severity": "normal"|"high"|"critical", '
-                '"reason": one short English sentence}.\n'
+                "Classify this factory incident report.\n"
+                f"Worker description: {inc.description or '(none)'}\n"
+                f"Voice note transcript: {transcript or '(none)'}\n"
+                f"Departments: {', '.join(dept_codes)}\n"
+                'Respond ONLY with JSON {"category": "safety"|"fire"|"machine_breakdown"|"injury"|'
+                '"electrical"|"water_leakage"|"security"|"other", '
+                '"department_code": which department this incident is ABOUT (from the list), '
+                '"severity": "normal"|"high"|"critical", '
+                '"confidence": 0.0-1.0, "reason": one short English sentence}.\n'
                 "critical = immediate danger to life, fire, major machine failure stopping production; "
                 "high = significant risk or damage needing urgent action; normal = routine issue."
             )
@@ -253,63 +273,52 @@ async def _classify_incident_async(incident_id: str) -> dict:
                     result = await ai_core.vision_json(prompt, image)
                 else:
                     result = await ai_core.text_json(
-                        "You classify factory incident severity. Respond ONLY with valid JSON.", prompt
+                        "You classify factory incident reports. Respond ONLY with valid JSON.", prompt
                     )
             except Exception as e:
-                logger.warning("Severity classification failed for %s: %s", incident_id, e)
+                logger.warning("Incident classification failed for %s: %s", incident_id, e)
                 return {"error": "ai_failed"}
 
+            category = str(result.get("category", "")).lower()
+            if category not in ("safety", "fire", "machine_breakdown", "injury",
+                                "electrical", "water_leakage", "security", "other"):
+                category = "other"
+            dept_code = str(result.get("department_code", ""))
+            if dept_code not in dept_codes:
+                dept_code = inc.department_code
             severity = str(result.get("severity", "")).lower()
             if severity not in ("normal", "high", "critical"):
-                return {"error": f"invalid severity '{severity}'"}
+                severity = "normal"
+            try:
+                confidence = max(0.0, min(1.0, float(result.get("confidence", 0.5))))
+            except (TypeError, ValueError):
+                confidence = 0.5
             reason = str(result.get("reason") or "")[:300]
 
-            inc.severity = severity
+            inc.ai_suggested_category = category
+            inc.ai_suggested_department = dept_code
+            inc.ai_suggested_severity = severity
+            inc.ai_confidence = confidence
+            inc.ai_suggested_at = now_ist()
             inc.severity_reason = reason
             session.add(
                 IncidentTimeline(
-                    incident_id=inc.id, actor_id=None, event="ai_severity",
-                    detail_json={"severity": severity, "reason": reason},
+                    incident_id=inc.id, actor_id=None, event="ai_suggestion",
+                    detail_json={"category": category, "department_code": dept_code,
+                                 "severity": severity, "confidence": confidence, "reason": reason},
                 )
             )
-
-            if severity == "critical":
-                recipients: set = set()
-                dept = (
-                    await session.execute(select(Department).where(Department.code == inc.department_code))
-                ).scalar_one_or_none()
-                if dept and dept.manager_employee_id:
-                    recipients.add(dept.manager_employee_id)
-                tops = (
-                    (
-                        await session.execute(
-                            select(Employee).join(
-                                Employee.role
-                            ).where(Employee.is_active.is_(True))
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                for e in tops:
-                    if e.role and e.role.rank <= 2:  # CGM + MD (when exists)
-                        recipients.add(e.id)
-                title, body = template("incident_critical", f"{inc.category} — {reason}")
-                for rid in recipients:
-                    await dispatcher.notify(
-                        session, rid, "incident_critical", title, body, "incident", str(inc.id)
-                    )
-
             await session.commit()
 
             r = _fresh_redis()
             try:
-                uk = f"ai:usage:{now_ist().date().isoformat()}:severity"
+                uk = f"ai:usage:{now_ist().date().isoformat()}:classify"
                 if r.incr(uk) == 1:
                     r.expire(uk, 8 * 86400)
             finally:
                 r.close()
-            return {"severity": severity, "reason": reason}
+            return {"category": category, "department_code": dept_code,
+                    "severity": severity, "confidence": confidence}
     finally:
         await engine.dispose()
 
@@ -317,6 +326,202 @@ async def _classify_incident_async(incident_id: str) -> dict:
 @celery.task(name="app.tasks.classify_incident_severity")
 def classify_incident_severity(incident_id: str) -> dict:
     return asyncio.run(_classify_incident_async(incident_id))
+
+
+# ---------------- AI-suggestion timeout auto-apply ----------------
+
+AI_CONFIRM_TIMEOUT_MIN = 10
+
+
+async def _ai_timeout_sweep_async() -> dict:
+    """Never let an incident sit unrouted: auto-apply the AI suggestion after
+    10 minutes without worker confirmation (confirmed_by='ai_timeout')."""
+    from datetime import timedelta
+
+    from app.models import Incident
+    from app.routers.incidents import apply_incident_routing
+    from app.shift_logic import now_ist
+    from sqlalchemy import select
+
+    engine, sm = _session_factory()
+    applied = 0
+    try:
+        async with sm() as session:
+            cutoff = now_ist() - timedelta(minutes=AI_CONFIRM_TIMEOUT_MIN)
+            rows = (
+                await session.execute(
+                    select(Incident).where(
+                        Incident.ai_confirmed_by.is_(None),
+                        Incident.ai_suggested_at.isnot(None),
+                        Incident.ai_suggested_at < cutoff,
+                    )
+                )
+            ).scalars().all()
+            for inc in rows:
+                await apply_incident_routing(
+                    session, inc,
+                    inc.ai_suggested_category or inc.category,
+                    inc.ai_suggested_department or inc.department_code,
+                    inc.ai_suggested_severity or inc.severity,
+                    "ai_timeout",
+                )
+                applied += 1
+            await session.commit()
+    finally:
+        await engine.dispose()
+    return {"applied": applied}
+
+
+@celery.task(name="app.tasks.ai_suggestion_timeout_sweep")
+def ai_suggestion_timeout_sweep() -> dict:
+    return asyncio.run(_ai_timeout_sweep_async())
+
+
+# ---------------- Opportunistic ANPR (Rekognition DetectText, NO LLM) ----------------
+
+INDIAN_PLATE_RE = None  # compiled lazily
+
+
+def extract_plate(lines: list[str]) -> str | None:
+    """Regex an Indian vehicle plate (e.g. MH12AB1234) out of DetectText lines."""
+    import re
+
+    global INDIAN_PLATE_RE
+    if INDIAN_PLATE_RE is None:
+        INDIAN_PLATE_RE = re.compile(r"\b([A-Z]{2})[\s-]?(\d{1,2})[\s-]?([A-Z]{1,3})[\s-]?(\d{4})\b")
+    for line in lines:
+        text = line["text"] if isinstance(line, dict) else str(line)
+        m = INDIAN_PLATE_RE.search(text.upper())
+        if m:
+            return "".join(m.groups())
+    return None
+
+
+async def _detect_plate_async(kind: str, record_id: str) -> dict:
+    """Cheap plate check on every non-selfie photo: DetectText + regex.
+    Found → store; not found → store nothing, no UI. Never uses LLM vision."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app.aws import RekognitionUnavailable, detect_text
+    from app.models import FormSubmission, Incident
+    from app.shift_logic import now_ist
+    from app.storage import get_storage
+
+    engine, sm = _session_factory()
+    calls = 0
+    try:
+        async with sm() as session:
+            keys: list[str] = []
+            if kind == "incident":
+                rec = await session.get(Incident, record_id)
+                if rec is None:
+                    return {"error": "not found"}
+                keys = [k for k in (rec.photo_key, rec.resolution_photo_key) if k]
+            elif kind == "submission":
+                rec = await session.get(FormSubmission, record_id)
+                if rec is None:
+                    return {"error": "not found"}
+                keys = list(rec.photos or [])
+            else:
+                return {"error": f"unknown kind {kind}"}
+
+            plates: list[str] = []
+            for key in keys:
+                try:
+                    img = get_storage().get(key)
+                    lines = await run_in_threadpool(detect_text, img)
+                    calls += 1
+                except (RekognitionUnavailable, Exception) as e:
+                    logger.warning("DetectText failed for %s/%s: %s", kind, key, e)
+                    continue
+                plate = extract_plate(lines)
+                if plate and plate not in plates:
+                    plates.append(plate)
+
+            if plates:
+                if kind == "incident":
+                    rec.detected_plate = plates[0]
+                else:
+                    rec.detected_plates = plates
+                await session.commit()
+
+            if calls:
+                r = _fresh_redis()
+                try:
+                    uk = f"ai:usage:{now_ist().date().isoformat()}:detect_text"
+                    if r.incr(uk) == calls:
+                        r.expire(uk, 8 * 86400)
+                    elif calls > 1:
+                        r.incrby(uk, 0)
+                finally:
+                    r.close()
+            return {"plates": plates, "detect_text_calls": calls}
+    finally:
+        await engine.dispose()
+
+
+@celery.task(name="app.tasks.detect_plate")
+def detect_plate_task(kind: str, record_id: str) -> dict:
+    return asyncio.run(_detect_plate_async(kind, record_id))
+
+
+# ---------------- Punch-out reminder ----------------
+
+async def _punchout_reminder_async(now=None) -> dict:
+    """Every 15 min: punched-in employees whose shift ended >15 min ago with no
+    punch-out get ONE reminder per day (redis SETNX guard)."""
+    from datetime import datetime as dt, timedelta
+
+    from app.models import Attendance, Employee
+    from app.notify import dispatcher, template
+    from app.shift_logic import IST, get_shift, now_ist, resolve_shift_code
+    from sqlalchemy import select
+
+    engine, sm = _session_factory()
+    sent = 0
+    try:
+        now = now or now_ist()
+        today = now.date()
+        async with sm() as session:
+            rows = (
+                await session.execute(
+                    select(Attendance, Employee)
+                    .join(Employee, Attendance.employee_id == Employee.id)
+                    .where(Attendance.date == today, Attendance.punch_out_at.is_(None))
+                )
+            ).all()
+            r = _fresh_redis()
+            try:
+                for att, emp in rows:
+                    shift_code = await resolve_shift_code(session, emp.id, today)
+                    shift = await get_shift(session, shift_code) if shift_code else None
+                    if shift is None:
+                        continue
+                    end_dt = dt.combine(today, shift.end_time, tzinfo=IST)
+                    if shift.end_time < shift.start_time:  # overnight shift ends next day
+                        end_dt += timedelta(days=1)
+                    if now < end_dt + timedelta(minutes=15):
+                        continue
+                    guard = f"punchout_reminder:{emp.id}:{today.isoformat()}"
+                    if not r.set(guard, "1", nx=True, ex=86400):
+                        continue  # already reminded today
+                    title, body = template("punchout_reminder")
+                    await dispatcher.notify(
+                        session, emp.id, "punchout_reminder", title, body,
+                        "attendance", str(att.id),
+                    )
+                    sent += 1
+            finally:
+                r.close()
+            await session.commit()
+    finally:
+        await engine.dispose()
+    return {"sent": sent}
+
+
+@celery.task(name="app.tasks.punchout_reminder_sweep")
+def punchout_reminder_sweep() -> dict:
+    return asyncio.run(_punchout_reminder_async())
 
 
 # ---------------- Phase 4 Part C: SOP ingestion (RAG) ----------------

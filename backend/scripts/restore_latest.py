@@ -60,34 +60,47 @@ def main() -> None:
 
     parsed = urlparse(settings.database_url.replace("+asyncpg", ""))
     dbname = args.target or (parsed.path or "/postgres").lstrip("/")
-    host, port = parsed.hostname or "127.0.0.1", str(parsed.port or 5432)
+    # use the DIRECT endpoint for admin ops — DDL through a transaction pooler
+    # leaks session state (search_path) into pooled server connections
+    host = (parsed.hostname or "127.0.0.1").replace("-pooler", "")
+    port = str(parsed.port or 5432)
     user, pw = parsed.username or "postgres", parsed.password or ""
     env = {"PGPASSWORD": pw}
 
     print(f"Downloading {key} …")
     raw = gzip.decompress(s3.get(key))
 
-    print(f"Recreating database {dbname} …")
-    for sql in (
-        f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)',
-        f'CREATE DATABASE "{dbname}"',
-    ):
-        subprocess.run(
-            ["psql", "-h", host, "-p", port, "-U", user, "-d", "postgres", "-c", sql],
-            env=env, check=True, capture_output=True,
+    def run_psql(db: str, sql: str, check: bool = True):
+        return subprocess.run(
+            ["psql", "-h", host, "-p", port, "-U", user, "-d", db, "-c", sql],
+            env=env, check=check, capture_output=True,
         )
+
+    print(f"Recreating database {dbname} …")
+    managed = False
+    try:
+        run_psql("postgres", f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
+        run_psql("postgres", f'CREATE DATABASE "{dbname}"')
+    except subprocess.CalledProcessError:
+        # Managed Postgres (e.g. Neon): no 'postgres' maintenance DB / no dropdb rights.
+        # Reset the public schema in-place instead.
+        managed = True
+        print("  drop/create unavailable (managed PG) — resetting public schema instead")
+        run_psql(dbname, "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;")
     # pgvector must exist before the dump's CREATE TABLE ... vector(384) lines.
-    # Works when the extension is trusted or the user is superuser; the dump's
-    # own CREATE EXTENSION IF NOT EXISTS then no-ops.
-    subprocess.run(
-        ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-c",
-         "CREATE EXTENSION IF NOT EXISTS vector"],
-        env=env, check=True, capture_output=True,
-    )
+    run_psql(dbname, "CREATE EXTENSION IF NOT EXISTS vector")
 
     print("Restoring dump …")
-    with tempfile.NamedTemporaryFile(suffix=".sql", delete=False) as tmp:
-        tmp.write(raw)
+    # Strip role-specific statements the target may not have (e.g. Neon lacks the
+    # sandbox 'hogo' role) — equivalent of pg_restore --no-owner for plain dumps.
+    text_dump = raw.decode()
+    filtered = "\n".join(
+        line for line in text_dump.splitlines()
+        if not (line.startswith("ALTER ") and " OWNER TO " in line)
+        and not line.startswith(("GRANT ", "REVOKE "))
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as tmp:
+        tmp.write(filtered)
         tmp_path = tmp.name
     subprocess.run(
         ["psql", "-h", host, "-p", port, "-U", user, "-d", dbname, "-v", "ON_ERROR_STOP=1", "-f", tmp_path],

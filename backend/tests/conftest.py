@@ -6,10 +6,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 os.environ["TESTING"] = "1"
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://hogo:hogo_secret@127.0.0.1:5432/hogoplus_test"
-os.environ["REDIS_URL"] = "redis://127.0.0.1:6379/5"
-os.environ["CELERY_BROKER_URL"] = "redis://127.0.0.1:6379/6"
-os.environ["CELERY_RESULT_BACKEND"] = "redis://127.0.0.1:6379/7"
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://hogo:hogo_secret@127.0.0.1:5432/hogoplus_test")
+os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/5")
+os.environ.setdefault("CELERY_BROKER_URL", "redis://127.0.0.1:6379/6")
+os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/7")
 os.environ["JWT_SECRET"] = "test-secret-not-for-production"
 os.environ["OTP_MODE"] = "demo"
 os.environ["DEMO_OTP_ENABLED"] = "true"

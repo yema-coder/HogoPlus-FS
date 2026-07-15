@@ -138,3 +138,55 @@ notes:
   - BLE is a noop scanner on web/Expo Go BY DESIGN (isolated interface) — punch-in will yield "verified" not "verified_plus" in tests; this is expected.
   - Watermark viewshot burn-in is skipped on web (falls back to plain compressed photo) BY DESIGN.
   - File serving GET /api/files/{key} is public; upload requires Bearer token.
+
+## Prompt 6 UX Pack — Mobile Frontend (2026-07 fork)
+user_problem_statement: UX Pack mobile UI — photo-first complaint flow (camera opens immediately,
+  category defaults 'other', 60s expo-audio voice note), AI category suggestion confirmation card
+  post-submit (accept / change → POST /api/incidents/{id}/confirm-routing), Grievance→Complaint
+  rename (en/hi/mr), simplified onboarding (Name+Selfie only; Time Office assigns dept/role/emp_id
+  on approval), searchable shift-swap colleague picker, mandatory resolution photo on manager
+  Resolve, ANPR plate chip (detected_plate) in incident detail + webdash.
+
+frontend:
+  - task: "Photo-first complaint capture (camera-first, ✕ close, GPS chip, desc, voice note, submit as 'other')"
+    implemented: true
+    working: "NA"
+    files: ["app/incident/capture.tsx"]
+  - task: "Success screen AI suggestion card (poll incident detail; Accept → confirm-routing {}; Change → category+dept modal)"
+    implemented: true
+    working: "NA"
+    files: ["app/incident/success.tsx"]
+  - task: "Onboarding simplified: register-name → register-selfie (no department step; register-department.tsx DELETED)"
+    implemented: true
+    working: "NA"
+    files: ["app/(auth)/register-name.tsx", "app/(auth)/register-selfie.tsx"]
+  - task: "Approvals regs tab: Approve opens assignment modal (dept list + role chips + emp_id input) → POST /api/admin/employees/{id}/approve with body"
+    implemented: true
+    working: "NA"
+    files: ["app/(tabs)/approvals.tsx"]
+  - task: "Shift swap searchable colleague picker (filter by name/emp_id)"
+    implemented: true
+    working: "NA"
+    files: ["app/swap/new.tsx"]
+  - task: "Manager Resolve requires resolution photo (PhotoCaptureModal) + resolution photo & detected_plate chip shown in incident detail"
+    implemented: true
+    working: "NA"
+    files: ["app/incident/[id].tsx"]
+  - task: "Grievance→Complaint rename trilingual + new UX pack strings (parity verified en/hi/mr)"
+    implemented: true
+    working: "NA"
+    files: ["src/i18n/locales/*.json"]
+
+backend: 126/126 pytest green on Neon/Upstash. Fixed duplicate detect_text def in aws.py +
+  extract_plate dict handling in tasks.py. dashboard feed now includes detected_plate.
+  ai_timeout path demonstrated live: incident → AI suggestion (water_leakage 0.95) → 11-min
+  backdate → sweep → ai_confirmed_by='ai_timeout'. Celery worker restarted (new tasks registered).
+
+credentials: /app/memory/test_credentials.md — demo OTP 123456. Worker +917972540971,
+  TIME_OFFICE manager +918308829567, PRODUCTION manager +918379811866, CGM +918483029039.
+
+notes:
+  - AI classification is async (celery, ~15-30s). Success screen polls up to ~36s then shows "will route automatically" note.
+  - Voice note recording does not work on web preview reliably (expo-audio native); do not fail the flow on web for it.
+  - Camera on web preview uses webcam emulation; watermark burn-in skipped on web BY DESIGN.
+  - New registrations get department_code NULL until Time Office approval — expected.

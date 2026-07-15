@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import {
   Camera as CameraIcon,
   ChevronDown,
@@ -9,6 +9,7 @@ import {
   MapPinOff,
   RefreshCcw,
   Settings,
+  X,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -36,8 +37,8 @@ import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
-import { categoryDef } from "@/src/constants/categories";
 import { departmentIcon } from "@/src/constants/departments";
+import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
@@ -54,13 +55,12 @@ interface Shot {
 
 type GpsStatus = "searching" | "ok" | "none" | "blocked";
 
-/** Taps 2 & 3 of the incident flow: shutter, watermark burn-in, submit. */
+/** Photo-first complaint flow: camera opens immediately, GPS acquired in
+ * parallel, then one detail screen (photo, description, voice note) → submit.
+ * Category defaults to 'other' — the AI suggestion is confirmed post-submit. */
 export default function IncidentCapture() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { category } = useLocalSearchParams<{ category: string }>();
-  const def = categoryDef(category ?? "other");
-  const CatIcon = def.icon;
   const profile = useAuthStore((s) => s.profile);
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW } = useWindowDimensions();
@@ -73,6 +73,7 @@ export default function IncidentCapture() {
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("searching");
   const [dept, setDept] = useState(profile?.department_code ?? "PRODUCTION");
   const [desc, setDesc] = useState("");
+  const [voiceUri, setVoiceUri] = useState<string | undefined>(undefined);
   const [deptModal, setDeptModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const cameraRef = useRef<CameraView>(null);
@@ -93,6 +94,8 @@ export default function IncidentCapture() {
       active = false;
     };
   }, []);
+
+  const close = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   const capture = async () => {
     if (!cameraRef.current || capturing) return;
@@ -121,7 +124,7 @@ export default function IncidentCapture() {
     if (!shot || submitting) return;
     setSubmitting(true);
     const payload: Record<string, unknown> = {
-      category: def.code,
+      category: "other", // AI suggests the real category post-submit
       department_code: dept,
       gps_lat: gps?.lat ?? null,
       gps_lng: gps?.lng ?? null,
@@ -138,12 +141,23 @@ export default function IncidentCapture() {
       return;
     }
     try {
+      if (voiceUri) {
+        try {
+          const audio = await uploadFile(voiceUri, "voice_note.m4a");
+          payload.voice_note_key = audio.key;
+        } catch (audioErr) {
+          if (audioErr instanceof ApiError && audioErr.status === 0) throw audioErr;
+          // non-network audio failure: submit without the voice note
+          console.warn("voice note upload failed:", audioErr);
+        }
+      }
       const uploaded = await uploadFile(finalUri, "incident.jpg");
       const incident = await createIncident({ ...payload, photo_key: uploaded.key }) as Incident;
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       router.replace({ pathname: "/incident/success", params: { queued: "0", rid: incident.id } });
     } catch (e) {
       if (e instanceof ApiError && e.status === 0) {
+        delete payload.voice_note_key;
         await enqueue({
           type: "incident",
           payload,
@@ -205,7 +219,7 @@ export default function IncidentCapture() {
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-capture-screen">
-        <ScreenHeader title={t(def.tKey)} />
+        <ScreenHeader title={t("home.reportIncident")} />
         <View style={styles.permissionWrap} testID="incident-camera-permission">
           <View style={styles.permissionIcon}>
             <CameraIcon size={40} color={colors.primary} strokeWidth={2} />
@@ -236,20 +250,26 @@ export default function IncidentCapture() {
     );
   }
 
-  // ---- Tap 2: camera ----
+  // ---- Tap 1: camera opens immediately ----
   if (!shot) {
     return (
       <View style={styles.fill} testID="incident-capture-screen">
         <CameraView ref={cameraRef} style={styles.fill} facing="back" />
         <SafeAreaView style={styles.cameraOverlay}>
           <View style={styles.cameraTop}>
-            <View style={styles.catChip}>
-              <CatIcon size={18} color="#FFFFFF" strokeWidth={2.4} />
-              <Text style={styles.catChipText}>{t(def.tKey)}</Text>
-            </View>
+            <Pressable
+              testID="incident-camera-close-button"
+              accessibilityRole="button"
+              accessibilityLabel={t("common.close")}
+              onPress={close}
+              style={styles.cameraClose}
+            >
+              <X size={26} color="#FFFFFF" strokeWidth={2.6} />
+            </Pressable>
             {gpsChip()}
           </View>
           <View style={styles.shutterRow}>
+            <Text style={styles.shutterHint}>{t("incident.captureHint")}</Text>
             <Pressable
               testID="incident-shutter-button"
               accessibilityRole="button"
@@ -264,7 +284,7 @@ export default function IncidentCapture() {
     );
   }
 
-  // ---- Tap 3: watermark preview + submit ----
+  // ---- Tap 2: details + submit ----
   const displayW = windowW - sizes.screenPadding * 2;
   const displayH = Math.round((displayW * shot.height) / shot.width);
 
@@ -283,7 +303,7 @@ export default function IncidentCapture() {
           >
             <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
             <View style={styles.watermark} testID="incident-watermark">
-              <Text style={styles.wmLine1}>HOGO PLUS · {t(def.tKey)}</Text>
+              <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")}</Text>
               <Text style={styles.wmLine2}>
                 {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
                 {gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone")}
@@ -293,6 +313,8 @@ export default function IncidentCapture() {
               </Text>
             </View>
           </View>
+
+          <View style={styles.chipRow}>{gpsChip()}</View>
 
           <Text style={styles.fieldLabel}>{t("incident.aboutDept")}</Text>
           <Pressable
@@ -320,6 +342,9 @@ export default function IncidentCapture() {
             multiline
             maxLength={500}
           />
+
+          <Text style={styles.fieldLabel}>{t("incident.voiceNote")}</Text>
+          <VoiceFieldInput value={voiceUri} onChange={setVoiceUri} testID="incident-voice-note" />
 
           <View style={styles.actions}>
             <BigButton
@@ -401,17 +426,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cameraCloseText: { fontFamily: fonts.bold, fontSize: 24, color: "#FFFFFF" },
-  catChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  catChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
   gpsChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -423,7 +437,17 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   gpsChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
-  shutterRow: { alignItems: "center", paddingBottom: spacing.xl },
+  shutterRow: { alignItems: "center", paddingBottom: spacing.xl, gap: spacing.md },
+  shutterHint: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.base,
+    color: "#FFFFFF",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    overflow: "hidden",
+  },
   shutter: {
     width: sizes.cameraShutter,
     height: sizes.cameraShutter,
@@ -481,6 +505,7 @@ const styles = StyleSheet.create({
   },
   wmLine1: { fontFamily: fonts.bold, fontSize: 15, color: "#FFFFFF" },
   wmLine2: { fontFamily: fonts.medium, fontSize: 13, color: "#FFFFFF" },
+  chipRow: { flexDirection: "row", marginTop: spacing.sm },
   fieldLabel: {
     fontFamily: fonts.semiBold,
     fontSize: type.base,

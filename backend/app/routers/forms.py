@@ -42,6 +42,7 @@ def _sub_out(s: FormSubmission, form_code: str | None = None) -> dict:
         "department_code": s.department_code,
         "data_json": s.data_json,
         "photos": s.photos,
+        "detected_plates": s.detected_plates,
         "gps_lat": s.gps_lat,
         "gps_lng": s.gps_lng,
         "status": s.status,
@@ -126,6 +127,14 @@ async def submit_form(
             )
     await session.commit()
     await session.refresh(submission)
+    if submission.photos:
+        # opportunistic ANPR on form photos (DetectText only — never LLM)
+        try:
+            from app.tasks import detect_plate_task
+
+            detect_plate_task.delay("submission", str(submission.id))
+        except Exception:
+            pass
     return _sub_out(submission, definition.code)
 
 

@@ -89,6 +89,11 @@ app.add_middleware(
 async def _startup():
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     app.state.db_seeded = None
+    # Redis write probe: a read-only Upstash token must fail loudly at boot.
+    if not os.environ.get("TESTING"):
+        from app.redis_client import redis_write_probe
+
+        await redis_write_probe()
     # DB integrity check: pod recycles have wiped PostgreSQL before. Never auto-restore.
     try:
         from sqlalchemy import text as sqltext

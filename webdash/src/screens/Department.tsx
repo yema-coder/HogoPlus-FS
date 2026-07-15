@@ -93,7 +93,7 @@ export default function Department() {
           {data.incidents.length === 0 ? <Empty /> : data.incidents.map((i: any) => (
             <div key={i.id} className="feed-item" style={{ cursor: "default" }}>
               <div style={{ flex: 1 }}>
-                <div className="t">{i.category}</div>
+                <div className="t">{i.category}{i.detected_plate ? <> · <b style={{ color: "var(--primary, #1a6b3c)" }}>🚗 {i.detected_plate}</b></> : null}</div>
                 <div className="m">{new Date(i.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · {i.status}</div>
               </div>
               <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>

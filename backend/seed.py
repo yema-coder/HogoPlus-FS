@@ -141,7 +141,7 @@ FORMS = [
         fld("reference_no", "text", "Reference No.", "संदर्भ संख्या", "संदर्भ क्रमांक"),
         fld("remarks", "text", "Remarks", "टिप्पणी", "शेरा", required=False),
     ]),
-    ("ADMIN", "grievance", "Grievance", "शिकायत", "तक्रार", [
+    ("ADMIN", "grievance", "Complaint", "शिकायत", "तक्रार", [
         fld("subject", "text", "Subject", "विषय", "विषय"),
         fld("description", "text", "Description", "विवरण", "वर्णन"),
         fld("photo", "photo", "Photo", "फोटो", "फोटो", required=False),
