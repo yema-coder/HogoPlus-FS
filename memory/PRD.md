@@ -339,3 +339,20 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - LESSON: search_replace occasionally silently mis-applied during heavy parallel batches this
   session (models.py tail garbage, files.py cap block, App.tsx import) — ALWAYS re-verify with
   grep + compile after batched edits.
+
+## Pre-republish fixes (launch-critical, 2026-07-15 evening)
+1. SECRETS: Deployment Panel "Secrets" tab IS the runtime source of truth (confirmed via support);
+   .env / .env.* / *.env RESTORED to .gitignore (Save to GitHub respects .gitignore — secrets never
+   reach the repo). Deploy does NOT need .env shipped.
+2. OOM ROOT CAUSE of production 520 + restart loop: main.py startup eagerly warmed the fastembed
+   ONNX model → API worker RSS 707MB at boot; on the 1Gi prod container (plus celery worker+beat)
+   → OOMKilled crash loop. FIX: warm-up removed; get_model() stays lazy singleton. Startup RSS now
+   102MB. First AI chat call loads model on demand → ~846MB in that process (verified working).
+   RECOMMENDATION for owner: pick ≥2GiB deploy tier if AI chat/RAG will be used heavily.
+   Sandbox restarts were NOT crashes: uvicorn --reload (dev) + controlled supervisorctl restarts;
+   cgroup oom_kill=0 here.
+3. Celery worker+beat: independent supervisor programs — survived 6+ backend restarts (uptime 1h30m).
+   Lost in-flight celery tasks are self-healing: classify → ai_timeout sweep (10 min), reminders/
+   escalations → recurring beat sweeps; punch/incident submits retry via mobile outbox on status 0.
+4. Expo tunnel enabled in supervisor (--tunnel + @expo/ngrok) per deployment health check.
+   Tests still 136/136 after all changes.

@@ -1,7 +1,8 @@
 """Local multilingual embeddings (Marathi/Hindi/English) via fastembed (ONNX, no torch).
 
 Model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 — 384 dims.
-Loaded once per process (lazy singleton, warmed at FastAPI startup).
+Lazy thread-safe singleton: loaded on the FIRST embedding call (NOT at startup —
+eager warm-up OOM-crash-looped 1Gi production containers), then cached per process.
 Cache lives inside /app so it survives pod recycles.
 """
 import logging

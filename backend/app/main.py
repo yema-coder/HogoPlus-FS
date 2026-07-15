@@ -129,12 +129,8 @@ async def _startup():
                 await session.commit()
         except Exception:
             pass  # if the DB is gone we cannot persist a notification — the CRITICAL log stands
-    # warm the local embedding model once at startup (non-blocking)
-    if not os.environ.get("TESTING"):
-        import asyncio
-
-        from starlette.concurrency import run_in_threadpool
-
-        from app.embeddings import get_model
-
-        asyncio.get_event_loop().create_task(run_in_threadpool(get_model))
+    # NOTE (Prompt 7 launch fix): the embedding model is intentionally NOT warmed at
+    # startup. Eager warm-up put ~500MB of ONNX weights into the API process at boot,
+    # which OOM-crash-looped 1Gi production containers (backend RSS ~700MB + celery).
+    # app.embeddings.get_model() stays a lazy thread-safe singleton — the model loads
+    # on the FIRST RAG/embedding call and is cached for the process lifetime.

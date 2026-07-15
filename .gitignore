@@ -84,3 +84,8 @@ credentials.json
 *.key
 .credentials
 backend/.fastembed_cache/models--qdrant--paraphrase-multilingual-MiniLM-L12-v2-onnx-Q/blobs/634d0f66c29dc934c8fa72b8a4fe91dd4d420a22f1d82a241058d4316e659a99
+
+# Secrets — never commit (runtime values come from Deployment Panel → Secrets)
+.env
+.env.*
+*.env
