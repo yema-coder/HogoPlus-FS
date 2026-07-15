@@ -306,3 +306,36 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - Tests: backend 126/126 green; testing_agent iteration_7 ALL GREEN (1 LOW modal-overflow issue →
   fixed: edit modal content in ScrollView, maxHeight 75%, actions pinned). Reusable live suite:
   /app/backend/tests/live_ux_pack_spotcheck.py.
+
+## Prompt 7 — VIDEO + PASSWORD LOGIN + POLISH PACK (2026-07 fork) — DONE (deployment NOT triggered; owner publishes)
+- Part A Video: capture.tsx photo/video toggle (30s auto-stop countdown, 720p, mode="video" CameraView),
+  offline disables video toggle (NetInfo) w/ trilingual note; upload mp4/mov (ftyp magic, 40MB cap →
+  trilingual 413 video_too_large); playback expo-video (mobile detail) + HTML5 <video> (dash feed);
+  incidents.video_key nullable + photo_key made nullable (validator: one media required); classifier
+  text+audio only for video (no image); ANPR skipped for video incidents.
+  NATIVE MODULES/PERMISSIONS ADDED: expo-video ~3.0.16 (+plugin), android RECORD_AUDIO,
+  iOS NSMicrophoneUsageDescription, expo-camera plugin microphonePermission string (was False!).
+- Part B Password login (webdash MD/CGM only): employees.password_hash+must_change_password
+  (alembic 0005); passlib bcrypt helpers in security.py; POST /auth/password-login (redis lockout
+  5/15min pwlogin:fail:{emp_id}, trilingual 429; rank>2 → 403), /auth/change-password,
+  /admin/employees/{id}/set-password (rank<=2). Webdash Login has OTP/Password tabs + forced-change
+  screen; sidebar Change-password modal (top mgmt). CGM creds: 0001/Hogo@2026Cgm (test_credentials.md).
+- Part C Plate search: GET /api/dashboard/plates/search?q= (ilike on incidents.detected_plate +
+  jsonb_array_elements_text on form_submissions.detected_plates; manager scoped to own dept);
+  webdash Vehicles screen + Overview feed filter box.
+- Part D Address polish: address_text on incidents+form_submissions; src/utils/geocode.ts
+  (Location.reverseGeocodeAsync, never throws); geocoded at capture in capture.tsx / FormRenderer
+  (incl. offline enqueue) / punch.tsx (passed to result screen); location blocks: incident detail
+  (mobile), attendance result (zone > address > coords), dashboard feed 📍 line.
+- Part E Permission primer ROOT CAUSES FIXED: (1) otp.tsx/pending.tsx bypassed index gate with
+  router.replace("/(tabs)/home") → primer never ran on first login — now replace("/"); (2)
+  authStore.hydrate never restored hogo.permsPrimed — now restored; (3) one-time re-prime if
+  camera/location still undetermined (hogo.permsReprimed flag). acquireGps already does inline
+  request (defense-in-depth). ON-DEVICE VERIFY needed: primer runs after first login on real device.
+- Tests: 136/136 pytest (test_prompt7.py: cap/magic/presign/role gates/lockout/forced-change/
+  worker-403/plate-scope/address). testing_agent iteration_8 ALL GREEN. Live evidence: ANPR
+  MH14GH7777 via real Rekognition on photo-first photo; mp4 presign content-type video/mp4;
+  password E2E in browser. i18n parity 309 keys ×3.
+- LESSON: search_replace occasionally silently mis-applied during heavy parallel batches this
+  session (models.py tail garbage, files.py cap block, App.tsx import) — ALWAYS re-verify with
+  grep + compile after batched edits.
