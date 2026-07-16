@@ -66,13 +66,28 @@ async def test_beacon_crud(client):
     mgr = await login(client, PHONES["prod_mgr"])
     r = await client.post(
         "/api/admin/beacons",
-        json={"beacon_uuid": "f7826da6-4fa2-4e98-8024-bc5b71e0893e", "major": 1, "minor": 2,
+        json={"mac_address": "dd:ee:ff:00:11:22",
               "zone_label_en": "Mill Gate", "zone_label_hi": "मिल गेट", "zone_label_mr": "मिल गेट",
               "department_code": "SECURITY"},
         headers=mgr,
     )
     assert r.status_code == 200
     beacon = r.json()
+    assert beacon["mac_address"] == "DD:EE:FF:00:11:22"  # normalized to uppercase
+    # invalid MAC format rejected
+    r = await client.post(
+        "/api/admin/beacons",
+        json={"mac_address": "not-a-mac", "zone_label_en": "X", "zone_label_hi": "X", "zone_label_mr": "X"},
+        headers=mgr,
+    )
+    assert r.status_code == 422
+    # duplicate MAC rejected
+    r = await client.post(
+        "/api/admin/beacons",
+        json={"mac_address": "DD:EE:FF:00:11:22", "zone_label_en": "X", "zone_label_hi": "X", "zone_label_mr": "X"},
+        headers=mgr,
+    )
+    assert r.status_code == 409
     r = await client.patch(
         f"/api/admin/beacons/{beacon['id']}", json={"is_active": False}, headers=mgr
     )

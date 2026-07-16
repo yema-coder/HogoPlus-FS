@@ -5,6 +5,7 @@ import { Chip, Empty } from "../components";
 import { localName, useI18n } from "../i18n";
 
 const ROLES = ["MD", "CGM", "Manager", "Staff", "Clerk", "Worker"];
+const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
 
 function EmployeeSearch({ render }: { render: (e: any, reload: () => void) => React.ReactNode }) {
   const { t } = useI18n();
@@ -46,16 +47,21 @@ export default function Admin() {
   const [roleEdits, setRoleEdits] = useState<Record<string, string>>({});
   const [sops, setSops] = useState<any[] | null>(null);
   const [opsMsg, setOpsMsg] = useState("");
+  const [beacons, setBeacons] = useState<any[]>([]);
+  const [bForm, setBForm] = useState({ mac: "", en: "", hi: "", mr: "" });
+  const [bMsg, setBMsg] = useState("");
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
   const loadSops = () => api("/admin/sop-docs").then(setSops).catch(() => setSops([]));
+  const loadBeacons = () => api("/admin/beacons").then(setBeacons).catch(() => setBeacons([]));
 
   useEffect(() => {
     api("/admin/settings").then(setGeo).catch(() => {});
     loadDepts();
     loadNoPhone();
     loadSops();
+    loadBeacons();
   }, []);
 
   if (!isTopMgmt(user)) return <div className="card">{t("accessDeniedMsg")}</div>;
@@ -128,6 +134,54 @@ export default function Admin() {
     }
   };
 
+  const addBeacon = async () => {
+    setBMsg("");
+    const mac = bForm.mac.trim().toUpperCase();
+    if (!MAC_RE.test(mac)) {
+      setBMsg(t("invalidMac"));
+      return;
+    }
+    const en = bForm.en.trim();
+    if (!en) {
+      setBMsg(t("zoneEn"));
+      return;
+    }
+    try {
+      await api("/admin/beacons", {
+        method: "POST",
+        body: JSON.stringify({
+          mac_address: mac,
+          zone_label_en: en,
+          zone_label_hi: bForm.hi.trim() || en,
+          zone_label_mr: bForm.mr.trim() || en,
+        }),
+      });
+      setBForm({ mac: "", en: "", hi: "", mr: "" });
+      setBMsg(`✓ ${t("saved")}`);
+      loadBeacons();
+    } catch (e: any) {
+      setBMsg(e.message);
+    }
+  };
+
+  const toggleBeacon = async (b: any) => {
+    try {
+      await api(`/admin/beacons/${b.id}`, { method: "PATCH", body: JSON.stringify({ is_active: !b.is_active }) });
+      loadBeacons();
+    } catch (e: any) {
+      setBMsg(e.message);
+    }
+  };
+
+  const deleteBeacon = async (b: any) => {
+    try {
+      await api(`/admin/beacons/${b.id}`, { method: "DELETE" });
+      loadBeacons();
+    } catch (e: any) {
+      setBMsg(e.message);
+    }
+  };
+
   return (
     <div>
       <div className="topbar">
@@ -154,6 +208,36 @@ export default function Admin() {
                 {geoMsg && <span style={{ fontSize: 13, color: geoMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{geoMsg}</span>}
               </div>
             )}
+          </div>
+
+          <div className="card">
+            <h2>📡 {t("beacons")} ({beacons.length})</h2>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+              <input data-testid="beacon-mac-input" style={{ width: 170, fontFamily: "monospace" }} placeholder="AA:BB:CC:DD:EE:FF"
+                value={bForm.mac} onChange={(e) => setBForm({ ...bForm, mac: e.target.value })} />
+              <input data-testid="beacon-zone-en" style={{ flex: 1, minWidth: 120 }} placeholder={t("zoneEn")}
+                value={bForm.en} onChange={(e) => setBForm({ ...bForm, en: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+              <input style={{ flex: 1, minWidth: 120 }} placeholder={t("zoneHi")}
+                value={bForm.hi} onChange={(e) => setBForm({ ...bForm, hi: e.target.value })} />
+              <input style={{ flex: 1, minWidth: 120 }} placeholder={t("zoneMr")}
+                value={bForm.mr} onChange={(e) => setBForm({ ...bForm, mr: e.target.value })} />
+              <button className="btn primary" data-testid="beacon-add" onClick={addBeacon}>+ {t("addBeacon")}</button>
+            </div>
+            {bMsg && <div style={{ fontSize: 13, marginBottom: 8, color: bMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{bMsg}</div>}
+            {beacons.length === 0 ? <Empty /> : beacons.map((b) => (
+              <div key={b.id} className="feed-item" style={{ cursor: "default" }} data-testid={`beacon-row-${b.mac_address || b.id}`}>
+                <div style={{ flex: 1 }}>
+                  <div className="t">{b.zone_label_en}</div>
+                  <div className="m" style={{ fontFamily: "monospace" }}>{b.mac_address || "—"}{b.department_code ? ` · ${b.department_code}` : ""}</div>
+                </div>
+                <button className="btn ghost" style={{ padding: "6px 10px" }} onClick={() => toggleBeacon(b)}>
+                  <Chip tone={b.is_active ? "green" : "red"}>{b.is_active ? t("active") : t("inactive")}</Chip>
+                </button>
+                <button className="btn danger" style={{ padding: "6px 10px" }} onClick={() => deleteBeacon(b)}>✕</button>
+              </div>
+            ))}
           </div>
 
           <div className="card">

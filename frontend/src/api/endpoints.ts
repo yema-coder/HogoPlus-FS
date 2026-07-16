@@ -83,6 +83,8 @@ export const confirmIncidentRouting = (
 export const punchIn = (body: Record<string, unknown>) =>
   api<AttendanceRecord>("/attendance/punch-in", { method: "POST", body });
 
+export const beaconMacs = () => api<{ macs: string[] }>("/attendance/beacon-macs");
+
 export const punchOut = () => api<AttendanceRecord>("/attendance/punch-out", { method: "POST" });
 
 export const myAttendance = (month: string) =>

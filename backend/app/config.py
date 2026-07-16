@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     backup_keep_last: int = 14
     demo_otp_enabled: bool = True
     demo_otp: str = "123456"
+    demo_otp_whitelist: str = ""  # comma-separated +91 numbers allowed to use DEMO_OTP
+
+    @property
+    def demo_otp_whitelist_set(self) -> frozenset[str]:
+        return frozenset(p.strip() for p in self.demo_otp_whitelist.split(",") if p.strip())
     escalation_hours: int = 48
     upload_dir: str = str(ROOT_DIR / "uploads")
 

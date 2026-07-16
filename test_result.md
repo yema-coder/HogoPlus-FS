@@ -213,3 +213,19 @@ Backend: 136/136 pytest green (tests/test_prompt7.py added). Live verified: ANPR
 Credentials: CGM dashboard password login emp_id 0001 / Hogo@2026Cgm (see memory/test_credentials.md).
 NOTE: video recording NOT testable on web preview (expo-camera recordAsync is native-only) — verify
   video capture on device/APK. Do not fail web tests on video recording.
+
+## Prompt 8 — OTP whitelist + BLE-MAC beacons + Android manifest fix (2026-06 fork)
+- app.json android.permissions → ["POST_NOTIFICATIONS"] only; all others injected by plugins.
+  Verified via expo prebuild sandbox: each <uses-permission> exactly once.
+- DEMO_OTP now requires DEMO_OTP_ENABLED + phone in DEMO_OTP_WHITELIST + employee exists.
+  Prod whitelist: +918483029039 (CGM), +917972540971 (worker). All other seeded numbers reject 123456.
+- ble_beacons.mac_address (unique, AA:BB:CC:DD:EE:FF normalized uppercase, alembic 0006 applied to Neon).
+  Beacon CRUD accepts mac_address; duplicate → 409; invalid format → 422.
+- GET /api/attendance/beacon-macs (approved employee) → {"macs":[...active registered]}.
+- punch-in: sent MAC matched case-insensitively vs registered active beacons; registered → verified_plus
+  + backend-resolved ble_zone; unregistered → ignored (verified); no BLE → verified. ble_zone removed
+  from punch payload.
+- Mobile BleScanner matches device.id (Android MAC) against registered list, strongest RSSI (native-only,
+  NOT testable on web preview — noop scanner returns null on web/Expo Go BY DESIGN).
+- Webdash Admin: new "📡 BLE beacons" card (add/toggle/delete, MAC format validation).
+- Backend: 140/140 pytest green. Prod API verified via curl (whitelist 200/401, beacon-macs, CRUD).

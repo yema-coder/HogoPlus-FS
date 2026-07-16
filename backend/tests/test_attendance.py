@@ -10,17 +10,43 @@ OUTSIDE = {"gps_lat": 19.1000, "gps_lng": 74.8000}  # ~15 km away
 
 
 async def test_punch_in_verified_plus(client):
+    # registered vendor beacon MAC (case-insensitive) → verified_plus, backend resolves zone
     headers = await login(client, PHONES["w_att1"])
     r = await client.post(
         "/api/attendance/punch-in",
-        json={**INSIDE, "selfie_key": "s1.jpg", "ble_beacon_id": "beacon-01", "ble_zone": "Mill Gate"},
+        json={**INSIDE, "selfie_key": "s1.jpg", "ble_beacon_id": "aa:bb:cc:dd:ee:01"},
         headers=headers,
     )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["verification_level"] == "verified_plus"
+    assert body["ble_beacon_id"] == "AA:BB:CC:DD:EE:01"
+    assert body["ble_zone"] == "Mill Gate"
     assert body["gps_verified"] is True
     assert body["shift_code"] == "GEN"
+
+
+async def test_punch_in_unregistered_mac_ignored(client):
+    # unregistered MAC → BLE ignored, falls back to GPS-only "verified"
+    headers = await login(client, PHONES["w_att5"])
+    r = await client.post(
+        "/api/attendance/punch-in",
+        json={**INSIDE, "selfie_key": "s5.jpg", "ble_beacon_id": "11:22:33:44:55:66"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["verification_level"] == "verified"
+    assert body["ble_zone"] is None
+
+
+async def test_beacon_macs_lists_active_registered_macs(client):
+    headers = await login(client, PHONES["w_att1"])
+    r = await client.get("/api/attendance/beacon-macs", headers=headers)
+    assert r.status_code == 200
+    macs = r.json()["macs"]
+    assert "AA:BB:CC:DD:EE:01" in macs
+    assert "AA:BB:CC:DD:EE:02" not in macs  # inactive beacon excluded
 
 
 async def test_punch_in_verified_no_beacon(client):

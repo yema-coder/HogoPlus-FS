@@ -26,13 +26,7 @@
       "edgeToEdgeEnabled": true,
       "package": "com.hogoplus.fs",
       "permissions": [
-        "CAMERA",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "BLUETOOTH_SCAN",
-        "BLUETOOTH_CONNECT",
-        "POST_NOTIFICATIONS",
-        "RECORD_AUDIO"
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {

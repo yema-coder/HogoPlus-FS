@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit
@@ -336,6 +337,7 @@ def _beacon_out(b: BleBeacon) -> dict:
     return {
         "id": str(b.id),
         "beacon_uuid": b.beacon_uuid,
+        "mac_address": b.mac_address,
         "major": b.major,
         "minor": b.minor,
         "zone_label_en": b.zone_label_en,
@@ -363,8 +365,15 @@ async def create_beacon(
 ):
     beacon = BleBeacon(**body.model_dump())
     session.add(beacon)
-    await session.flush()
-    await write_audit(session, actor.id, "beacon.created", "ble_beacon", str(beacon.id), {"uuid": body.beacon_uuid})
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="MAC address already registered")
+    await write_audit(
+        session, actor.id, "beacon.created", "ble_beacon", str(beacon.id),
+        {"uuid": body.beacon_uuid, "mac": body.mac_address},
+    )
     await session.commit()
     await session.refresh(beacon)
     return _beacon_out(beacon)
@@ -384,7 +393,11 @@ async def patch_beacon(
     for k, v in updates.items():
         setattr(beacon, k, v)
     await write_audit(session, actor.id, "beacon.updated", "ble_beacon", str(beacon.id), updates)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="MAC address already registered")
     await session.refresh(beacon)
     return _beacon_out(beacon)
 

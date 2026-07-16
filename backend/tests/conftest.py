@@ -18,22 +18,6 @@ os.environ["FILE_STORAGE_MODE"] = "local"
 os.environ["UPLOAD_DIR"] = "/tmp/hogo_test_uploads"
 os.environ["ESCALATION_HOURS"] = "48"
 
-import pytest_asyncio  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
-from sqlalchemy import text  # noqa: E402
-
-from app.database import Base, SessionLocal, engine  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import (  # noqa: E402
-    Department,
-    Employee,
-    FactorySettings,
-    FormDefinition,
-    Role,
-    Shift,
-    ShiftAssignment,
-)
-
 DEMO_OTP = "123456"
 
 PHONES = {
@@ -49,7 +33,32 @@ PHONES = {
     "w_att2": "+919000000022",
     "w_att3": "+919000000023",
     "w_att4": "+919000000024",
+    "w_att5": "+919000000025",
 }
+# Seeded employee deliberately NOT in DEMO_OTP_WHITELIST — proves whitelist enforcement.
+NON_WHITELISTED_PHONE = "+919000000031"
+# These get registered/patched during tests and then log in via demo OTP:
+# +919777777701 (test_admin_misc phone fix), +919888888801 (test_register new worker).
+os.environ["DEMO_OTP_WHITELIST"] = ",".join(
+    [*PHONES.values(), "+919777777701", "+919888888801"]
+)
+
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
+
+from app.database import Base, SessionLocal, engine  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models import (  # noqa: E402
+    BleBeacon,
+    Department,
+    Employee,
+    FactorySettings,
+    FormDefinition,
+    Role,
+    Shift,
+    ShiftAssignment,
+)
 
 ROLES = [
     ("MD", 1), ("CGM", 2), ("Manager", 3), ("Staff", 4), ("Clerk", 5), ("Worker", 6),
@@ -101,7 +110,22 @@ async def _seed_base():
         wa2 = emp("0022", "Att Worker2", PHONES["w_att2"], "PRODUCTION", "Worker", eligible=True)
         wa3 = emp("0023", "Att Worker3", PHONES["w_att3"], "PRODUCTION", "Worker", eligible=True)
         wa4 = emp("0024", "Att Worker4", PHONES["w_att4"], "PRODUCTION", "Worker", eligible=True)
+        wa5 = emp("0025", "Att Worker5", PHONES["w_att5"], "PRODUCTION", "Worker", eligible=True)
+        emp("0031", "NoWhitelist Worker", NON_WHITELISTED_PHONE, "PRODUCTION", "Worker", eligible=True)
         emp("0120", "NoPhone Worker", None, "GODOWN", "Worker", eligible=True, status="seeded")
+        await s.flush()
+
+        # registered vendor beacons (MAC-based, non-configurable)
+        s.add(BleBeacon(
+            beacon_uuid="", mac_address="AA:BB:CC:DD:EE:01", major=0, minor=0,
+            zone_label_en="Mill Gate", zone_label_hi="मिल गेट", zone_label_mr="मिल गेट",
+            department_code="SECURITY", is_active=True,
+        ))
+        s.add(BleBeacon(
+            beacon_uuid="", mac_address="AA:BB:CC:DD:EE:02", major=0, minor=0,
+            zone_label_en="Old Gate", zone_label_hi="पुराना गेट", zone_label_mr="जुना गेट",
+            department_code="SECURITY", is_active=False,
+        ))
         await s.flush()
 
         # dept managers
@@ -114,7 +138,7 @@ async def _seed_base():
 
         base = date(2025, 1, 1)
         for e, code in ((w1, "A"), (w2, "B"), (w3, "A"), (weng, "A"),
-                        (wa1, "GEN"), (wa2, "GEN"), (wa3, "GEN"), (wa4, "GEN"),
+                        (wa1, "GEN"), (wa2, "GEN"), (wa3, "GEN"), (wa4, "GEN"), (wa5, "GEN"),
                         (cgm, "GEN"), (prod_mgr, "GEN"), (time_mgr, "GEN")):
             s.add(ShiftAssignment(employee_id=e.id, shift_code=code, effective_date=base, source="baseline"))
 

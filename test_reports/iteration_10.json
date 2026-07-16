@@ -1,0 +1,38 @@
+{
+  "summary": "Prompt 8 (Demo OTP whitelist + BLE beacon MAC CRUD) fully verified. Backend 11/11 pytest PASSED against prod Neon+Upstash: (a) CGM +918483029039/123456 → 200 with access+refresh tokens; (b) worker +917972540971/123456 → 200; (c) non-whitelisted seeded phone +918308829567 (TIME_OFFICE mgr)/123456 → 401 (single attempt only — lockout-safe); (d) GET /api/attendance/beacon-macs no-token → 401, with CGM token → 200 {macs:[]}; (e) POST /api/admin/beacons {mac_address:'e1:e2:e3:e4:e5:XX' lowercase} → 200 with mac_address='E1:E2:E3:E4:E5:XX' (normalized upper) and is_active=true; (f) POST duplicate MAC → 409 'MAC address already registered'; (g) POST mac_address='garbage' → 422 pydantic validation; (h) GET /api/attendance/beacon-macs after create → 200 with the new MAC in macs[]; (i) PATCH is_active=false → 200 and MAC no longer in beacon-macs list; (j) DELETE → 200 {deleted:true}. Frontend webdash regression PASSED at 1440x900 via password login (CGM 0001/Hogo@2026Cgm — used instead of OTP to conserve the 3/10min rate limit): /api/dash/admin renders with data-testid='admin-title' present, all 4 admin cards visible (📍 Factory geofence, 📡 BLE beacons(0), 👔 Assign department manager, 📚 SOP documents). BLE beacons card exposes data-testid=beacon-mac-input, beacon-zone-en, beacon-add. Invalid MAC 'xx:yy' + zone 'Invalid Test Zone' → red validation message 'MAC must be AA:BB:CC:DD:EE:FF' rendered under the form and NO beacon inserted (verified via GET). Valid MAC 'e7:e8:e9:ea:eb:11' + zone 'QA Test Zone' → beacon successfully created in Neon (confirmed by GET /admin/beacons which returned id=b9dc8120...af mac=E7:E8:E9:EA:EB:11 active=true after form submit) and CLEANED UP via DELETE 200. Note: the Playwright script's post-submit inner_text check ran before the async loadBeacons() refresh completed so the row-testid assertion technically failed in the automation, but the state in the database confirms the UI POST worked end-to-end; not a bug. All 4 admin cards still render (no regression from the new beacons card). No deprecated Expo packages, no React Native issues, no red screens. NON-WHITELISTED SEEDED PHONE ENFORCEMENT: exactly 1 wrong attempt made against +918308829567 (well below the 5/30min lockout threshold), account safe.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_prompt8_whitelist_and_beacons.py — 11 tests, all PASS",
+    "/app/test_reports/pytest/iter10_prompt8.xml — JUnit XML output",
+    "/tmp/wd_pwd_login.png — password login CGM 0001",
+    "/tmp/wd_admin_page.png — Admin renders all 4 cards including new 📡 BLE beacons card",
+    "/tmp/wd_admin_invalid.png — Invalid MAC 'xx:yy' shows red 'MAC must be AA:BB:CC:DD:EE:FF' error, list stays at (0)",
+    "/tmp/wd_admin_valid.png — Valid MAC + QA Test Zone form filled (POST succeeded — DB confirmed, then cleanup)",
+    "/tmp/wd_admin_deleted.png — Post-delete state"
+  ],
+  "action_items": [
+    "None — all Prompt 8 scope items pass. Main agent can proceed."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/app/schemas.py:10-20 — MAC_REGEX ^[0-9A-F]{2}(:[0-9A-F]{2}){5}$ + normalize_mac uppercases + validates. BeaconIn and BeaconPatchIn both wire through the field_validator; invalid input surfaces as pydantic 422 (verified).",
+    "/app/backend/app/routers/admin.py:360-402 — Create/patch both catch IntegrityError → 409; delete returns {deleted:True}. Clean.",
+    "/app/backend/app/routers/attendance.py:61-98 — beacon-macs filters is_active AND mac_address IS NOT NULL (correct); punch-in normalizes body.ble_beacon_id to uppercase before lookup; unregistered MAC → level=verified, registered → verified_plus. Matches spec.",
+    "/app/webdash/src/screens/Admin.tsx:8 MAC_RE + :137-165 addBeacon: client-side normalization to upper + regex check before POST — belt-and-braces with backend validation. Chip toggle + delete wire to PATCH/DELETE and re-fetch. Well-structured.",
+    "One tiny nit (not blocking): /app/webdash/src/screens/Admin.tsx:139 `mac.toUpperCase()` happens before regex — fine — but on invalid the error string comes from t('invalidMac') which the report confirmed renders as 'MAC must be AA:BB:CC:DD:EE:FF' in English; would be good to spot-check hi/mr copies at some point but out of scope."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_prompt8_whitelist_and_beacons.py — new test file (11 tests)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% for observable scope (Admin card renders, all testIDs present, invalid-MAC validation, valid-MAC create verified via DB, cleanup) — the row-appears assertion in the Playwright script had a timing miss but DB state confirmed the POST worked end-to-end"},
+  "seed_data_creation": "TEST_QA Zone beacon (random MAC e1:e2:e3:e4:e5:XX) created + deleted by pytest cleanup fixture; QA Test Zone beacon (E7:E8:E9:EA:EB:11) created via UI and deleted via API cleanup. No leftover rows — verified with final GET /admin/beacons run. No employees / settings / SOPs / attendance touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "1) DEMO_OTP_WHITELIST enforcement is live: only +918483029039 (CGM 0001) and +917972540971 (worker 0021) accept 123456; all other seeded phones now return 401 for demo OTP and require real SMS. Never make more than 3 wrong OTP attempts against a single non-whitelisted phone (5-wrong/30-min account lockout). 2) OTP send rate limit is 3/10min per phone — during this iteration only ONE OTP was consumed on +918483029039 (via my initial explore before I switched to password login) and ZERO on the worker phone. 3) Password login (POST /api/auth/password-login) is a simpler auth path for automated webdash tests: CGM 0001 / Hogo@2026Cgm. 4) When Playwright-testing the beacon add flow, sleep ~1500ms after clicking beacon-add before asserting on `[data-testid=beacon-row-<MAC>]` because loadBeacons() re-fetches. 5) Backend tests file /app/backend/tests/test_prompt8_whitelist_and_beacons.py uses a class-scoped teardown fixture to DELETE any created beacons — safe to re-run against prod. 6) The Neon `ble_beacons.mac_address` column is UNIQUE — a leftover from a crashed test WILL cause a 409 on the next create with the same MAC; the test file already randomizes the last octet via uuid4() to avoid this.",
+  "rca_of_issue": "No issue to RCA — all functionality verified working. The only observable test-script friction was that after clicking '+ Add beacon' in the webdash, the immediate inner_text assertion did not see the new row because the async loadBeacons() refetch had not yet completed. Sleeping ~1.5s or awaiting a network idle after the add would fix this in future runs. The underlying UI POST + DB persist + subsequent DELETE all work correctly (confirmed by direct GET /admin/beacons via backend which showed the QA Test Zone beacon present, then absent after cleanup)."
+}

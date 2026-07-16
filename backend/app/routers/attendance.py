@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit
 from app.database import get_session
-from app.models import Attendance, Department, Employee, FactorySettings
+from app.models import Attendance, BleBeacon, Department, Employee, FactorySettings
 from app.notify import dispatcher, template
 from app.schemas import PunchInIn
 from app.security import get_approved_employee, is_dept_manager, require_role
@@ -58,6 +58,22 @@ async def _factory_settings(session: AsyncSession) -> FactorySettings:
     return s
 
 
+@router.get("/attendance/beacon-macs")
+async def beacon_macs(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Active registered beacon MACs — the mobile scanner matches detected devices against these."""
+    macs = (
+        await session.execute(
+            select(BleBeacon.mac_address).where(
+                BleBeacon.is_active.is_(True), BleBeacon.mac_address.is_not(None)
+            )
+        )
+    ).scalars().all()
+    return {"macs": macs}
+
+
 @router.post("/attendance/punch-in")
 async def punch_in(
     body: PunchInIn,
@@ -67,6 +83,19 @@ async def punch_in(
     fs = await _factory_settings(session)
     now_utc = datetime.now(timezone.utc)
     ist_now = now_ist()
+
+    # opportunistic BLE: the app sends the strongest detected MAC; the backend resolves
+    # the zone from registered beacons. Unregistered MACs are ignored (GPS-only level).
+    matched_beacon = None
+    mac = body.ble_beacon_id.strip().upper() if body.ble_beacon_id else None
+    if mac:
+        matched_beacon = (
+            await session.execute(
+                select(BleBeacon).where(
+                    BleBeacon.mac_address == mac, BleBeacon.is_active.is_(True)
+                )
+            )
+        ).scalar_one_or_none()
 
     # verification level
     inside = False
@@ -80,7 +109,7 @@ async def punch_in(
         if not inside:
             level = "flagged"
             flagged_reason = f"outside_geofence({int(distance)}m)"
-        elif body.ble_beacon_id:
+        elif matched_beacon:
             level = "verified_plus"
         else:
             level = "verified"
@@ -112,8 +141,8 @@ async def punch_in(
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
         gps_verified=inside,
-        ble_beacon_id=body.ble_beacon_id,
-        ble_zone=body.ble_zone,
+        ble_beacon_id=mac,
+        ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
         selfie_key=body.selfie_key,
         verification_level=level,
         shift_code=shift_code,

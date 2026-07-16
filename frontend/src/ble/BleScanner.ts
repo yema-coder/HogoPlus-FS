@@ -2,14 +2,17 @@ import Constants from "expo-constants";
 import { PermissionsAndroid, Platform } from "react-native";
 
 export interface BleBeaconHit {
-  beaconId: string;
-  zone: string | null;
+  /** MAC address of the strongest matched registered beacon (normalized uppercase). */
+  mac: string;
 }
 
 export interface BleScanner {
   readonly isReal: boolean;
-  /** Scan for nearby factory beacons; resolves with the strongest hit or null. */
-  scan(timeoutMs: number): Promise<BleBeaconHit | null>;
+  /**
+   * Scan for nearby vendor beacons and match them against the registered MAC list
+   * (case-insensitive); resolves with the strongest-RSSI match or null.
+   */
+  scan(timeoutMs: number, registeredMacs: string[]): Promise<BleBeaconHit | null>;
 }
 
 class NoopBleScanner implements BleScanner {
@@ -27,45 +30,46 @@ class NoopBleScanner implements BleScanner {
  */
 class RealBleScanner implements BleScanner {
   readonly isReal = true;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- third-party module loaded dynamically, no types at build time
+  // third-party module loaded dynamically, no types at build time
   private manager: any;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see above
   constructor(manager: any) {
     this.manager = manager;
   }
 
-  scan(timeoutMs: number): Promise<BleBeaconHit | null> {
+  scan(timeoutMs: number, registeredMacs: string[]): Promise<BleBeaconHit | null> {
+    // Vendor beacons are MAC-based (non-configurable): match device.id (the MAC on
+    // Android) against the registered list — no iBeacon UUID/major/minor filtering.
+    const macSet = new Set(registeredMacs.map((m) => m.trim().toUpperCase()));
+    if (macSet.size === 0) return Promise.resolve(null);
     return new Promise((resolve) => {
-      let best: { hit: BleBeaconHit; rssi: number } | null = null;
+      let best: { mac: string; rssi: number } | null = null;
       const finish = () => {
         try {
           this.manager.stopDeviceScan();
         } catch {
           // ignore
         }
-        resolve(best ? best.hit : null);
+        resolve(best ? { mac: best.mac } : null);
       };
       const timer = setTimeout(finish, timeoutMs);
       try {
         this.manager.startDeviceScan(
           null,
           { allowDuplicates: false },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ble-plx callback types unavailable
+          // ble-plx callback types unavailable at build time
           (error: any, device: any) => {
             if (error) {
               clearTimeout(timer);
               finish();
               return;
             }
-            if (device && (device.localName || device.name)) {
-              const rssi = typeof device.rssi === "number" ? device.rssi : -100;
-              if (!best || rssi > best.rssi) {
-                best = {
-                  hit: { beaconId: String(device.id), zone: device.localName ?? device.name ?? null },
-                  rssi,
-                };
-              }
+            if (!device?.id) return;
+            const mac = String(device.id).toUpperCase();
+            if (!macSet.has(mac)) return;
+            const rssi = typeof device.rssi === "number" ? device.rssi : -100;
+            if (!best || rssi > best.rssi) {
+              best = { mac, rssi };
             }
           },
         );

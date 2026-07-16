@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from tests.conftest import DEMO_OTP, PHONES, login, set_otp
+from tests.conftest import DEMO_OTP, NON_WHITELISTED_PHONE, PHONES, login, set_otp
 
 
 async def test_send_otp_success(client):
@@ -65,6 +65,26 @@ async def test_demo_otp_rejected_for_unknown_phone(client):
     # DEMO_OTP shortcut must never work for phones not present in the employees table
     r = await client.post("/api/auth/verify-otp", json={"phone": "+919999999988", "otp": DEMO_OTP})
     assert r.status_code == 401
+
+
+async def test_demo_otp_rejected_for_non_whitelisted_seeded_phone(client):
+    # employee EXISTS but is not in DEMO_OTP_WHITELIST → demo OTP must be rejected
+    r = await client.post(
+        "/api/auth/verify-otp", json={"phone": NON_WHITELISTED_PHONE, "otp": DEMO_OTP}
+    )
+    assert r.status_code == 401
+
+
+async def test_non_whitelisted_phone_real_otp_still_works(client):
+    # the real OTP flow is unchanged for non-whitelisted employees
+    code = await set_otp(NON_WHITELISTED_PHONE)
+    r = await client.post(
+        "/api/auth/verify-otp", json={"phone": NON_WHITELISTED_PHONE, "otp": code}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_new"] is False
+    assert body["employee"]["emp_id"] == "0031"
 
 
 async def test_refresh_token(client):

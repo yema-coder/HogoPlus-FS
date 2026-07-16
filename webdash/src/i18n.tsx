@@ -146,6 +146,16 @@ const D: Record<string, [string, string, string]> = {
   hasManager: ["Has manager", "प्रबंधक है", "व्यवस्थापक आहे"],
   pages: ["pages", "पृष्ठ", "पाने"],
   chunks: ["chunks", "खंड", "खंड"],
+  // BLE beacons (MAC-based vendor beacons)
+  beacons: ["BLE beacons", "BLE बीकन", "BLE बीकन"],
+  macAddress: ["MAC address", "MAC पता", "MAC पत्ता"],
+  zoneEn: ["Zone (English)", "क्षेत्र (अंग्रेज़ी)", "झोन (इंग्रजी)"],
+  zoneHi: ["Zone (Hindi)", "क्षेत्र (हिंदी)", "झोन (हिंदी)"],
+  zoneMr: ["Zone (Marathi)", "क्षेत्र (मराठी)", "झोन (मराठी)"],
+  addBeacon: ["Add beacon", "बीकन जोड़ें", "बीकन जोडा"],
+  invalidMac: ["MAC must be AA:BB:CC:DD:EE:FF", "MAC प्रारूप AA:BB:CC:DD:EE:FF होना चाहिए", "MAC स्वरूप AA:BB:CC:DD:EE:FF असावे"],
+  active: ["Active", "सक्रिय", "सक्रिय"],
+  inactive: ["Inactive", "निष्क्रिय", "निष्क्रिय"],
 };
 
 const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }>({

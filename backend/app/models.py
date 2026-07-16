@@ -308,6 +308,8 @@ class BleBeacon(TimestampMixin, Base):
     __tablename__ = "ble_beacons"
     id: Mapped[uuid.UUID] = uuid_pk()
     beacon_uuid: Mapped[str] = mapped_column(String(100), nullable=False)
+    # vendor beacons are MAC-based (non-configurable) — matching happens on this field
+    mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True, unique=True)
     major: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     zone_label_en: Mapped[str] = mapped_column(String(100), nullable=False)

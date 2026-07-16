@@ -85,9 +85,15 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
     employee = (
         await session.execute(select(Employee).where(Employee.phone == phone))
     ).scalar_one_or_none()
-    # DEMO_OTP shortcut is only honoured for phones that already exist in the employees
-    # table — it can never be used to create accounts for unknown phones.
-    demo_ok = settings.demo_otp_enabled and otp == settings.demo_otp and employee is not None
+    # DEMO_OTP shortcut requires ALL of: DEMO_OTP_ENABLED, the phone explicitly listed
+    # in DEMO_OTP_WHITELIST, and an existing employee row. It can never be used for
+    # unknown phones or non-whitelisted seeded numbers.
+    demo_ok = (
+        settings.demo_otp_enabled
+        and otp == settings.demo_otp
+        and employee is not None
+        and phone in settings.demo_otp_whitelist_set
+    )
     if not ((stored and _hash(otp) == stored) or demo_ok):
         fails = await redis_client.incr(f"otp:fail:{phone}")
         if fails == 1:

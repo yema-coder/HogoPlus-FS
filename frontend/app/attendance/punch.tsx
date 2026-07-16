@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { punchIn } from "@/src/api/endpoints";
+import { beaconMacs, punchIn } from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
@@ -49,15 +49,21 @@ export default function PunchInScreen() {
     try {
       const scanner = getBleScanner();
       if (scanner.isReal) {
+        let macs: string[] = [];
+        try {
+          macs = (await beaconMacs()).macs;
+        } catch {
+          macs = []; // offline / endpoint failure → skip zone step gracefully
+        }
         const asked = await storage.getItem<boolean>("hogo.bleAsked", false);
         if (!asked) {
           showToast(t("perm.bleExplain"), "info");
           await storage.setItem("hogo.bleAsked", true);
         }
         const allowed = await ensureBlePermissions();
-        ble = allowed ? await scanner.scan(3000) : null;
+        ble = allowed ? await scanner.scan(3000, macs) : null;
       } else {
-        ble = await scanner.scan(3000);
+        ble = await scanner.scan(3000, []);
       }
     } catch {
       ble = null;
@@ -68,8 +74,7 @@ export default function PunchInScreen() {
     const payload: Record<string, unknown> = {
       gps_lat: fix?.lat ?? null,
       gps_lng: fix?.lng ?? null,
-      ble_beacon_id: ble?.beaconId ?? null,
-      ble_zone: ble?.zone ?? null,
+      ble_beacon_id: ble?.mac ?? null,
     };
 
     let selfieUri = uri;

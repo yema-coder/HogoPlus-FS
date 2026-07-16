@@ -373,3 +373,39 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - APK build: NO EAS CLI — Emergent Publish panel generates .apk/.aab (inputs: app name + icon).
   Backend URL comes from Deployment Secrets (EXPO_PUBLIC_BACKEND_URL → https://hogo-backend-phase1.emergent.host).
   OTA/EAS Update NOT documented on platform — update path is rebuild + redistribute.
+
+## Prompt 8 — Build fix + OTP whitelist + BLE-MAC beacons (2026-06 fork) — DONE
+- A) ANDROID BUILD FIX (duplicate <uses-permission>): app.json android.permissions reduced to
+  ["POST_NOTIFICATIONS"] only. CAMERA/RECORD_AUDIO injected by expo-camera+expo-audio plugins,
+  ACCESS_FINE/COARSE_LOCATION by expo-location plugin, BLUETOOTH_SCAN(neverForLocation)/CONNECT/
+  BLUETOOTH/BLUETOOTH_ADMIN by react-native-ble-plx plugin. Verified via real `expo prebuild` in
+  /tmp sandbox copy (NEVER prebuild inside /app/frontend — leaves android/ dir + edits package.json):
+  every permission exactly once in AndroidManifest.xml. The 2 `uses-permission-sdk-23` location
+  entries (maxSdkVersion=30, from ble-plx) are a DIFFERENT element type — legal, not duplicates.
+- B) DEMO OTP WHITELIST: settings.demo_otp_whitelist (env DEMO_OTP_WHITELIST, comma-separated) +
+  demo_otp_whitelist_set property. verify-otp demo shortcut now requires enabled AND whitelisted
+  AND employee exists (replaces all-seeded-numbers behavior). Real OTP flow/rate-limits/lockout
+  unchanged. Prod .env whitelist: +918483029039 (CGM), +917972540971 (worker — Play-reviewer acct).
+  conftest whitelists all test PHONES + +919777777701 + +919888888801 (registered during tests);
+  NON_WHITELISTED_PHONE +919000000031 (emp 0031) seeded to prove rejection.
+- C) BLE-MAC BEACON MATCHING (vendor ships MAC-based, non-configurable beacons):
+  * ble_beacons.mac_address String(17) nullable UNIQUE (alembic 0006, applied to Neon).
+  * BeaconIn/PatchIn: mac_address validated ^[0-9A-F]{2}(:..){5}$, normalized uppercase
+    (schemas.normalize_mac); beacon_uuid now optional (default ""); duplicate MAC → 409.
+  * punch-in: backend matches sent MAC against active registered beacons (uppercase equality),
+    resolves ble_zone=zone_label_en; registered→verified_plus, unregistered→ignored (verified),
+    no BLE→verified. PunchInIn.ble_zone REMOVED (backend resolves zone).
+  * NEW GET /api/attendance/beacon-macs (any approved employee) → {"macs":[active registered MACs]}.
+  * Mobile BleScanner.scan(timeoutMs, registeredMacs): matches device.id (Android=MAC,
+    case-insensitive) against the set, strongest-RSSI wins, iBeacon/name filtering removed;
+    empty list → instant null; noop fallback + 3s scan window unchanged. punch.tsx fetches
+    beacon-macs (offline-safe catch→[]) and sends ble_beacon_id=matched MAC only.
+  * Webdash Admin: new "📡 BLE beacons" card (list/add/toggle-active/delete, client-side MAC
+    format validation, trilingual i18n keys beacons/macAddress/zoneEn|Hi|Mr/addBeacon/invalidMac).
+- Tests: 140/140 pytest (was 136; +2 whitelist auth, +2 MAC attendance incl. beacon-macs;
+  beacon CRUD test now covers mac normalize/422/409). Prod verified: CGM demo login 200,
+  non-whitelisted seeded 401, beacon-macs 401/200, beacon create normalized + deleted.
+- ENV NOTE: this fork's container has NO local postgres/redis (managed Neon/Upstash cutover).
+  For pytest: apt install postgresql postgresql-server-dev-15 redis-server, build pgvector v0.8.0
+  from source (make && make install), create role hogo/hogo_secret SUPERUSER + db hogoplus_test,
+  service postgresql start && service redis-server start.
