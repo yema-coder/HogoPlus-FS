@@ -249,6 +249,10 @@ class Incident(TimestampMixin, Base):
     ai_confirmed_by: Mapped[str | None] = mapped_column(String(20), nullable=True)
     ai_suggested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     detected_plate: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    plate_status: Mapped[str | None] = mapped_column(String(20), nullable=True)  # pending|detected|not_detected
+    plate_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-100
+    plate_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # rekognition|llm_vision
+    plate_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # code when not_detected
 
 
 class IncidentTimeline(Base):

@@ -1,10 +1,12 @@
+import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
-import { Camera as CameraIcon, Car, CircleDot, MapPin } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Smartphone } from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -67,10 +69,16 @@ export default function IncidentDetailScreen() {
     void load();
   }, [load]);
 
-  // AI severity classification lands async — one light re-poll if it hasn't yet
+  // AI severity + ANPR land async — re-poll lightly (max 5x) while either is pending
+  const pollCount = useRef(0);
   useEffect(() => {
-    if (!detail || detail.severity_reason) return;
-    const timer = setTimeout(() => void load(), 8000);
+    if (!detail) return;
+    const waiting = !detail.severity_reason || detail.plate_status === "pending";
+    if (!waiting || pollCount.current >= 5) return;
+    const timer = setTimeout(() => {
+      pollCount.current += 1;
+      void load();
+    }, 8000);
     return () => clearTimeout(timer);
   }, [detail, load]);
 
@@ -123,6 +131,21 @@ export default function IncidentDetailScreen() {
   const def = detail ? categoryDef(detail.category) : null;
   const CatIcon = def?.icon ?? CircleDot;
 
+  const PLATE_REASON_KEY: Record<string, string> = {
+    no_text_found: "incident.reasonNoText",
+    no_valid_plate: "incident.reasonNoValidPlate",
+    detection_failed: "incident.reasonDetectionFailed",
+  };
+
+  const copyPlate = async () => {
+    if (!detail?.detected_plate) return;
+    await Clipboard.setStringAsync(detail.detected_plate);
+    showToast(t("incident.copied"), "success");
+  };
+
+  const plateDetected =
+    detail?.detected_plate && (detail.plate_status === "detected" || !detail.plate_status);
+
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-detail-screen">
       <ScreenHeader title={def ? t(def.tKey) : t("reports.title")} />
@@ -134,15 +157,22 @@ export default function IncidentDetailScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
-          {detail.video_key ? (
-            <IncidentVideo uri={fileUrl(detail.video_key)} />
-          ) : detail.photo_key ? (
-            <Image
-              source={{ uri: fileUrl(detail.photo_key) }}
-              style={styles.photo}
-              resizeMode="cover"
-              testID="incident-photo"
-            />
+          {detail.video_key || detail.photo_key ? (
+            <View style={styles.mediaCard} testID="incident-media-card">
+              {detail.video_key ? (
+                <IncidentVideo uri={fileUrl(detail.video_key)} />
+              ) : (
+                <Image
+                  source={{ uri: fileUrl(detail.photo_key as string) }}
+                  style={styles.photo}
+                  resizeMode="cover"
+                  testID="incident-photo"
+                />
+              )}
+              <View style={styles.mediaBadge}>
+                <StatusChip status={detail.status} />
+              </View>
+            </View>
           ) : null}
           <View style={styles.headRow}>
             <View style={[styles.catIcon, { backgroundColor: `${def?.tint ?? colors.muted}18` }]}>
@@ -153,35 +183,96 @@ export default function IncidentDetailScreen() {
               <Text style={styles.meta}>{formatDateTime(detail.created_at)}</Text>
             </View>
             <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <StatusChip status={detail.status} />
+              {!detail.video_key && !detail.photo_key ? <StatusChip status={detail.status} /> : null}
               <SeverityChip severity={detail.severity} testID="incident-severity-chip" />
             </View>
           </View>
 
-          {detail.detected_plate ? (
-            <View style={styles.plateChip} testID="incident-plate-chip">
-              <Car size={18} color={colors.primary} strokeWidth={2.4} />
-              <Text style={styles.plateLabel}>{t("incident.detectedPlate")}</Text>
-              <Text style={styles.plateText}>{detail.detected_plate}</Text>
-            </View>
-          ) : null}
-
-          {detail.address_text || detail.gps_lat != null ? (
-            <View style={styles.locationBlock} testID="incident-location-block">
-              <View style={styles.locationRow}>
-                <MapPin size={18} color={colors.primary} strokeWidth={2.4} />
-                <Text style={styles.locationLabel}>{t("common.location")}</Text>
+          {plateDetected ? (
+            <View style={styles.plateCard} testID="incident-plate-card">
+              <View style={styles.plateHeader}>
+                <Car size={18} color={colors.primary} strokeWidth={2.4} />
+                <Text style={styles.plateLabel}>{t("incident.detectedPlate")}</Text>
               </View>
-              {detail.address_text ? (
-                <Text style={styles.locationAddress}>{detail.address_text}</Text>
+              <View style={styles.plateRow}>
+                <Text style={styles.plateBig} testID="incident-plate-text">
+                  {detail.detected_plate}
+                </Text>
+                <Pressable
+                  style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.6 }]}
+                  onPress={() => void copyPlate()}
+                  testID="copy-plate-button"
+                >
+                  <Copy size={16} color={colors.primary} strokeWidth={2.2} />
+                  <Text style={styles.copyText}>{t("incident.copy")}</Text>
+                </Pressable>
+              </View>
+              {detail.plate_confidence != null ? (
+                <Text style={styles.plateMeta}>
+                  {t("incident.confidence")}: {Math.round(detail.plate_confidence)}%
+                </Text>
               ) : null}
-              {detail.gps_lat != null && detail.gps_lng != null ? (
-                <Text style={styles.locationCoords}>
-                  {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
+            </View>
+          ) : detail.plate_status === "pending" ? (
+            <View style={styles.plateCard} testID="incident-plate-pending">
+              <View style={styles.plateHeader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.plateLabel}>{t("incident.plateChecking")}</Text>
+              </View>
+            </View>
+          ) : detail.plate_status === "not_detected" ? (
+            <View style={[styles.plateCard, styles.plateMissCard]} testID="incident-plate-missing">
+              <View style={styles.plateHeader}>
+                <Car size={18} color={colors.warning} strokeWidth={2.4} />
+                <Text style={styles.plateMissTitle}>{t("incident.plateNotDetected")}</Text>
+              </View>
+              {detail.plate_reason ? (
+                <Text style={styles.plateMeta}>
+                  {t(PLATE_REASON_KEY[detail.plate_reason] ?? "incident.reasonNoValidPlate")}
                 </Text>
               ) : null}
             </View>
           ) : null}
+
+          {detail.address_text || detail.gps_lat != null ? (
+            <>
+              <View style={styles.locationBlock} testID="incident-object-location">
+                <View style={styles.locationRow}>
+                  <MapPin size={18} color={colors.primary} strokeWidth={2.4} />
+                  <Text style={styles.locationLabel}>{t("incident.objectLocation")}</Text>
+                </View>
+                {detail.address_text ? (
+                  <Text style={styles.locationAddress}>{detail.address_text}</Text>
+                ) : null}
+                {detail.gps_lat != null && detail.gps_lng != null ? (
+                  <Text style={styles.locationCoords}>
+                    {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
+                  </Text>
+                ) : null}
+              </View>
+              <View style={styles.locationBlock} testID="incident-device-location">
+                <View style={styles.locationRow}>
+                  <Smartphone size={18} color={colors.accent} strokeWidth={2.4} />
+                  <Text style={styles.locationLabel}>{t("incident.deviceLocation")}</Text>
+                </View>
+                {detail.address_text ? (
+                  <Text style={styles.locationAddress}>{detail.address_text}</Text>
+                ) : null}
+                {detail.gps_lat != null && detail.gps_lng != null ? (
+                  <Text style={styles.locationCoords}>
+                    {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
+                  </Text>
+                ) : null}
+              </View>
+            </>
+          ) : null}
+
+          <View style={styles.capturedRow} testID="incident-captured-at">
+            <Clock size={15} color={colors.muted} strokeWidth={2.2} />
+            <Text style={styles.capturedText}>
+              {t("incident.capturedAt")}: {formatDateTime(detail.created_at)}
+            </Text>
+          </View>
 
           {detail.severity_reason ? (
             <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
@@ -362,20 +453,47 @@ const styles = StyleSheet.create({
   timelineTime: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   actions: { gap: spacing.md, marginTop: spacing.md },
   resolveBox: { gap: spacing.sm },
-  plateChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    alignSelf: "flex-start",
-    backgroundColor: colors.brandTertiary,
-    borderRadius: radius.pill,
+  mediaCard: {
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceTertiary,
+  },
+  mediaBadge: { position: "absolute", top: spacing.sm, right: spacing.sm },
+  plateCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    minHeight: 40,
+    padding: spacing.md,
+    gap: spacing.xs,
   },
+  plateMissCard: { borderColor: colors.warning, backgroundColor: `${colors.warning}10` },
+  plateHeader: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  plateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  plateBig: {
+    fontFamily: fonts.bold,
+    fontSize: type.xl,
+    color: colors.text,
+    letterSpacing: 2,
+  },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    minHeight: 36,
+  },
+  copyText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.primary },
   plateLabel: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
-  plateText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.primary, letterSpacing: 1 },
+  plateMeta: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
+  plateMissTitle: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  capturedRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  capturedText: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   resolutionPhoto: {
     width: "100%",
     aspectRatio: 4 / 3,

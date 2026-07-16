@@ -409,3 +409,38 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
   For pytest: apt install postgresql postgresql-server-dev-15 redis-server, build pgvector v0.8.0
   from source (make && make install), create role hogo/hogo_secret SUPERUSER + db hogoplus_test,
   service postgresql start && service redis-server start.
+
+## Prompt 9 — ANPR PRODUCTION FIX + DETECTION UPGRADE + RESULT-CARD UI (2026-06 fork) — DONE
+- ROOT CAUSE (proven with evidence): production deployment runs ONLY the FastAPI process (no
+  Celery worker), and its .delay() enqueues to Upstash silently FAILED (swallowed by
+  `except Exception: pass`) — repro: incident created on prod backend → 95s later queue len 0,
+  zero tasks received by a live worker on the same broker. Secondary defect: strict plate regex
+  missed OCR confusables (Rekognition read MH02FX2660 as "MHO2FX2660" — O/0 confusion).
+- FIX: incident AI (ANPR + classification) now runs IN-PROCESS via FastAPI BackgroundTasks
+  (tasks.run_incident_ai_background — ANPR first, LLM classify second; forms/resolution use
+  run_plate_detection_background). Celery task detect_plate kept for manual backfills; beat
+  sweeps unchanged. Enqueue guarded by TESTING env in routes.
+- DETECTION UPGRADE (app/anpr.py): DetectText → extract_plate_from_lines (exact regex + Indian
+  state-code check, then POSITIONAL confusable coercion O→0,I→1,Z→2,S→5,B→8,G→6 etc.);
+  if no valid plate → llm_plate_fallback (ai_core.vision_json, Universal Key) — incidents only.
+  Outcome ALWAYS stored: incidents.plate_status(pending/detected/not_detected), plate_confidence,
+  plate_source(rekognition/llm_vision), plate_reason(no_text_found/no_valid_plate/detection_failed)
+  — migration 0008... (0007_anpr_pipeline, applied to Neon, legacy detected rows backfilled).
+  Every outcome logged INFO "ANPR incident/<id> → status=... plate=...".
+- RESULT-CARD UI: mobile incident/[id].tsx — media card w/ status badge, Detected Number Plate
+  card (big mono plate + confidence % + expo-clipboard copy) OR "Number Plate Not Detected"
+  banner + translated reason OR pending spinner (re-polls ≤5×8s); Object Location + Device
+  Location blocks (same data, labeled separately); captured-at row. Webdash Department.tsx —
+  incidents clickable → IncidentModal (same layout, navigator.clipboard copy); dashboard dept
+  endpoint now returns photo_url/video_url/plate_*/address_text/gps/description for incidents.
+  i18n: 12 new keys ×3 langs (mobile locales + webdash i18n.tsx).
+- ACCEPTANCE DEMONSTRATED: user's original prod incident 668d75cc (16/07 21:01 IST) reprocessed
+  via celery → plate MH02FX2660 conf 64.2 rekognition stored in prod Neon; NEW incident d37baac1
+  created via API → in-process background task detected MH02FX2660 with NO celery; screenshots
+  of mobile + webdash result cards taken.
+- TESTS: 147/147 (was 140; +7: test_prompt9_anpr.py normalization/fallback/persistence + ux_pack updated).
+- ⚠️ DEPLOYMENT PREREQS (user must verify in Deployment Panel Secrets before Publish): AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY, AWS_REGION, EMERGENT_LLM_KEY must exist (ANPR now runs in the API container).
+  CELERY_* secrets likely missing/wrong there (the original root cause) — needed only for sweeps.
+- NOTE: attendance face-verification + beat sweeps still depend on the sandbox Celery worker —
+  same architectural gap, NOT fixed (out of scope, flag for future prompt).

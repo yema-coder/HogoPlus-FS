@@ -377,38 +377,27 @@ def ai_suggestion_timeout_sweep() -> dict:
     return asyncio.run(_ai_timeout_sweep_async())
 
 
-# ---------------- Opportunistic ANPR (Rekognition DetectText, NO LLM) ----------------
+# ---------------- Opportunistic ANPR (DetectText → Universal-Key vision fallback) ----------------
 
-INDIAN_PLATE_RE = None  # compiled lazily
-
-
-def extract_plate(lines: list[str]) -> str | None:
-    """Regex an Indian vehicle plate (e.g. MH12AB1234) out of DetectText lines."""
-    import re
-
-    global INDIAN_PLATE_RE
-    if INDIAN_PLATE_RE is None:
-        INDIAN_PLATE_RE = re.compile(r"\b([A-Z]{2})[\s-]?(\d{1,2})[\s-]?([A-Z]{1,3})[\s-]?(\d{4})\b")
-    for line in lines:
-        text = line["text"] if isinstance(line, dict) else str(line)
-        m = INDIAN_PLATE_RE.search(text.upper())
-        if m:
-            return "".join(m.groups())
-    return None
+from app.anpr import extract_plate  # noqa: E402  (re-export for back-compat)
 
 
 async def _detect_plate_async(kind: str, record_id: str) -> dict:
-    """Cheap plate check on every non-selfie photo: DetectText + regex.
-    Found → store; not found → store nothing, no UI. Never uses LLM vision."""
+    """ANPR pipeline for a record's photos: Rekognition DetectText + confusable-aware
+    Indian-plate extraction; incidents additionally fall back to Universal-Key vision.
+    The outcome is ALWAYS stored on incidents (plate_status/confidence/source/reason)
+    and ALWAYS logged at INFO level."""
     from starlette.concurrency import run_in_threadpool
 
-    from app.aws import RekognitionUnavailable, detect_text
+    from app.anpr import extract_plate_from_lines, llm_plate_fallback
+    from app.aws import detect_text
     from app.models import FormSubmission, Incident
     from app.shift_logic import now_ist
     from app.storage import get_storage
 
     engine, sm = _session_factory()
     calls = 0
+    vision_calls = 0
     try:
         async with sm() as session:
             keys: list[str] = []
@@ -426,38 +415,123 @@ async def _detect_plate_async(kind: str, record_id: str) -> dict:
                 return {"error": f"unknown kind {kind}"}
 
             plates: list[str] = []
+            best: tuple[str | None, float | None, str | None] = (None, None, None)
+            any_text = False
+            any_call_ok = False
             for key in keys:
                 try:
                     img = get_storage().get(key)
                     lines = await run_in_threadpool(detect_text, img)
                     calls += 1
-                except (RekognitionUnavailable, Exception) as e:
+                    any_call_ok = True
+                except Exception as e:
                     logger.warning("DetectText failed for %s/%s: %s", kind, key, e)
                     continue
-                plate = extract_plate(lines)
-                if plate and plate not in plates:
-                    plates.append(plate)
+                if lines:
+                    any_text = True
+                plate, conf = extract_plate_from_lines(lines)
+                if plate:
+                    if best[0] is None:
+                        best = (plate, conf, "rekognition")
+                    if plate not in plates:
+                        plates.append(plate)
 
-            if plates:
-                if kind == "incident":
-                    rec.detected_plate = plates[0]
+            # accuracy over cost: incidents with no valid DetectText plate get a
+            # Universal-Key vision second opinion on the primary photo
+            if kind == "incident" and best[0] is None and keys:
+                try:
+                    img = get_storage().get(keys[0])
+                    plate, conf = await llm_plate_fallback(img)
+                    vision_calls += 1
+                    any_call_ok = True
+                    if plate:
+                        best = (plate, conf, "llm_vision")
+                        plates.append(plate)
+                except Exception as e:
+                    logger.warning("ANPR vision fallback failed for %s/%s: %s", kind, record_id, e)
+
+            if kind == "incident":
+                if best[0]:
+                    rec.detected_plate, rec.plate_confidence, rec.plate_source = best
+                    rec.plate_status = "detected"
+                    rec.plate_reason = None
                 else:
-                    rec.detected_plates = plates
+                    rec.plate_status = "not_detected"
+                    if not any_call_ok:
+                        rec.plate_reason = "detection_failed"
+                    elif any_text:
+                        rec.plate_reason = "no_valid_plate"
+                    else:
+                        rec.plate_reason = "no_text_found"
+                await session.commit()
+            elif plates:
+                rec.detected_plates = plates
                 await session.commit()
 
-            if calls:
+            if calls or vision_calls:
                 r = _fresh_redis()
                 try:
-                    uk = f"ai:usage:{now_ist().date().isoformat()}:detect_text"
-                    if r.incr(uk) == calls:
-                        r.expire(uk, 8 * 86400)
-                    elif calls > 1:
-                        r.incrby(uk, 0)
+                    day = now_ist().date().isoformat()
+                    if calls:
+                        uk = f"ai:usage:{day}:detect_text"
+                        if r.incrby(uk, calls) == calls:
+                            r.expire(uk, 8 * 86400)
+                    if vision_calls:
+                        vk = f"ai:usage:{day}:anpr_vision"
+                        if r.incrby(vk, vision_calls) == vision_calls:
+                            r.expire(vk, 8 * 86400)
                 finally:
                     r.close()
-            return {"plates": plates, "detect_text_calls": calls}
+
+            outcome = {
+                "plates": plates,
+                "detect_text_calls": calls,
+                "vision_calls": vision_calls,
+            }
+            if kind == "incident":
+                outcome.update({
+                    "plate_status": rec.plate_status,
+                    "confidence": rec.plate_confidence,
+                    "source": rec.plate_source,
+                    "reason": rec.plate_reason,
+                })
+                logger.info(
+                    "ANPR incident/%s → status=%s plate=%s conf=%s source=%s reason=%s "
+                    "detect_text_calls=%d vision_calls=%d",
+                    record_id, rec.plate_status, rec.detected_plate, rec.plate_confidence,
+                    rec.plate_source, rec.plate_reason, calls, vision_calls,
+                )
+            else:
+                logger.info(
+                    "ANPR submission/%s → plates=%s detect_text_calls=%d",
+                    record_id, plates, calls,
+                )
+            return outcome
     finally:
         await engine.dispose()
+
+
+async def run_incident_ai_background(incident_id: str, with_plate: bool) -> None:
+    """In-process incident AI (ANPR + classification) as a FastAPI background task.
+    Production containers run NO Celery worker — this must never depend on a broker.
+    ANPR runs FIRST: the plate result is the product; classification LLM is slower."""
+    if with_plate:
+        try:
+            await _detect_plate_async("incident", incident_id)
+        except Exception:
+            logger.exception("ANPR pipeline failed for incident %s", incident_id)
+    try:
+        await _classify_incident_async(incident_id)
+    except Exception:
+        logger.exception("incident classification failed for %s", incident_id)
+
+
+async def run_plate_detection_background(kind: str, record_id: str) -> None:
+    """In-process ANPR only (form submissions / resolution photos)."""
+    try:
+        await _detect_plate_async(kind, record_id)
+    except Exception:
+        logger.exception("ANPR pipeline failed for %s %s", kind, record_id)
 
 
 @celery.task(name="app.tasks.detect_plate")

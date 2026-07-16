@@ -1,0 +1,28 @@
+{
+  "summary": "Prompt 9 ANPR result-card frontend testing. Mobile web (430x932) + Webdash (1920x800) both verified against the two production incident IDs. Backend spot-check via curl: GET /api/incidents/668d75cc... returns plate_status=detected, plate_source=rekognition, plate_confidence=64.17, detected_plate=MH02FX2660 (matches spec). Not_detected incident 8b79a503... returns plate_status=not_detected, plate_reason=no_valid_plate. Mobile: language screen -> phone +918483029039 -> OTP 123456 (single successful attempt), deep-link to detected & not_detected screens both render exactly as specified; incident-plate-text=MH02FX2660, Confidence 64%, Copy button triggers 'Copied' toast, both incident-object-location and incident-device-location blocks show '301, Building, 15th Road, Khar West, Konkan Division' + coords 19.07547, 72.83192, incident-captured-at row shows '16/07/2026 03:31 PM'. Not_detected: incident-plate-missing banner 'Number Plate Not Detected' + reason 'Text found but not a valid plate', no plate-card. Webdash: password login (0001/Hogo@2026Cgm) OK; /dept/ACCOUNTS shows detected incident with inline '🚗 MH02FX2660' chip in feed and clicking opens modal with modal-plate-text=MH02FX2660, Confidence: 64%, modal-object-location + modal-device-location (same address+coords), captured-at line, media with 'submitted' status badge. Trends chart (14-day) and attendance register render without errors. Not_detected incident 8b79a503... is in dept CANE_YARD (NOT ACCOUNTS as review request stated); tested there — modal-plate-missing shows '🚫 Number Plate Not Detected' + reason, both location blocks + captured-at present. Copy button in webdash modal did NOT visually flip to 'Copied' state under Playwright (clipboard API present but writeText likely rejected without explicit clipboard-write permission grant in test env) — mobile toast worked because it does not depend on clipboard resolution the same way (mobile calls showToast synchronously after await Clipboard.setStringAsync which resolves). Recommend adding a .catch fallback so users still see 'Copied' feedback if clipboard rejects.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Webdash IncidentModal copy button", "issue": "navigator.clipboard.writeText(...).then(setCopied) has no .catch(); if clipboard API rejects (e.g., permissions/insecure context) the '✓ Copied' state never toggles and user gets no feedback. Reference: /app/webdash/src/screens/Department.tsx:21-25", "testID": "modal-plate-copy", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_11.json"],
+  "action_items": [
+    "Optional: harden modal-plate-copy in webdash by adding .catch() and using document.execCommand fallback so 'Copied' toast fires even when navigator.clipboard rejects.",
+    "Minor doc nit: review request stated not_detected incident 8b79a503... is in ACCOUNTS feed — it is actually in CANE_YARD (department_code=CANE_YARD). Tests passed there. No code change needed.",
+    "Nothing else required — all Prompt 9 acceptance criteria verified."
+  ],
+  "critical_code_review_comments": [
+    "Clipboard write path in both files should have a rejection fallback: /app/webdash/src/screens/Department.tsx:21 (no .catch) and /app/frontend/app/incident/[id].tsx:140 (uses expo-clipboard so it awaits, but a try/catch would prevent an uncaught promise rejection if writing fails)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100% (1 low-priority UX robustness note)"},
+  "seed_data_creation": "None. Read-only tests against production Neon DB using existing incident IDs 668d75cc... and 8b79a503...",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Password login (0001/Hogo@2026Cgm) works reliably; avoids OTP rate limit. Note: rapid consecutive password logins can trip lockout (5/15min per emp_id). Mobile OTP: only ONE Get OTP call succeeded (rate limit 3/10min); design tests to hit /login once and reuse token. The webdash OTP tab is default — click 'Password login' text to switch. Webdash OTP screen has a hidden testID='otp-input' single field capturing all 6 digits; type digits sequentially after clicking around x=45,y=172 (or use the testID). Not_detected incident 8b79a503... lives in CANE_YARD dept, not ACCOUNTS.",
+  "rca_of_issue": "N/A — no blocking bugs found; all acceptance criteria met."
+}

@@ -156,6 +156,19 @@ const D: Record<string, [string, string, string]> = {
   invalidMac: ["MAC must be AA:BB:CC:DD:EE:FF", "MAC प्रारूप AA:BB:CC:DD:EE:FF होना चाहिए", "MAC स्वरूप AA:BB:CC:DD:EE:FF असावे"],
   active: ["Active", "सक्रिय", "सक्रिय"],
   inactive: ["Inactive", "निष्क्रिय", "निष्क्रिय"],
+  // ANPR result card (Prompt 9)
+  detectedPlate: ["Detected Number Plate", "पहचानी गई नंबर प्लेट", "ओळखलेली नंबर प्लेट"],
+  plateNotDetected: ["Number Plate Not Detected", "नंबर प्लेट नहीं मिली", "नंबर प्लेट आढळली नाही"],
+  plateChecking: ["Checking for number plate…", "नंबर प्लेट जाँची जा रही है…", "नंबर प्लेट तपासली जात आहे…"],
+  confidence: ["Confidence", "विश्वसनीयता", "विश्वासार्हता"],
+  copy: ["Copy", "कॉपी", "कॉपी"],
+  copied: ["Copied", "कॉपी हो गया", "कॉपी झाले"],
+  objectLocation: ["Object Location", "वस्तु का स्थान", "वस्तूचे स्थान"],
+  deviceLocation: ["Device Location", "डिवाइस का स्थान", "डिव्हाइसचे स्थान"],
+  capturedAt: ["Captured at", "कैप्चर समय", "कॅप्चर वेळ"],
+  rNoText: ["No text found in the photo", "फोटो में कोई टेक्स्ट नहीं मिला", "फोटोमध्ये मजकूर आढळला नाही"],
+  rNoValidPlate: ["Text found but not a valid plate", "टेक्स्ट मिला पर मान्य नंबर प्लेट नहीं", "मजकूर आढळला पण वैध नंबर प्लेट नाही"],
+  rDetectionFailed: ["Plate check failed", "प्लेट जाँच विफल", "प्लेट तपासणी अयशस्वी"],
 };
 
 const LangCtx = createContext<{ lang: Lang; setLang: (l: Lang) => void; t: (k: string) => string }>({

@@ -96,6 +96,10 @@ export interface Incident {
   ai_confidence: number | null;
   ai_confirmed_by: string | null;
   detected_plate: string | null;
+  plate_status: "pending" | "detected" | "not_detected" | null;
+  plate_confidence: number | null;
+  plate_source: "rekognition" | "llm_vision" | null;
+  plate_reason: string | null;
   created_at: string | null;
 }
 

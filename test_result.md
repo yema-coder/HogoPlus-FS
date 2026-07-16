@@ -229,3 +229,13 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   NOT testable on web preview — noop scanner returns null on web/Expo Go BY DESIGN).
 - Webdash Admin: new "📡 BLE beacons" card (add/toggle/delete, MAC format validation).
 - Backend: 140/140 pytest green. Prod API verified via curl (whitelist 200/401, beacon-macs, CRUD).
+
+## Prompt 9 — ANPR production fix + result-card UI (2026-06)
+- Root cause: prod deploy has no celery worker + silent enqueue failure; fixed via in-process
+  FastAPI BackgroundTasks (ANPR first, classify second). anpr.py adds confusable coercion
+  (MHO2FX2660→MH02FX2660), state-code validation, Universal-Key vision fallback, and
+  plate_status/confidence/source/reason persisted on incidents (migration 0007 applied to Neon).
+- Mobile incident detail reworked to result-card layout (media+badge, plate card w/ copy,
+  object/device location, captured-at). Webdash Department has incident modal with same layout.
+- 147/147 pytest. Live verified on prod data: incident 668d75cc → MH02FX2660 (64%, rekognition).
+- Local postgres/redis must be reinstalled after each fork (see PRD runbook).

@@ -330,6 +330,16 @@ async def department_detail(
             "id": str(i.id), "category": i.category, "status": i.status,
             "severity": i.severity, "created_at": i.created_at.isoformat(),
             "detected_plate": i.detected_plate,
+            "plate_status": i.plate_status,
+            "plate_confidence": i.plate_confidence,
+            "plate_source": i.plate_source,
+            "plate_reason": i.plate_reason,
+            "description": i.description,
+            "address_text": i.address_text,
+            "gps_lat": i.gps_lat,
+            "gps_lng": i.gps_lng,
+            "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
+            "video_url": storage.url_for(i.video_key) if i.video_key else None,
         }
         for i in inc_rows
     ]

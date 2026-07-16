@@ -1,7 +1,8 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,6 +82,7 @@ async def list_forms(
 async def submit_form(
     definition_id: uuid.UUID,
     body: FormSubmitIn,
+    background: BackgroundTasks,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -129,14 +131,11 @@ async def submit_form(
             )
     await session.commit()
     await session.refresh(submission)
-    if submission.photos:
-        # opportunistic ANPR on form photos (DetectText only — never LLM)
-        try:
-            from app.tasks import detect_plate_task
+    if submission.photos and not os.environ.get("TESTING"):
+        # opportunistic ANPR on form photos — in-process (no Celery in production)
+        from app.tasks import run_plate_detection_background
 
-            detect_plate_task.delay("submission", str(submission.id))
-        except Exception:
-            pass
+        background.add_task(run_plate_detection_background, "submission", str(submission.id))
     return _sub_out(submission, definition.code)
 
 

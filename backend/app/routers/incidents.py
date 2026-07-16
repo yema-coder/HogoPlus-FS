@@ -1,7 +1,8 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +47,10 @@ def _out(i: Incident) -> dict:
         "ai_confidence": i.ai_confidence,
         "ai_confirmed_by": i.ai_confirmed_by,
         "detected_plate": i.detected_plate,
+        "plate_status": i.plate_status,
+        "plate_confidence": i.plate_confidence,
+        "plate_source": i.plate_source,
+        "plate_reason": i.plate_reason,
         "created_at": i.created_at.isoformat() if i.created_at else None,
     }
 
@@ -63,6 +68,7 @@ def _timeline_out(t: IncidentTimeline) -> dict:
 @router.post("/incidents")
 async def create_incident(
     body: IncidentCreateIn,
+    background: BackgroundTasks,
     employee: Employee = Depends(get_current_employee),  # pending users MAY report incidents
     session: AsyncSession = Depends(get_session),
 ):
@@ -95,6 +101,7 @@ async def create_incident(
         severity=body.severity,
         assigned_manager_id=assigned,
         status="submitted",
+        plate_status="pending" if body.photo_key else None,
     )
     session.add(incident)
     await session.flush()
@@ -114,16 +121,14 @@ async def create_incident(
     await session.commit()
     await session.refresh(incident)
 
-    # AI classification (category+dept+severity) + opportunistic ANPR run AFTER commit.
-    # Video incidents: classifier uses text+audio only (no video AI); ANPR only for photos.
-    try:
-        from app.tasks import classify_incident_severity, detect_plate_task
+    # AI classification (category+dept+severity) + opportunistic ANPR run AFTER the
+    # response, IN-PROCESS. Production containers have no Celery worker (root cause of
+    # the "plate chip never appears" bug) — never depend on a broker for incident AI.
+    # Video incidents: classifier uses text+audio only; ANPR only for photos.
+    if not os.environ.get("TESTING"):
+        from app.tasks import run_incident_ai_background
 
-        classify_incident_severity.delay(str(incident.id))
-        if incident.photo_key:
-            detect_plate_task.delay("incident", str(incident.id))
-    except Exception:
-        pass
+        background.add_task(run_incident_ai_background, str(incident.id), bool(incident.photo_key))
 
     return _out(incident)
 
@@ -272,6 +277,7 @@ async def list_incidents(
 async def change_status(
     incident_id: uuid.UUID,
     body: IncidentStatusIn,
+    background: BackgroundTasks,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -317,11 +323,8 @@ async def change_status(
     await dispatcher.notify(session, incident.reported_by, "incident_status", title, notif_body, "incident", str(incident.id))
     await session.commit()
     await session.refresh(incident)
-    if body.status == "resolved" and incident.resolution_photo_key:
-        try:
-            from app.tasks import detect_plate_task
+    if body.status == "resolved" and incident.resolution_photo_key and not os.environ.get("TESTING"):
+        from app.tasks import run_plate_detection_background
 
-            detect_plate_task.delay("incident", str(incident.id))
-        except Exception:
-            pass
+        background.add_task(run_plate_detection_background, "incident", str(incident.id))
     return _out(incident)

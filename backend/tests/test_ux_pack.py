@@ -167,15 +167,26 @@ async def test_anpr_plate_stored_and_silent(client, db_session, monkeypatch):
     out = await _detect_plate_async("incident", inc["id"])
     assert out["plates"] == ["MH12AB1234"]
     r = await client.get(f"/api/incidents/{inc['id']}", headers=w)
-    assert r.json()["detected_plate"] == "MH12AB1234"
+    body = r.json()
+    assert body["detected_plate"] == "MH12AB1234"
+    assert body["plate_status"] == "detected"
+    assert body["plate_source"] == "rekognition"
 
-    # no plate → nothing stored, no error
+    # no valid plate anywhere (vision fallback negative too) → explicit not_detected
     inc2 = await _create_incident(client, w)
+
+    async def _no_llm(img):
+        return None, None
+
     monkeypatch.setattr("app.aws.detect_text", lambda b: ["JUST A WALL"])
+    monkeypatch.setattr("app.anpr.llm_plate_fallback", _no_llm)
     out = await _detect_plate_async("incident", inc2["id"])
     assert out["plates"] == []
     r = await client.get(f"/api/incidents/{inc2['id']}", headers=w)
-    assert r.json()["detected_plate"] is None
+    body = r.json()
+    assert body["detected_plate"] is None
+    assert body["plate_status"] == "not_detected"
+    assert body["plate_reason"] == "no_valid_plate"
 
 
 def test_selfies_excluded_from_anpr():
