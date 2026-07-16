@@ -95,3 +95,21 @@ tr.red td { background: #FDF0F2; }
 .plate-big { font-size: 26px; font-weight: 800; letter-spacing: 3px; font-family: ui-monospace, monospace; }
 .loc-block { border: 1px solid var(--border, #E7E4DC); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
 .loc-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* Animated brand "eye" loader — CSS twin of the mobile EyeLoader.
+   Sequence: iris left → hold → right → hold → centre → blink. */
+.eye-loading { padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-weight: 600; }
+.eye-loader { position: relative; width: 60px; height: 36px; border: 3px solid var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: eye-blink 2.6s ease-in-out infinite; }
+.eye-iris { width: 16px; height: 16px; border-radius: 50%; background: var(--primary); position: relative; animation: eye-look 2.6s ease-in-out infinite; }
+.eye-iris::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+@keyframes eye-look {
+  0%, 6% { transform: translateX(0); }
+  12%, 32% { transform: translateX(-14px); }
+  44%, 64% { transform: translateX(14px); }
+  74%, 100% { transform: translateX(0); }
+}
+@keyframes eye-blink {
+  0%, 82% { transform: scaleY(1); }
+  86% { transform: scaleY(0.08); }
+  90%, 100% { transform: scaleY(1); }
+}

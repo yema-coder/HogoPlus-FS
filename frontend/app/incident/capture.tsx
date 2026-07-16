@@ -17,7 +17,6 @@ import {
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -39,6 +38,7 @@ import { ApiError, uploadFile } from "@/src/api/client";
 import { createIncident, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { departmentIcon } from "@/src/constants/departments";
@@ -263,7 +263,7 @@ export default function IncidentCapture() {
       return;
     }
 
-    // ---- photo path (full outbox support) ----
+    // ---- photo path: optimistic — always via the outbox ----
     let finalUri: string;
     try {
       finalUri = await buildFinalImage();
@@ -273,50 +273,27 @@ export default function IncidentCapture() {
       setSubmitting(false);
       return;
     }
-    try {
-      if (voiceUri) {
-        try {
-          const audio = await uploadFile(voiceUri, "voice_note.m4a");
-          payload.voice_note_key = audio.key;
-        } catch (audioErr) {
-          if (audioErr instanceof ApiError && audioErr.status === 0) throw audioErr;
-          // non-network audio failure: submit without the voice note
-          console.warn("voice note upload failed:", audioErr);
-        }
-      }
-      const uploaded = await uploadFile(finalUri, "incident.jpg");
-      const incident = await createIncident({ ...payload, photo_key: uploaded.key }) as Incident;
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
-      router.replace({ pathname: "/incident/success", params: { queued: "0", rid: incident.id } });
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 0) {
-        delete payload.voice_note_key;
-        await enqueue({
-          type: "incident",
-          payload,
-          photoUri: finalUri,
-          photoName: "incident.jpg",
-          photoField: "photo_key",
-        });
-        router.replace({ pathname: "/incident/success", params: { queued: "1" } });
-      } else if (e instanceof ApiError && e.status === 401) {
-        showToast(t("errors.sessionExpired"), "error");
-      } else if (e instanceof ApiError && (e.status === 400 || e.status === 413)) {
-        const extra = typeof e.detail === "string" ? ` (${e.detail})` : "";
-        showToast(`${t("errors.uploadRejected")}${extra}`, "error");
-        setSubmitting(false);
-      } else {
-        showToast(t("errors.server"), "error");
-        setSubmitting(false);
-      }
-    }
+    // Queue locally + upload in the background: the user is unblocked immediately;
+    // the outbox worker handles retries and the success screen shows live progress.
+    const oid = await enqueue({
+      type: "incident",
+      payload,
+      photoUri: finalUri,
+      photoName: "incident.jpg",
+      photoField: "photo_key",
+      files: voiceUri
+        ? [{ field: "voice_note_key", uri: voiceUri, name: "voice_note.m4a", kind: "audio" }]
+        : undefined,
+    });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    router.replace({ pathname: "/incident/success", params: { oid } });
   };
 
   const gpsChip = () => {
     if (gpsStatus === "searching") {
       return (
         <View style={styles.gpsChip} testID="gps-chip-searching">
-          <ActivityIndicator size="small" color="#FFFFFF" />
+          <EyeLoader size={16} color="#FFFFFF" />
           <Text style={styles.gpsChipText}>{t("incident.gpsSearching")}</Text>
         </View>
       );
@@ -481,7 +458,7 @@ export default function IncidentCapture() {
     if (gpsStatus === "searching") {
       return (
         <View style={styles.locLine} testID="capture-location-line">
-          <ActivityIndicator size="small" color={colors.primary} />
+          <EyeLoader size={16} />
           <Text style={styles.locText} numberOfLines={1}>{t("incident.gpsSearching")}</Text>
         </View>
       );

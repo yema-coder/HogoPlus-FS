@@ -8,7 +8,6 @@ import {
 import { Mic, Square, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   StyleSheet,
@@ -19,6 +18,7 @@ import { useTranslation } from "react-i18next";
 
 import { uploadFile } from "@/src/api/client";
 import { aiVoiceFill } from "@/src/api/endpoints";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, spacing, type } from "@/src/theme/tokens";
 
@@ -123,7 +123,7 @@ export function VoiceFillButton({ formDefinitionId, onFilled, testID }: Props) {
           <View style={styles.card} testID={`${testID}-modal`}>
             {processing ? (
               <>
-                <ActivityIndicator size="large" color={colors.primary} />
+                <EyeLoader size={36} />
                 <Text style={styles.title}>{t("ai.voiceProcessing")}</Text>
               </>
             ) : (

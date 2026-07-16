@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { CheckCircle2, CloudOff, Home, Sparkles } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -17,11 +16,13 @@ import { useTranslation } from "react-i18next";
 import { confirmIncidentRouting, incidentDetail, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { INCIDENT_CATEGORIES, categoryDef } from "@/src/constants/categories";
 import { departmentIcon } from "@/src/constants/departments";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
+import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
 const POLL_MS = 3000;
@@ -31,8 +32,16 @@ const MAX_POLLS = 12; // ~36s — after that the 10-min server timeout takes ove
 export default function IncidentSuccess() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { queued, rid } = useLocalSearchParams<{ queued: string; rid?: string }>();
+  const { queued, rid, oid } = useLocalSearchParams<{ queued: string; rid?: string; oid?: string }>();
   const isQueued = queued === "1";
+
+  // Optimistic mode: the report sits in the outbox — watch its background upload live
+  const outboxItem = useOutboxStore((s) => (oid ? s.items.find((i) => i.id === oid) : undefined));
+  const outboxResult = useOutboxStore((s) => (oid ? s.results[oid] : undefined));
+  const effectiveRid = rid ?? (typeof outboxResult === "string" ? outboxResult : undefined);
+  const sending = !!oid && !!outboxItem;
+  const willRetry = sending && (outboxItem?.retries ?? 0) > 0;
+  const uploadFailed = !!oid && !outboxItem && outboxResult === null;
 
   const [incident, setIncident] = useState<Incident | null>(null);
   const [pollTimedOut, setPollTimedOut] = useState(false);
@@ -60,12 +69,12 @@ export default function IncidentSuccess() {
 
   // poll for the async AI suggestion
   useEffect(() => {
-    if (isQueued || !rid || confirmed) return;
+    if (isQueued || !effectiveRid || confirmed) return;
     let active = true;
     const tick = async () => {
       polls.current += 1;
       try {
-        const detail = await incidentDetail(rid);
+        const detail = await incidentDetail(effectiveRid);
         if (!active) return;
         setIncident(detail);
         if (detail.ai_suggested_category || detail.ai_confirmed_by) return; // stop polling
@@ -84,7 +93,7 @@ export default function IncidentSuccess() {
       active = false;
       clearTimeout(timer);
     };
-  }, [isQueued, rid, confirmed]);
+  }, [isQueued, effectiveRid, confirmed]);
 
   const deptName = useCallback(
     (code: string | null | undefined) => {
@@ -95,10 +104,10 @@ export default function IncidentSuccess() {
   );
 
   const confirm = async (body: { category?: string; department_code?: string } = {}) => {
-    if (!rid || confirming) return;
+    if (!effectiveRid || confirming) return;
     setConfirming(true);
     try {
-      const updated = await confirmIncidentRouting(rid, body);
+      const updated = await confirmIncidentRouting(effectiveRid, body);
       setIncident(updated);
       setConfirmed(true);
       setEditVisible(false);
@@ -114,7 +123,7 @@ export default function IncidentSuccess() {
   const suggestion = incident?.ai_suggested_category && !incident.ai_confirmed_by ? incident : null;
   const suggestionDef = suggestion ? categoryDef(suggestion.ai_suggested_category ?? "other") : null;
   const SugIcon = suggestionDef?.icon ?? Sparkles;
-  const showWaiting = !isQueued && !!rid && !suggestion && !confirmed && !pollTimedOut
+  const showWaiting = !isQueued && !!effectiveRid && !suggestion && !confirmed && !pollTimedOut
     && !incident?.ai_confirmed_by;
 
   return (
@@ -122,24 +131,47 @@ export default function IncidentSuccess() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.center}>
           <View
-            style={[styles.circle, { backgroundColor: isQueued ? "#FDF0DC" : "#DDF5E5" }]}
-            testID={isQueued ? "incident-queued-icon" : "incident-sent-icon"}
+            style={[
+              styles.circle,
+              { backgroundColor: isQueued || willRetry || uploadFailed ? "#FDF0DC" : "#DDF5E5" },
+            ]}
+            testID={
+              sending
+                ? "incident-uploading-icon"
+                : isQueued || uploadFailed
+                  ? "incident-queued-icon"
+                  : "incident-sent-icon"
+            }
           >
-            {isQueued ? (
+            {sending && !willRetry ? (
+              <EyeLoader size={38} color={colors.success} />
+            ) : isQueued || willRetry || uploadFailed ? (
               <CloudOff size={56} color={colors.warning} strokeWidth={2} />
             ) : (
               <CheckCircle2 size={56} color={colors.success} strokeWidth={2} />
             )}
           </View>
           <Text style={styles.title}>
-            {isQueued ? t("incident.queuedTitle") : t("incident.successTitle")}
+            {isQueued || sending
+              ? t("incident.queuedTitle")
+              : uploadFailed
+                ? t("incident.uploadFailed")
+                : t("incident.successTitle")}
           </Text>
           <Text style={styles.body}>
-            {isQueued ? t("incident.queuedBody") : t("incident.sentToManager")}
+            {uploadFailed
+              ? t("errors.generic")
+              : willRetry
+                ? t("incident.willRetryBody")
+                : sending
+                  ? t("incident.uploadingBody")
+                  : isQueued
+                    ? t("incident.queuedBody")
+                    : t("incident.sentToManager")}
           </Text>
-          {!isQueued && rid ? (
+          {!isQueued && effectiveRid ? (
             <Text style={styles.rid} testID="incident-id-text">
-              {t("incident.incidentId")}: #{rid.slice(0, 8).toUpperCase()}
+              {t("incident.incidentId")}: #{effectiveRid.slice(0, 8).toUpperCase()}
             </Text>
           ) : null}
           {isQueued ? <Text style={styles.returning}>{t("incident.returningHome")}</Text> : null}
@@ -147,7 +179,7 @@ export default function IncidentSuccess() {
 
         {showWaiting ? (
           <View style={styles.waitCard} testID="ai-waiting-card">
-            <ActivityIndicator size="small" color={colors.primary} />
+            <EyeLoader size={18} />
             <Text style={styles.waitText}>{t("incident.aiWaiting")}</Text>
           </View>
         ) : null}

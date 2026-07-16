@@ -1,7 +1,8 @@
 import { Redirect } from "expo-router";
 import React from "react";
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, type } from "@/src/theme/tokens";
 
@@ -12,7 +13,7 @@ export default function Index() {
     return (
       <View style={styles.splash} testID="splash-screen">
         <Text style={styles.logo}>HogoPlus-FS</Text>
-        <ActivityIndicator size="large" color={colors.onPrimary} />
+        <EyeLoader size={36} color={colors.onPrimary} />
       </View>
     );
   }

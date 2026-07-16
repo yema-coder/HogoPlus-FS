@@ -4,7 +4,6 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Pressable,
   ScrollView,
@@ -21,6 +20,7 @@ import { changeIncidentStatus, incidentDetail } from "@/src/api/endpoints";
 import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
@@ -157,7 +157,7 @@ export default function IncidentDetailScreen() {
         <ErrorRetry onRetry={() => void load()} />
       ) : !detail ? (
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EyeLoader size={40} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
@@ -220,7 +220,7 @@ export default function IncidentDetailScreen() {
           ) : detail.plate_status === "pending" ? (
             <View style={styles.plateCard} testID="incident-plate-pending">
               <View style={styles.plateHeader}>
-                <ActivityIndicator size="small" color={colors.primary} />
+                <EyeLoader size={16} />
                 <Text style={styles.plateLabel}>{t("incident.plateChecking")}</Text>
               </View>
             </View>

@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { Search, Send, UserRound } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +17,7 @@ import { ApiError } from "@/src/api/client";
 import { createSwap, myShifts, swapCandidates } from "@/src/api/endpoints";
 import type { ShiftDay, SwapCandidate } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
@@ -117,7 +117,9 @@ export default function NewSwapScreen() {
           <>
             <Text style={styles.sectionTitle}>{t("swap.pickColleague")}</Text>
             {loadingCands ? (
-              <ActivityIndicator size="large" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+              <View style={{ marginVertical: spacing.lg, alignItems: "center" }}>
+                <EyeLoader size={36} />
+              </View>
             ) : (candidates ?? []).length === 0 ? (
               <View style={styles.emptyCard} testID="no-candidates">
                 <Text style={styles.emptyText}>{t("swap.noCandidates")}</Text>

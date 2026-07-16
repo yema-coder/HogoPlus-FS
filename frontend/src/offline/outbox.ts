@@ -34,8 +34,12 @@ const MAX_BACKOFF_MS = 10 * 60 * 1000;
 interface OutboxState {
   items: OutboxItem[];
   processing: boolean;
+  /** id of the item currently being uploaded (drives "Uploading…" chips) */
+  uploadingId: string | null;
+  /** outbox item id → created incident id (null = permanently rejected) */
+  results: Record<string, string | null>;
   init: () => Promise<void>;
-  enqueue: (item: Omit<OutboxItem, "id" | "createdAt" | "retries" | "nextAttemptAt">) => Promise<void>;
+  enqueue: (item: Omit<OutboxItem, "id" | "createdAt" | "retries" | "nextAttemptAt">) => Promise<string>;
   process: () => Promise<void>;
 }
 
@@ -72,6 +76,8 @@ let initialized = false;
 export const useOutboxStore = create<OutboxState>((set, get) => ({
   items: [],
   processing: false,
+  uploadingId: null,
+  results: {},
 
   init: async () => {
     if (initialized) return;
@@ -116,6 +122,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
     set({ items });
     await persist(items);
     void get().process();
+    return id;
   },
 
   process: async () => {
@@ -126,14 +133,26 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
     try {
       for (const item of [...get().items]) {
         if (item.nextAttemptAt > Date.now()) continue;
+        set({ uploadingId: item.id });
         try {
           const payload: Record<string, unknown> = { ...item.payload };
           if (item.photoUri) {
             const uploaded = await uploadFile(item.photoUri, item.photoName);
             payload[item.photoField] = uploaded.key;
           }
-          if (item.type === "incident") await createIncident(payload);
-          else if (item.type === "attendance") await punchIn(payload);
+          if (item.type === "incident") {
+            // aux files (voice note): a non-network failure must not block the report
+            for (const f of item.files ?? []) {
+              try {
+                const up = await uploadFile(f.uri, f.name);
+                payload[f.field] = up.key;
+              } catch (fe) {
+                if (fe instanceof ApiError && fe.status === 0) throw fe;
+              }
+            }
+            const created = (await createIncident(payload)) as { id?: string };
+            set({ results: { ...get().results, [item.id]: created.id ?? null } });
+          } else if (item.type === "attendance") await punchIn(payload);
           else {
             // form submission: upload each queued file, patch data_json, submit
             const data = { ...(payload.data_json as Record<string, unknown>) };
@@ -160,7 +179,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
           if (status >= 400 && status < 500 && status !== 401 && status !== 429) {
             // permanent rejection (validation / duplicate punch) — drop it
             const items = get().items.filter((i) => i.id !== item.id);
-            set({ items });
+            set({ items, results: { ...get().results, [item.id]: null } });
             await persist(items);
             await removeOutboxFile(item.photoUri);
             for (const f of item.files ?? []) await removeOutboxFile(f.uri);
@@ -176,7 +195,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
         }
       }
     } finally {
-      set({ processing: false });
+      set({ processing: false, uploadingId: null });
     }
   },
 }));

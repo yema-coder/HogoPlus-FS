@@ -1,9 +1,10 @@
 import { Sparkles } from "lucide-react-native";
 import React from "react";
-import { StyleSheet, Text, View, ActivityIndicator, type LayoutChangeEvent } from "react-native";
+import { StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import type { FormFieldDef } from "@/src/api/types";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { tri } from "@/src/i18n";
 import { colors, fonts, radius, spacing, type } from "@/src/theme/tokens";
 
@@ -43,7 +44,7 @@ export function FieldWrapper({ field, error, children, onLayout, aiFilled, aiLoa
       </View>
       {aiLoading ? (
         <View style={styles.aiLoadingRow} testID={`ai-loading-${field.key}`}>
-          <ActivityIndicator size="small" color={colors.accent} />
+          <EyeLoader size={14} color={colors.accent} />
           <Text style={styles.aiLoadingText}>{t("ai.reading")}</Text>
         </View>
       ) : field.ai_hook && aiFilled === undefined ? (

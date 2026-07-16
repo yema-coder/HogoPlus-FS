@@ -12,7 +12,14 @@ export function AgeChip({ hours }: { hours: number }) {
 
 export function Loading() {
   const { t } = useI18n();
-  return <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>{t("loading")}</div>;
+  return (
+    <div className="eye-loading" role="status" aria-label={t("loading")}>
+      <div className="eye-loader">
+        <div className="eye-iris" />
+      </div>
+      <div>{t("loading")}</div>
+    </div>
+  );
 }
 
 export function Empty() {

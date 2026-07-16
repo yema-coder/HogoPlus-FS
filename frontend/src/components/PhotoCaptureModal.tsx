@@ -4,7 +4,6 @@ import * as Haptics from "expo-haptics";
 import { Camera as CameraIcon, RefreshCcw, Settings } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Linking,
   Modal,
@@ -18,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
@@ -204,7 +204,7 @@ export function PhotoCaptureModal({ visible, label, onClose, onCaptured, testIDP
       <View style={styles.fillBg} testID={`${testIDPrefix}-capture-modal`}>
         {busy && !shot ? (
           <View style={styles.busyOverlay}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
+            <EyeLoader size={36} color="#FFFFFF" />
           </View>
         ) : null}
         {body()}

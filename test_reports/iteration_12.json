@@ -1,0 +1,30 @@
+{
+  "summary": "Prompt 11 (Optimistic Incident Submit + EyeLoader) verified end-to-end on Expo web. Login (+918483029039 / 123456) → language screen (eye logo) → home (home-brand-eye visible) → Report Incident tile → camera (shutter tapped) → preview → Submit. Navigation to /incident/success completed in 117 ms (target <3 s). Success screen correctly showed 'Saved!' initial state with EyeLoader inside incident-uploading-icon; within ~30 s it transitioned to incident-sent-icon + incident-id-text ('Complaint ID: #835FEA22'). AI suggestion card (ai-suggestion-card) appeared; ai-accept tapped and page auto-navigated back home per design. No ActivityIndicator references remain in /app/frontend/src or /app/frontend/app (grep verified — 0 matches). No red-screen errors, no missing-import errors. Expected web warnings only: 'useNativeDriver not supported' (web fallback — documented acceptable), expo-notifications web listener no-op, expo-location Geocoding SDK 49 removal notice, and a minor RN Web deprecation 'props.pointerEvents is deprecated. Use style.pointerEvents'.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "IncidentSuccess viewer / capture viewer", "issue": "RN Web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Migrate any <View pointerEvents=...> (e.g., viewerClose SafeAreaView in app/incident/capture.tsx:611) to style={{ pointerEvents: 'box-none' }}. Cosmetic, non-blocking."},
+      {"component": "expo-location", "issue": "SDK 49 removed the Geocoding API — console warns 'The Geocoding API has been removed in SDK 49, use Place Autocomplete service instead'. If reverseGeocode is still using Location.reverseGeocodeAsync, it will silently no-op on newer SDKs. Reference: /app/frontend/src/utils/geocode.ts (address_text fell back to null in the run — payload still submitted OK)."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional cosmetic) Replace pointerEvents prop with style.pointerEvents on the viewerClose SafeAreaView in app/incident/capture.tsx (~line 611) to silence RN Web deprecation warning.",
+    "(Follow-up, not prompt 11 scope) Audit /app/frontend/src/utils/geocode.ts against expo-location SDK ≥49 — Geocoding API removed; provider replacement needed for address_text."
+  ],
+  "critical_code_review_comments": [
+    "outbox.ts: 'results' map is in-memory only (documented acceptable). If the user backgrounds+kills the app between enqueue and upload completion, the success screen (opened via oid) will still see the outbox row until upload finishes — fine; on cold-start the row rehydrates from storage and processes on connectivity — good.",
+    "incident/success.tsx effectiveRid: chained through outbox results — correctly binds so the AI polling starts as soon as the background upload returns the incident id. Good pattern.",
+    "EyeLoader uses useNativeDriver: true — on web this falls back to JS driver (documented). Animation still runs smoothly in the browser during our test."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (backend testing skipped per request)", "frontend": "100% of prompt 11 acceptance criteria" },
+  "seed_data_creation": "One real incident was created against the live backend as part of the optimistic-submit test — Complaint ID #835FEA22 (CGM Amey Ghadge, dept 'other'/AI-routed). Safe to leave or clean up.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Optimistic-submit path is stable on Expo web. Key verified testIDs: home-brand-eye, incident-uploading-icon, incident-sent-icon, incident-id-text, ai-suggestion-card, ai-accept-button, submit-incident-button (nav to incident-success-screen). EyeLoader has replaced every ActivityIndicator in the codebase (grep returned zero). AI suggestion typically arrives well under 40 s in this environment. If retesting on My Reports outbox chips, submit while backend is briefly rate-limited or offline to hold the row long enough to observe outbox-chip-uploading-<id> / outbox-chip-<id>.",
+  "rca_of_issue": "n/a — no bugs found for prompt 11."
+}

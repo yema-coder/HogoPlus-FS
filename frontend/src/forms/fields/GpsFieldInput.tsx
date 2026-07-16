@@ -1,8 +1,9 @@
 import { MapPin, MapPinCheck, Settings } from "lucide-react-native";
 import React, { useState } from "react";
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
@@ -48,7 +49,7 @@ export function GpsFieldInput({ value, onChange, error, testID }: Props) {
         style={[styles.row, value && styles.rowDone, error && !value && styles.rowError]}
       >
         {busy ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <EyeLoader size={14} />
         ) : value ? (
           <MapPinCheck size={24} color={colors.success} strokeWidth={2.2} />
         ) : (

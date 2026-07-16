@@ -2,7 +2,6 @@ import dayjs from "dayjs";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -23,6 +22,7 @@ import {
 import type { FormDefinitionItem, SubmissionItem } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { StatusChip } from "@/src/components/StatusChip";
@@ -125,7 +125,7 @@ export default function SubmissionDetailScreen() {
         <ErrorRetry onRetry={() => void load()} />
       ) : !sub ? (
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EyeLoader size={40} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>

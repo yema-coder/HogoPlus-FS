@@ -12,8 +12,19 @@ import {
   LogOut,
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useState } from "react";
-import { Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  AppState,
+  Image,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -31,6 +42,46 @@ import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, shadow, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatShiftTime, formatTime } from "@/src/utils/format";
+
+/** Idle brand animation: the eye logo blinks softly every few seconds (native driver,
+ * paused while the app is backgrounded — battery-friendly). */
+function BlinkingLogo() {
+  const lid = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    const blink = (duration: number) =>
+      Animated.sequence([
+        Animated.timing(lid, { toValue: 0.12, duration: 90, useNativeDriver: true }),
+        Animated.timing(lid, { toValue: 1, duration, useNativeDriver: true }),
+      ]);
+    const start = () => {
+      loop?.stop();
+      lid.setValue(1);
+      loop = Animated.loop(
+        Animated.sequence([Animated.delay(4200), blink(140), Animated.delay(190), blink(160)]),
+      );
+      loop.start();
+    };
+    start();
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") start();
+      else loop?.stop();
+    });
+    return () => {
+      sub.remove();
+      loop?.stop();
+    };
+  }, [lid]);
+  return (
+    <Animated.View style={{ transform: [{ scaleY: lid }] }} testID="home-brand-eye">
+      <Image
+        source={require("@/assets/images/logo.png")}
+        style={styles.brandLogo}
+        resizeMode="contain"
+      />
+    </Animated.View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -157,11 +208,7 @@ export default function HomeScreen() {
         <View style={styles.brandRow}>
           <View style={styles.brandSpacer} />
           <View style={styles.brandCenter} testID="home-brand">
-            <Image
-              source={require("@/assets/images/logo.png")}
-              style={styles.brandLogo}
-              resizeMode="contain"
-            />
+            <BlinkingLogo />
             <Text style={styles.brandName}>HogoPlus-FS</Text>
           </View>
           <Pressable

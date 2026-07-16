@@ -9,6 +9,7 @@ import { listIncidents, myIncidents } from "@/src/api/endpoints";
 import type { Incident } from "@/src/api/types";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { StatusChip } from "@/src/components/StatusChip";
 import { UpdatedNote } from "@/src/components/UpdatedNote";
@@ -34,6 +35,7 @@ export default function ReportsScreen() {
   const { data, fetchedAt, loading, error, refresh } = useCachedFetch<Incident[]>(key, fetcher);
 
   const outboxIncidents = useOutboxStore((s) => s.items).filter((i) => i.type === "incident");
+  const uploadingId = useOutboxStore((s) => s.uploadingId);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,10 +118,24 @@ export default function ReportsScreen() {
                         <Text style={styles.rowTitle}>{t(def.tKey)}</Text>
                         <Text style={styles.rowSub}>{formatDateTime(item.createdAt)}</Text>
                       </View>
-                      <View style={styles.queuedChip}>
-                        <CloudOff size={14} color={colors.onWarning} strokeWidth={2.4} />
-                        <Text style={styles.queuedText}>{t("status.queued")}</Text>
-                      </View>
+                      {uploadingId === item.id ? (
+                        <View
+                          style={[styles.queuedChip, { backgroundColor: colors.accent }]}
+                          testID={`outbox-chip-uploading-${item.id}`}
+                        >
+                          <EyeLoader size={12} color="#FFFFFF" />
+                          <Text style={[styles.queuedText, { color: "#FFFFFF" }]}>
+                            {t("status.uploading")}
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={styles.queuedChip} testID={`outbox-chip-${item.id}`}>
+                          <CloudOff size={14} color={colors.onWarning} strokeWidth={2.4} />
+                          <Text style={styles.queuedText}>
+                            {t(item.retries > 0 ? "status.willRetry" : "status.queued")}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   );
                 })}

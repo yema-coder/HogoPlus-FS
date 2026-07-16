@@ -2,13 +2,14 @@ import * as ImageManipulator from "expo-image-manipulator";
 import { useRouter } from "expo-router";
 import { Check, X } from "lucide-react-native";
 import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
 import { beaconMacs, punchIn } from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
@@ -130,7 +131,7 @@ export default function PunchInScreen() {
   };
 
   const stepIcon = (state: StepState) => {
-    if (state === "running") return <ActivityIndicator size="small" color={colors.primary} />;
+    if (state === "running") return <EyeLoader size={16} />;
     if (state === "ok") return <Check size={22} color={colors.success} strokeWidth={3} />;
     if (state === "skip") return <X size={22} color={colors.warning} strokeWidth={3} />;
     return <View style={styles.pendingDot} />;

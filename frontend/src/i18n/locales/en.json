@@ -131,7 +131,10 @@
     "videoHint": "Record a video (max 30 sec)",
     "recordingLeft": "Recording… {{s}}s left",
     "videoNeedsNet": "Video needs internet — use photo for now",
-    "videoTooLarge": "Video is too big (max 40 MB). Record a shorter clip."
+    "videoTooLarge": "Video is too big (max 40 MB). Record a shorter clip.",
+    "uploadingBody": "Sending in the background — you can keep working",
+    "willRetryBody": "No network — will send automatically",
+    "uploadFailed": "Could not send. Please try again."
   },
   "status": {
     "submitted": "Sent",
@@ -141,7 +144,9 @@
     "escalated": "Escalated",
     "queued": "Waiting to send",
     "approved": "Approved",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "uploading": "Uploading…",
+    "willRetry": "Will retry"
   },
   "reports": {
     "title": "My Complaints",

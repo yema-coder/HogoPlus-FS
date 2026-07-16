@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { listForms } from "@/src/api/endpoints";
 import type { FormDefinitionItem } from "@/src/api/types";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { FormRenderer } from "@/src/forms/FormRenderer";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
@@ -34,7 +35,7 @@ export default function FormFillScreen() {
         <ErrorRetry onRetry={() => void refresh()} />
       ) : !definition ? (
         <View style={styles.loading}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <EyeLoader size={40} />
         </View>
       ) : (
         <FormRenderer

@@ -1,7 +1,6 @@
 import { MessageCircleQuestion, Send } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,7 @@ import { useTranslation } from "react-i18next";
 
 import { aiChat } from "@/src/api/endpoints";
 import type { ChatCitation } from "@/src/api/types";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
@@ -109,7 +109,7 @@ export default function SahayakScreen() {
         )}
         {busy ? (
           <View style={styles.typingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
+            <EyeLoader size={16} />
             <Text style={styles.typingText}>{t("sahayak.thinking")}</Text>
           </View>
         ) : null}

@@ -1,10 +1,11 @@
 import { Camera as CameraIcon } from "lucide-react-native";
 import React, { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
 import { uploadFile } from "@/src/api/client";
 import { aiAnpr } from "@/src/api/endpoints";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { TextFieldInput } from "@/src/forms/fields/TextFieldInput";
 import { colors, radius, sizes } from "@/src/theme/tokens";
@@ -58,7 +59,7 @@ export function AnprTextInput({ label, value, onChange, onAiFilled, onAiLoading,
         style={[styles.scanBtn, busy && { opacity: 0.6 }]}
       >
         {busy ? (
-          <ActivityIndicator size="small" color={colors.onPrimary} />
+          <EyeLoader size={14} color={colors.onPrimary} />
         ) : (
           <CameraIcon size={24} color={colors.onPrimary} strokeWidth={2.2} />
         )}

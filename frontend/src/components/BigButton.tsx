@@ -1,8 +1,9 @@
 import * as Haptics from "expo-haptics";
 import type { LucideIcon } from "lucide-react-native";
 import React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, ViewStyle } from "react-native";
 
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { colors, fonts, radius, sizes, type } from "@/src/theme/tokens";
 
 type Variant = "primary" | "danger" | "success" | "outline" | "muted" | "accent";
@@ -70,7 +71,7 @@ export function BigButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={fg} />
+        <EyeLoader size={18} color={fg} />
       ) : (
         <>
           {Icon ? <Icon size={24} color={fg} strokeWidth={2.4} /> : null}
