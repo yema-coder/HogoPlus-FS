@@ -11,8 +11,9 @@ import {
   LogIn,
   LogOut,
 } from "lucide-react-native";
+import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -151,6 +152,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]} testID="home-screen">
+      <StatusBar style="dark" />
       <View style={styles.brandHeader}>
         <View style={styles.brandRow}>
           <View style={styles.brandSpacer} />
@@ -315,13 +317,26 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.primary },
+  safe: { flex: 1, backgroundColor: "#FFFFFF" },
   scrollBg: { flex: 1, backgroundColor: colors.background },
   scroll: { padding: sizes.screenPadding, gap: spacing.lg, paddingBottom: spacing.xxl },
   brandHeader: {
-    backgroundColor: colors.primary,
+    backgroundColor: "#FFFFFF",
     paddingHorizontal: sizes.screenPadding,
     paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
+    zIndex: 10,
     gap: spacing.sm,
   },
   brandRow: { flexDirection: "row", alignItems: "center" },
@@ -334,19 +349,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   brandLogo: { width: 36, height: 30 },
-  brandName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.onPrimary },
+  brandName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.primary },
   avatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.22)",
+    backgroundColor: colors.brandTertiary,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.onPrimary },
+  avatarText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.primary },
   subRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  headerName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.onPrimary },
-  headerSub: { fontFamily: fonts.medium, fontSize: type.sm, color: "rgba(255,255,255,0.8)" },
+  headerName: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  headerSub: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
   shiftChip: {
     backgroundColor: colors.brandTertiary,
     borderRadius: radius.md,

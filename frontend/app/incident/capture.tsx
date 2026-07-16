@@ -7,9 +7,10 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   Camera as CameraIcon,
   ChevronDown,
+  Maximize2,
   MapPin,
   MapPinOff,
-  RefreshCcw,
+  Play,
   Settings,
   Video as VideoIcon,
   X,
@@ -59,12 +60,19 @@ interface Shot {
 
 type GpsStatus = "searching" | "ok" | "none" | "blocked";
 
-/** Inline video preview for the detail card (expo-video). */
-function VideoPreviewCard({ uri }: { uri: string }) {
+/** Inline video preview (expo-video); controls=false renders a plain thumbnail surface. */
+function VideoPreviewCard({ uri, controls = true }: { uri: string; controls?: boolean }) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
   });
-  return <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls contentFit="cover" />;
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      nativeControls={controls}
+      contentFit={controls ? "contain" : "cover"}
+    />
+  );
 }
 
 /** Photo-first complaint flow: camera opens immediately, GPS acquired in
@@ -75,7 +83,7 @@ export default function IncidentCapture() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const enqueue = useOutboxStore((s) => s.enqueue);
-  const { width: windowW } = useWindowDimensions();
+  const { width: windowW, height: windowH } = useWindowDimensions();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
@@ -94,6 +102,7 @@ export default function IncidentCapture() {
   const [desc, setDesc] = useState("");
   const [voiceUri, setVoiceUri] = useState<string | undefined>(undefined);
   const [deptModal, setDeptModal] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const watermarkRef = useRef<View>(null);
@@ -461,11 +470,47 @@ export default function IncidentCapture() {
     );
   }
 
-  // ---- Tap 2: details + submit ----
+  // ---- Tap 2: details + submit (compact — the whole core path fits without scrolling) ----
   const displayW = windowW - sizes.screenPadding * 2;
-  const displayH = shot
-    ? Math.round((displayW * shot.height) / shot.width)
-    : Math.round(displayW * 0.75);
+  // off-screen full-aspect view used ONLY for the watermark burn-in (photo quality unchanged)
+  const burnH = shot ? Math.round((displayW * shot.height) / shot.width) : 0;
+  // visible media card: ~24% of screen height, tap to view full-screen
+  const mediaH = Math.round(windowH * 0.24);
+
+  const locationLine = () => {
+    if (gpsStatus === "searching") {
+      return (
+        <View style={styles.locLine} testID="capture-location-line">
+          <ActivityIndicator size="small" color={colors.primary} />
+          <Text style={styles.locText} numberOfLines={1}>{t("incident.gpsSearching")}</Text>
+        </View>
+      );
+    }
+    if (gps) {
+      return (
+        <View style={styles.locLine} testID="capture-location-line">
+          <MapPin size={18} color={colors.success} strokeWidth={2.4} />
+          <Text style={styles.locText} numberOfLines={1}>
+            {address ?? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`}
+          </Text>
+        </View>
+      );
+    }
+    return (
+      <Pressable
+        testID="capture-location-line"
+        onPress={() => {
+          if (gpsStatus === "blocked") void Linking.openSettings();
+        }}
+        style={styles.locLine}
+      >
+        <MapPinOff size={18} color={colors.warning} strokeWidth={2.4} />
+        <Text style={[styles.locText, { color: colors.warning }]} numberOfLines={1}>
+          {gpsStatus === "blocked" ? t("common.openSettings") : t("incident.gpsNone")}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-preview-screen">
@@ -475,25 +520,15 @@ export default function IncidentCapture() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
-          {videoUri ? (
-            <View style={[styles.shotWrap, { width: displayW, height: displayH }]} testID="incident-video-card">
-              <VideoPreviewCard uri={videoUri} />
-              <View style={styles.watermark}>
-                <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")} · 🎬</Text>
-                <Text style={styles.wmLine2}>
-                  {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
-                  {address ?? (gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone"))}
-                </Text>
-              </View>
-            </View>
-          ) : (
+          {/* off-screen full-size composite for the burn-in — never visible */}
+          {shot ? (
             <View
               ref={watermarkRef}
               collapsable={false}
-              style={[styles.shotWrap, { width: displayW, height: displayH }]}
+              style={[styles.burnSource, { width: displayW, height: burnH }]}
             >
-              <Image source={{ uri: shot!.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              <View style={styles.watermark} testID="incident-watermark">
+              <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              <View style={styles.watermark}>
                 <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")}</Text>
                 <Text style={styles.wmLine2}>
                   {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
@@ -505,16 +540,37 @@ export default function IncidentCapture() {
                 </Text>
               </View>
             </View>
-          )}
-
-          <View style={styles.chipRow}>{gpsChip()}</View>
-          {address ? (
-            <Text style={styles.addressLine} testID="capture-address-line" numberOfLines={2}>
-              📍 {address}
-            </Text>
           ) : null}
 
-          <Text style={styles.fieldLabel}>{t("incident.aboutDept")}</Text>
+          {/* compact media card — tap opens the full-screen viewer */}
+          <Pressable
+            testID="incident-media-card"
+            accessibilityRole="button"
+            onPress={() => setViewerOpen(true)}
+            style={[styles.mediaCard, { height: mediaH }]}
+          >
+            {videoUri ? (
+              <>
+                <VideoPreviewCard uri={videoUri} controls={false} />
+                <View style={styles.playOverlay}>
+                  <Play size={34} color="#FFFFFF" strokeWidth={2.4} fill="#FFFFFF" />
+                </View>
+              </>
+            ) : (
+              <Image source={{ uri: shot!.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+            )}
+            <View style={styles.mediaStrip} testID="incident-watermark">
+              <Text style={styles.mediaStripText} numberOfLines={1}>
+                {videoUri ? "🎬 " : ""}{dayjs(capturedAt).format("DD/MM HH:mm")} · {profile?.full_name ?? ""}
+              </Text>
+            </View>
+            <View style={styles.expandBadge}>
+              <Maximize2 size={18} color="#FFFFFF" strokeWidth={2.6} />
+            </View>
+          </Pressable>
+
+          {locationLine()}
+
           <Pressable
             testID="incident-dept-selector"
             accessibilityRole="button"
@@ -529,7 +585,6 @@ export default function IncidentCapture() {
             <ChevronDown size={22} color={colors.muted} strokeWidth={2.4} />
           </Pressable>
 
-          <Text style={styles.fieldLabel}>{t("incident.descriptionOptional")}</Text>
           <TextInput
             testID="incident-desc-input"
             style={styles.descInput}
@@ -541,14 +596,12 @@ export default function IncidentCapture() {
             maxLength={500}
           />
 
-          <Text style={styles.fieldLabel}>{t("incident.voiceNote")}</Text>
           <VoiceFieldInput value={voiceUri} onChange={setVoiceUri} testID="incident-voice-note" />
 
           <View style={styles.actions}>
             <BigButton
               testID="incident-retake-button"
               label={t("reg.retake")}
-              icon={RefreshCcw}
               variant="muted"
               disabled={submitting}
               onPress={() => {
@@ -563,12 +616,33 @@ export default function IncidentCapture() {
               variant="danger"
               loading={submitting}
               onPress={() => void submit()}
-              height={64}
+              height={60}
               style={{ flex: 2 }}
             />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* full-screen media viewer */}
+      <Modal visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>
+        <View style={styles.viewerWrap} testID="incident-media-viewer">
+          {videoUri ? (
+            <VideoPreviewCard uri={videoUri} controls />
+          ) : shot ? (
+            <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+          ) : null}
+          <SafeAreaView style={styles.viewerClose} pointerEvents="box-none">
+            <Pressable
+              testID="viewer-close-button"
+              accessibilityRole="button"
+              onPress={() => setViewerOpen(false)}
+              style={styles.cameraClose}
+            >
+              <X size={26} color="#FFFFFF" strokeWidth={2.6} />
+            </Pressable>
+          </SafeAreaView>
+        </View>
+      </Modal>
 
       <Modal visible={deptModal} transparent animationType="slide" onRequestClose={() => setDeptModal(false)}>
         <Pressable style={styles.modalBackdrop} onPress={() => setDeptModal(false)}>
@@ -702,12 +776,6 @@ const styles = StyleSheet.create({
     fontSize: type.lg,
     color: "#FFFFFF",
   },
-  addressLine: {
-    fontFamily: fonts.medium,
-    fontSize: type.sm,
-    color: colors.muted,
-    marginTop: spacing.xs,
-  },
   permissionWrap: {
     flex: 1,
     justifyContent: "center",
@@ -735,13 +803,49 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: "center",
   },
-  previewScroll: { padding: sizes.screenPadding, gap: spacing.sm, paddingBottom: spacing.xxl },
-  shotWrap: {
+  previewScroll: { padding: sizes.screenPadding, gap: spacing.sm, paddingBottom: spacing.lg },
+  burnSource: { position: "absolute", left: -10000, top: 0, justifyContent: "flex-end" },
+  mediaCard: {
     borderRadius: radius.md,
     overflow: "hidden",
     backgroundColor: "#000000",
     justifyContent: "flex-end",
   },
+  mediaStrip: {
+    backgroundColor: "rgba(0,0,0,0.55)",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  mediaStripText: { fontFamily: fonts.medium, fontSize: 12, color: "#FFFFFF" },
+  expandBadge: {
+    position: "absolute",
+    top: spacing.sm,
+    right: spacing.sm,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  viewerWrap: { flex: 1, backgroundColor: "#000000" },
+  viewerClose: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "flex-start",
+    padding: sizes.screenPadding,
+  },
+  locLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 28,
+  },
+  locText: { flex: 1, fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
   watermark: {
     backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: spacing.md,
@@ -770,7 +874,8 @@ const styles = StyleSheet.create({
   },
   deptText: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.text, flex: 1 },
   descInput: {
-    minHeight: 72,
+    minHeight: 64,
+    maxHeight: 84,
     borderRadius: radius.md,
     borderWidth: 2,
     borderColor: colors.border,
@@ -782,7 +887,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlignVertical: "top",
   },
-  actions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.lg },
+  actions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xs },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",

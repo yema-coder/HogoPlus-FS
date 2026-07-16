@@ -356,3 +356,20 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
    escalations → recurring beat sweeps; punch/incident submits retry via mobile outbox on status 0.
 4. Expo tunnel enabled in supervisor (--tunnel + @expo/ngrok) per deployment health check.
    Tests still 136/136 after all changes.
+
+## UI polish pack before APK (2026-07-16) — DONE
+- Fix 1: capture detail screen compact — media card 24% of viewport (tap → full-screen viewer modal
+  with ✕), one-line location, dept row 48px, 2-3 line description, voice button, Submit visible with
+  ZERO scroll at 390x640 (measured: submit bottom 573px). Watermark burn-in moved to an off-screen
+  full-aspect view (quality unchanged, cover-crop avoided).
+- Fix 2: Home header teal → WHITE band: #FFFFFF bg, 1px bottom border #D4D1CA + soft elevation,
+  title in PRIMARY TEAL #0B4F6C (pairs with logo), avatar chip brandTertiary/teal, StatusBar dark.
+  ScreenHeader (other screens) was already neutral — untouched. Tab bar untouched.
+- ENV NOTE: container got recycled mid-session; new image has NO postgres user → old
+  supervisord_hogo.conf [program:postgresql]/[redis] sections blocked supervisord startup.
+  Cleaned conf (celery worker+beat only now). @expo/ngrok had to be reinstalled globally after
+  recycle (needed for --tunnel). If services are ALL down after a recycle: start supervisord
+  manually and check /etc/supervisor/conf.d/supervisord_hogo.conf validity.
+- APK build: NO EAS CLI — Emergent Publish panel generates .apk/.aab (inputs: app name + icon).
+  Backend URL comes from Deployment Secrets (EXPO_PUBLIC_BACKEND_URL → https://hogo-backend-phase1.emergent.host).
+  OTA/EAS Update NOT documented on platform — update path is rebuild + redistribute.
