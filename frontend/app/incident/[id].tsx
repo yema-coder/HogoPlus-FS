@@ -139,8 +139,12 @@ export default function IncidentDetailScreen() {
 
   const copyPlate = async () => {
     if (!detail?.detected_plate) return;
-    await Clipboard.setStringAsync(detail.detected_plate);
-    showToast(t("incident.copied"), "success");
+    try {
+      await Clipboard.setStringAsync(detail.detected_plate);
+      showToast(t("incident.copied"), "success");
+    } catch {
+      showToast(t("errors.generic"), "error");
+    }
   };
 
   const plateDetected =

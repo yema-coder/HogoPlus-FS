@@ -18,10 +18,27 @@ function IncidentModal({ inc, onClose }: { inc: any; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const detected = inc.detected_plate && (inc.plate_status === "detected" || !inc.plate_status);
   const copyPlate = () => {
-    navigator.clipboard?.writeText(inc.detected_plate).then(() => {
+    const done = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = inc.detected_plate;
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        done();
+      } finally {
+        document.body.removeChild(ta);
+      }
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(inc.detected_plate).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
   };
   const coords =
     inc.gps_lat != null && inc.gps_lng != null
