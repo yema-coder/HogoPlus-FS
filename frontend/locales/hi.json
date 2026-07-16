@@ -1,7 +1,0 @@
-{
-  "CFBundleDisplayName": "होगो प्लस",
-  "NSCameraUsageDescription": "फैक्टरी की समस्या रिपोर्ट करने के लिए फोटो लें",
-  "NSLocationWhenInUseUsageDescription": "फैक्टरी में आपकी हाज़िरी की जगह पक्की करता है",
-  "NSMicrophoneUsageDescription": "फॉर्म के लिए छोटा वॉइस नोट रिकॉर्ड करें",
-  "NSBluetoothAlwaysUsageDescription": "हाज़िरी के लिए फैक्टरी ज़ोन बीकन पहचानता है"
-}

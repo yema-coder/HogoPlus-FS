@@ -35,11 +35,6 @@
         "RECORD_AUDIO"
       ]
     },
-    "locales": {
-      "en": "./locales/en.json",
-      "hi": "./locales/hi.json",
-      "mr": "./locales/mr.json"
-    },
     "web": {
       "bundler": "metro",
       "output": "single",
