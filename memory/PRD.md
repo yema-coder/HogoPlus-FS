@@ -444,3 +444,37 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
   CELERY_* secrets likely missing/wrong there (the original root cause) — needed only for sweeps.
 - NOTE: attendance face-verification + beat sweeps still depend on the sandbox Celery worker —
   same architectural gap, NOT fixed (out of scope, flag for future prompt).
+
+## Prompt 10 (Part D) — ALL Celery work now in-process for production (2026-06 fork) — DONE
+- ARCHITECTURE: production containers run ONLY the FastAPI process. All async/scheduled work
+  now executes there:
+  * Per-request → FastAPI BackgroundTasks: face verification (attendance punch-in →
+    tasks.run_face_verification_background), SOP embedding (admin sop upload →
+    run_sop_ingest_background, releases ONNX model after — embeddings.release_model() with
+    gc+malloc_trim: 663MB spike → 100MB after release), incident AI (Prompt 9). All wrapped
+    with INFO outcome logs; every silent `except: pass` in task paths removed/logged.
+  * Scheduled → app/scheduler.py APScheduler AsyncIOScheduler started in main.py startup
+    (guarded: once per process, skipped when TESTING/DISABLE_SCHEDULER=true). JOBS mirror old
+    beat: escalation */30, ai timeout */5, punchout reminder */15, backup 4h (3,7,11,15,19,23 UTC),
+    nightly report 00:30 UTC.
+  * CROSS-CONTAINER DEDUPE: sandbox + prod share Neon/Upstash → every run takes Redis NX lock
+    `jobs:lock:<name>` (async in scheduler, _job_lock_sync in the celery task bodies). PROVEN
+    live: 20:35 UTC APScheduler ran sweep, celery beat task returned {'skipped':'lock'}.
+    Celery worker+beat still run in sandbox (redundancy) — locks make double-run impossible.
+- BACKUP FIX (bonus root cause): pg_dump was SILENTLY FAILING against Neon even in sandbox
+  ("server version mismatch" — Neon PG17 vs client 15) → 4-hourly "backups" were broken.
+  run_backup_sync now falls back to a pure-Python data-only SQL dump via asyncpg
+  (_python_sql_dump_async: INSERTs + session_replication_role=replica; restore = alembic
+  upgrade head + run file). Verified: backups/2026-07-17/0157.sql.gz uploaded to R2, 523KB
+  uncompressed, 402 employees/402 shift_assignments rows. Result includes "method" field.
+- PROOFS (preview backend = code that will deploy): backup-now → backups/2026-07-17/0157.sql.gz
+  (method=python); punch-in → in-process face verification score 100.0 (log:
+  "Face verification attendance/e2974799… → {'score': 100.0, 'face_verified': True}"; proof
+  attendance row deleted after); scheduler startup logs list all 5 jobs registered.
+- MEMORY: API worker steady-state RSS ~135MB with scheduler running; SOP-embed spike ~660MB
+  then back to ~100-135MB after release_model() (malloc_trim). Safe on 1Gi.
+- Tests: 152/152 (+5: scheduler registry, TESTING guard, lock single-execution across
+  sync+async paths, _sql_literal, python dump fallback). requirements.txt += APScheduler 3.11.3.
+- ⚠️ PRODUCTION ACTIVATION: user must Publish (redeploy). After redeploy, prod logs will show
+  "scheduler: N jobs registered IN-PROCESS". Deployment Secrets must include AWS_*,
+  EMERGENT_LLM_KEY (already required by Prompt 9) — CELERY_* no longer needed in prod.

@@ -239,3 +239,9 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   object/device location, captured-at). Webdash Department has incident modal with same layout.
 - 147/147 pytest. Live verified on prod data: incident 668d75cc → MH02FX2660 (64%, rekognition).
 - Local postgres/redis must be reinstalled after each fork (see PRD runbook).
+
+## Prompt 10 (Part D) — Celery-free production (2026-06)
+- app/scheduler.py (APScheduler, 5 jobs, Redis NX locks jobs:lock:*), face verify + SOP ingest
+  → BackgroundTasks, pg_dump fallback to Python SQL dump (pg_dump was silently broken vs Neon
+  PG17). Live-proven: backup R2 key, face score 100.0 in-process, lock dedupe (celery skipped).
+- 152/152 pytest. RSS: API ~135MB steady; SOP embed spike 660MB → ~100MB after release_model().

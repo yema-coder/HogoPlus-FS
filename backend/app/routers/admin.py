@@ -1,6 +1,7 @@
+import os
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -562,10 +563,11 @@ MAX_SOP_SIZE = 20 * 1024 * 1024
 @router.post("/sop-docs")
 async def upload_sop_doc(
     file: UploadFile,
+    background: BackgroundTasks,
     actor: Employee = Depends(require_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
-    """SOP PDF upload (CGM/MD only) → R2 → Celery: extract, chunk, embed into pgvector."""
+    """SOP PDF upload (CGM/MD only) → R2 → in-process: extract, chunk, embed into pgvector."""
     from app.models import SopDoc
     from app.storage import get_storage
 
@@ -585,12 +587,11 @@ async def upload_sop_doc(
     await write_audit(session, actor.id, "sop_doc.uploaded", "sop_doc", str(doc.id), {"title": doc.title})
     await session.commit()
     await session.refresh(doc)
-    try:
-        from app.tasks import sop_ingest_task
+    # SOP ingest runs AFTER the response, IN-PROCESS (production has no Celery worker)
+    if not os.environ.get("TESTING"):
+        from app.tasks import run_sop_ingest_background
 
-        sop_ingest_task.delay(str(doc.id))
-    except Exception:
-        pass
+        background.add_task(run_sop_ingest_background, str(doc.id))
     return _sop_doc_out(doc)
 
 

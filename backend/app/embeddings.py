@@ -40,3 +40,22 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 
 def embed_query(query: str) -> list[float]:
     return embed_texts([query])[0]
+
+
+def release_model() -> None:
+    """Drop the cached ONNX model to reclaim RSS on 1Gi containers (it lazily
+    reloads on the next embedding call)."""
+    import gc
+
+    global _model
+    with _lock:
+        if _model is not None:
+            logger.info("Releasing embedding model to reclaim memory")
+            _model = None
+    gc.collect()
+    try:  # glibc: return freed arenas to the OS (RSS actually drops)
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        logger.debug("malloc_trim unavailable on this platform")

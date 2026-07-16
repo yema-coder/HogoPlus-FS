@@ -129,6 +129,13 @@ async def _startup():
                 await session.commit()
         except Exception:
             pass  # if the DB is gone we cannot persist a notification — the CRITICAL log stands
+    # In-process scheduler (Prompt 9/10 root cause: production runs no Celery
+    # beat/worker) — backups, sweeps, reminders and reports run inside the API
+    # process; Redis NX locks prevent duplicate runs across containers.
+    if not os.environ.get("TESTING"):
+        from app.scheduler import start_scheduler
+
+        start_scheduler()
     # NOTE (Prompt 7 launch fix): the embedding model is intentionally NOT warmed at
     # startup. Eager warm-up put ~500MB of ONNX weights into the API process at boot,
     # which OOM-crash-looped 1Gi production containers (backend RSS ~700MB + celery).

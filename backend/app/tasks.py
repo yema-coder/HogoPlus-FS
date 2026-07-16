@@ -27,6 +27,16 @@ def _fresh_redis():
     return redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
 
+def _job_lock_sync(name: str, ttl_seconds: int) -> bool:
+    """Same jobs:lock:* keys as app.scheduler — keeps Celery beat (sandbox) and the
+    in-process APScheduler (all containers) from ever double-running a job."""
+    r = _fresh_redis()
+    try:
+        return bool(r.set(f"jobs:lock:{name}", "1", nx=True, ex=ttl_seconds))
+    finally:
+        r.close()
+
+
 async def _sweep_async() -> dict:
     from app.escalation import run_escalation_sweep
 
@@ -43,6 +53,8 @@ async def _sweep_async() -> dict:
 
 @celery.task(name="app.tasks.escalation_sweep")
 def escalation_sweep() -> dict:
+    if not _job_lock_sync("escalation_sweep", 25 * 60):
+        return {"skipped": "lock"}
     counts = asyncio.run(_sweep_async())
     logger.info("Escalation sweep done: %s", counts)
     return counts
@@ -51,6 +63,8 @@ def escalation_sweep() -> dict:
 @celery.task(name="app.tasks.nightly_backup")
 def nightly_backup() -> dict:
     """pg_dump -> gzip -> S3 backups/YYYY-MM-DD.sql.gz; keep the newest 14, delete older."""
+    if not _job_lock_sync("nightly_backup", 210 * 60):
+        return {"skipped": "lock"}
     return run_backup_sync()
 
 
@@ -66,28 +80,103 @@ def run_backup_sync() -> dict:
     parsed = urlparse(settings.database_url.replace("+asyncpg", ""))
     ist_now = now_ist()
     key = f"backups/{ist_now.strftime('%Y-%m-%d')}/{ist_now.strftime('%H%M')}.sql.gz"
-    with tempfile.NamedTemporaryFile(suffix=".sql") as tmp:
-        cmd = [
-            "pg_dump",
-            "-h", (parsed.hostname or "127.0.0.1").replace("-pooler", ""),
-            "-p", str(parsed.port or 5432),
-            "-U", parsed.username or "postgres",
-            "-d", (parsed.path or "/postgres").lstrip("/"),
-            "-f", tmp.name,
-        ]
-        env = {"PGPASSWORD": parsed.password or ""}
-        subprocess.run(cmd, env=env, check=True, capture_output=True)
-        with open(tmp.name, "rb") as f:
-            compressed = gzip.compress(f.read())
+    method = "pg_dump"
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".sql") as tmp:
+            cmd = [
+                "pg_dump",
+                "-h", (parsed.hostname or "127.0.0.1").replace("-pooler", ""),
+                "-p", str(parsed.port or 5432),
+                "-U", parsed.username or "postgres",
+                "-d", (parsed.path or "/postgres").lstrip("/"),
+                "-f", tmp.name,
+            ]
+            env = {"PGPASSWORD": parsed.password or ""}
+            subprocess.run(cmd, env=env, check=True, capture_output=True)
+            with open(tmp.name, "rb") as f:
+                compressed = gzip.compress(f.read())
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        # production containers ship WITHOUT pg_dump — fall back to a pure-Python
+        # data dump (restorable onto an alembic-migrated schema)
+        detail = e.stderr.decode()[:200] if isinstance(e, subprocess.CalledProcessError) and e.stderr else str(e)
+        logger.warning("pg_dump unavailable/failed (%s) — using Python SQL dump fallback", detail)
+        compressed = gzip.compress(_python_sql_dump())
+        method = "python"
 
     from app.storage import S3Storage
 
     s3 = S3Storage()
     s3.client.put_object(Bucket=s3.bucket, Key=key, Body=compressed)
-    logger.info("Uploaded DB backup to %s", key)
+    logger.info("Uploaded DB backup to %s (method=%s, %d bytes gz)", key, method, len(compressed))
 
     deleted = _apply_backup_retention(s3, ist_now)
-    return {"uploaded": key, "deleted": deleted}
+    return {"uploaded": key, "method": method, "deleted": deleted}
+
+
+def _sql_literal(v) -> str:
+    """Best-effort SQL literal for the Python dump fallback."""
+    import datetime as _dt
+    import uuid as _uuid
+    from decimal import Decimal
+
+    if v is None:
+        return "NULL"
+    if isinstance(v, bool):
+        return "TRUE" if v else "FALSE"
+    if isinstance(v, (int, float, Decimal)):
+        return str(v)
+    if isinstance(v, (bytes, memoryview)):
+        return "'\\x" + bytes(v).hex() + "'"
+    if isinstance(v, (_dt.datetime, _dt.date, _dt.time)):
+        return "'" + v.isoformat() + "'"
+    if isinstance(v, _uuid.UUID):
+        return "'" + str(v) + "'"
+    if isinstance(v, list):  # postgres array (e.g. photos TEXT[])
+        inner = ",".join(
+            '"' + str(x).replace("\\", "\\\\").replace('"', '\\"') + '"' for x in v
+        )
+        return "'" + ("{" + inner + "}").replace("'", "''") + "'"
+    # str covers TEXT + JSONB + vector (asyncpg returns both as str without codecs)
+    return "'" + str(v).replace("'", "''") + "'"
+
+
+def _python_sql_dump() -> bytes:
+    return asyncio.run(_python_sql_dump_async())
+
+
+async def _python_sql_dump_async() -> bytes:
+    """Data-only SQL dump via asyncpg (no pg_dump binary needed). Restore procedure:
+    alembic upgrade head on an empty DB, then execute this file (FKs disabled by
+    session_replication_role=replica)."""
+    import asyncpg
+
+    conn = await asyncpg.connect(settings.database_url.replace("+asyncpg", ""))
+    try:
+        tables = [
+            r["tablename"]
+            for r in await conn.fetch(
+                "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename"
+            )
+        ]
+        out = [
+            "-- HogoPlus Python fallback dump (data-only).",
+            "-- Restore: alembic upgrade head on empty DB, then run this file.",
+            f"-- generated {datetime.now(timezone.utc).isoformat()}",
+            "SET session_replication_role = replica;",
+        ]
+        for t in tables:
+            rows = await conn.fetch(f'SELECT * FROM "{t}"')
+            if not rows:
+                continue
+            cols = list(rows[0].keys())
+            colsql = ", ".join(f'"{c}"' for c in cols)
+            for r in rows:
+                vals = ", ".join(_sql_literal(r[c]) for c in cols)
+                out.append(f'INSERT INTO "{t}" ({colsql}) VALUES ({vals});')
+        out.append("SET session_replication_role = DEFAULT;")
+        return "\n".join(out).encode()
+    finally:
+        await conn.close()
 
 
 def _parse_backup_key(key: str):
@@ -217,6 +306,16 @@ def verify_face_task(attendance_id: str) -> dict:
     return asyncio.run(_verify_face_async(attendance_id))
 
 
+async def run_face_verification_background(attendance_id: str) -> None:
+    """In-process face verification (FastAPI background task) — production containers
+    run no Celery worker. Never raises; outcome always logged."""
+    try:
+        out = await _verify_face_async(attendance_id)
+        logger.info("Face verification attendance/%s → %s", attendance_id, out)
+    except Exception:
+        logger.exception("Face verification FAILED for attendance %s", attendance_id)
+
+
 # ---------------- Phase 4 Part C: incident severity classification ----------------
 
 async def _classify_incident_async(incident_id: str) -> dict:
@@ -237,10 +336,14 @@ async def _classify_incident_async(incident_id: str) -> dict:
                 return {"error": "incident not found"}
 
             image = None
-            try:
-                image = get_storage().get(inc.photo_key)
-            except Exception:
-                pass
+            if inc.photo_key:
+                try:
+                    image = get_storage().get(inc.photo_key)
+                except Exception as e:
+                    logger.warning(
+                        "classification could not fetch photo %s for incident %s: %s",
+                        inc.photo_key, incident_id, e,
+                    )
 
             transcript = ""
             if inc.voice_note_key:
@@ -374,6 +477,8 @@ async def _ai_timeout_sweep_async() -> dict:
 
 @celery.task(name="app.tasks.ai_suggestion_timeout_sweep")
 def ai_suggestion_timeout_sweep() -> dict:
+    if not _job_lock_sync("ai_suggestion_timeout_sweep", 4 * 60):
+        return {"skipped": "lock"}
     return asyncio.run(_ai_timeout_sweep_async())
 
 
@@ -595,6 +700,8 @@ async def _punchout_reminder_async(now=None) -> dict:
 
 @celery.task(name="app.tasks.punchout_reminder_sweep")
 def punchout_reminder_sweep() -> dict:
+    if not _job_lock_sync("punchout_reminder_sweep", 12 * 60):
+        return {"skipped": "lock"}
     return asyncio.run(_punchout_reminder_async())
 
 
@@ -677,6 +784,21 @@ async def _sop_ingest_async(doc_id: str) -> dict:
 @celery.task(name="app.tasks.sop_ingest")
 def sop_ingest_task(doc_id: str) -> dict:
     return asyncio.run(_sop_ingest_async(doc_id))
+
+
+async def run_sop_ingest_background(doc_id: str) -> None:
+    """In-process SOP ingest (FastAPI background task) — production has no Celery
+    worker. The multilingual ONNX embedding model (~450MB RSS) is RELEASED afterwards
+    so a 1Gi API container returns to steady-state; RAG queries lazily reload it."""
+    from app.embeddings import release_model
+
+    try:
+        out = await _sop_ingest_async(doc_id)
+        logger.info("SOP ingest %s → %s", doc_id, out)
+    except Exception:
+        logger.exception("SOP ingest FAILED for %s", doc_id)
+    finally:
+        release_model()
 
 
 # ---------------- Phase 4 Part C: nightly factory report ----------------
@@ -866,6 +988,8 @@ async def generate_report_async(target_date) -> dict:
 def nightly_report() -> dict:
     from app.shift_logic import now_ist
 
+    if not _job_lock_sync("nightly_report", 20 * 3600):
+        return {"skipped": "lock"}
     yesterday = now_ist().date() - timedelta(days=1)
     result = asyncio.run(generate_report_async(yesterday))
     logger.info("Nightly report generated: %s", result)

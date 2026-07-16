@@ -204,12 +204,6 @@ async def test_sop_doc_upload_requires_cgm(client):
 
 
 async def test_sop_doc_upload_and_list(client, monkeypatch):
-    class _FakeTask:
-        @staticmethod
-        def delay(x):
-            return None
-
-    monkeypatch.setattr("app.tasks.sop_ingest_task", _FakeTask)
     headers = await login(client, PHONES["cgm"])
     r = await client.post(
         "/api/admin/sop-docs",

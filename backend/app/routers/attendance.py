@@ -1,8 +1,9 @@
 import math
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,6 +78,7 @@ async def beacon_macs(
 @router.post("/attendance/punch-in")
 async def punch_in(
     body: PunchInIn,
+    background: BackgroundTasks,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -157,14 +159,12 @@ async def punch_in(
         raise HTTPException(status_code=409, detail="Already punched in for this day")
     await session.refresh(record)
 
-    # Face verification runs ASYNC in Celery — the punch response is never delayed.
-    # The task also handles the bootstrap rule (first selfie becomes the reference).
-    try:
-        from app.tasks import verify_face_task
+    # Face verification runs AFTER the response, IN-PROCESS (production containers
+    # have no Celery worker). Handles the bootstrap rule (first selfie = reference).
+    if not os.environ.get("TESTING"):
+        from app.tasks import run_face_verification_background
 
-        verify_face_task.delay(str(record.id))
-    except Exception:  # broker unavailable must never fail a punch
-        pass
+        background.add_task(run_face_verification_background, str(record.id))
 
     return _out(record)
 
