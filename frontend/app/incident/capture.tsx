@@ -608,7 +608,7 @@ export default function IncidentCapture() {
           ) : shot ? (
             <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
           ) : null}
-          <SafeAreaView style={styles.viewerClose} pointerEvents="box-none">
+          <SafeAreaView style={[styles.viewerClose, { pointerEvents: "box-none" }]}>
             <Pressable
               testID="viewer-close-button"
               accessibilityRole="button"

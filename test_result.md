@@ -245,3 +245,12 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   → BackgroundTasks, pg_dump fallback to Python SQL dump (pg_dump was silently broken vs Neon
   PG17). Live-proven: backup R2 key, face score 100.0 in-process, lock dedupe (celery skipped).
 - 152/152 pytest. RSS: API ~135MB steady; SOP embed spike 660MB → ~100MB after release_model().
+
+## Prompt 11 — Optimistic submit + EyeLoader + logo assets (2026-06)
+- Optimistic incident submit via outbox (oid param on success screen, live upload progress,
+  results map for AI-card handoff); reports outbox chips Uploading…/Will retry/Waiting to send.
+- EyeLoader replaces every ActivityIndicator (16 files); BlinkingLogo idle header anim;
+  webdash CSS eye loader. Icon/adaptive/splash/favicon regenerated from user's white 1024 logo.
+- Frontend testing agent iteration_12.json: ALL PASS — submit→success in 117ms, uploading→sent
+  transition + AI card verified live (incident #835FEA22). No ActivityIndicator left (grep=0).
+- NOT web-testable (verify on v1.0.2 build): app icon/splash, video capture, BLE.

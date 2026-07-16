@@ -478,3 +478,32 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - ⚠️ PRODUCTION ACTIVATION: user must Publish (redeploy). After redeploy, prod logs will show
   "scheduler: N jobs registered IN-PROCESS". Deployment Secrets must include AWS_*,
   EMERGENT_LLM_KEY (already required by Prompt 9) — CELERY_* no longer needed in prod.
+
+## Prompt 11 — Submit speed + EyeLoader + logo assets (2026-06, FINAL PRE-BUILD) ✅ DONE
+- OPTIMISTIC SUBMIT (photo path): capture.tsx submit() now ALWAYS enqueues to the outbox
+  (photo + optional voice note as files[{field:"voice_note_key"}]) and navigates instantly to
+  /incident/success?oid=<outboxId> (measured 117ms; burn-in+compress ~1-2s before that).
+  Compression unchanged (burnIn.ts: quality 0.7, max 1600px — already met acceptance).
+  Video path unchanged (network-required, direct upload, queued=0/rid params still supported).
+- outbox.ts: new state uploadingId (chip driver) + results{oid → incident id | null=rejected,
+  in-memory only}; enqueue() returns id; incident branch uploads aux files (voice note;
+  non-network aux failure won't block the report).
+- success.tsx: oid mode watches the outbox live — Saved!/EyeLoader (uploading) → willRetryBody
+  (retries>0) → Complaint sent! + id + existing AI card polling (effectiveRid = rid ?? results[oid]).
+  Permanent rejection → uploadFailed copy. testIDs: incident-uploading-icon/queued/sent.
+- reports.tsx outbox rows: chips Uploading… (accent + mini EyeLoader) / Will retry / Waiting to send.
+- EyeLoader (/src/components/EyeLoader.tsx): left→hold→right→hold→centre→blink, native driver,
+  AppState-paused. Replaced ALL ActivityIndicators (16 files, grep=0 left). BigButton loading
+  uses it too. Home header: BlinkingLogo idle blink (testID home-brand-eye). Webdash: CSS
+  .eye-loader/.eye-iris keyframes in styles.css + Loading() markup in components.tsx.
+- ASSETS: icon.png + splash-image.png regenerated 1:1 from user's hogoplus_logo_white_1024.png;
+  adaptive-icon.png = same logo at 66% safe-zone on white 1024; favicon 96px; app.json splash
+  bg already #FFFFFF (untouched). Deleted orphans: app-image.png, partial-react-logo.png,
+  react-logo*.png. In-app logo.png kept (transparent variant, same artwork — attached
+  hogoplus_logo_white.png is white-bg RGB, worse for headers).
+- Extra fixes: pointerEvents prop→style (capture viewer), reverseGeocode web guard (Geocoding
+  API removed on web SDK49; native unaffected).
+- i18n added (en/hi/mr): status.uploading, status.willRetry, incident.uploadingBody/
+  willRetryBody/uploadFailed.
+- Testing: iteration_12.json — ALL PASS (frontend agent, live prod backend; incident #835FEA22
+  created). tsc + eslint clean. Icon/splash verification requires the Android build (v1.0.2).
