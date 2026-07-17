@@ -536,3 +536,31 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
   when repeated logins throttle testing. gtts pinned click conflict: click restored to >=8.4.2.
 - Testing: iteration_13.json PASS (one web-only iris finding — FIXED after, re-verified
   numerically). User will now trigger the v1.0.2 build.
+
+## Prompt 13 — CGM/MD dept switcher + prod employee Yema G (2026-06) ✅ DONE
+- DEPT SWITCHER (mobile "My Department" tab): rank<=2 (CGM/MD) get a horizontal chip row
+  (testID dept-selector, chips dept-chip-<CODE>) of all 13 departments (trilingual from
+  /api/departments, own dept first + default). Selecting loads that dept's forms
+  (listForms(dept)) + dept-wide submissions (listSubmissions({department_code})); header title
+  = selected dept name; form tiles push /form/[id]?dept=<code> (form/[id].tsx accepts dept
+  param for the definitions fetch). Rank>=3 unchanged (no chips, locked to own dept).
+- BACKEND SCOPING TIGHTENED (forms.py): list_forms → 403 if department_code != own && rank>2
+  (previously managers could silently browse any dept); submit_form → 403 threshold rank>2
+  (was >3 — managers could cross-submit before!). Submission stays stamped with
+  definition.department_code (CGM cross-submits carry the selected dept).
+- TESTS: 158/158 passing (was 152; +6 in tests/test_dept_switcher.py; 2 tests in
+  test_forms.py REWRITTEN to expect 403: test_worker_other_dept_forms_forbidden,
+  test_manager_other_dept_forms_forbidden). Local test infra reinstalled this fork:
+  apt postgresql+redis-server, role hogo/hogo_secret, db hogoplus_test, pgvector v0.8.0
+  BUILT FROM SOURCE (apt has no postgresql-15-pgvector; needed postgresql-server-dev-15 +
+  make install from github pgvector tag v0.8.0, then CREATE EXTENSION vector).
+- i18n added: forms.viewDept (en "View department" / hi "विभाग देखें" / mr "विभाग पहा").
+- PROD EMPLOYEE (REAL, live immediately): Yema G, emp_id 1212 (next free numeric), phone
+  +919309491145, TIME_OFFICE / Manager, onboarding approved, ShiftAssignment GEN baseline
+  eff 2026-07-17. Employee count 402 → 403. NOT whitelisted (real SMS OTP once owner flips
+  OTP_MODE). TIME_OFFICE.manager_employee_id already set to another employee (untouched) —
+  Yema qualifies via is_dept_manager role+dept rule. Verified live with a minted JWT:
+  GET /api/attendance/flagged 200 (3 items), GET /api/admin/employees/pending 200; worker 403.
+- E2 frontend pass iteration_14.json: ALL PASS (13 chips, ADMIN first/default for CGM,
+  cross-dept form renders, worker sees no chips, Marathi labels OK).
+- Ships in v1.0.3 consolidated build (mobile side); Yema's record already live.

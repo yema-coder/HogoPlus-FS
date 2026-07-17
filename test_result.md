@@ -264,3 +264,11 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   .m4a→audio/mp4 MIME fix, mobile AudioPlayerCard (incident detail, progress+duration), webdash
   modal <audio>. Live Marathi note verified: incident 5b3ccaa2 (DO NOT DELETE), mobile 0:03/0:10,
   webdash duration 10.176s. iteration_13.json PASS.
+
+## Prompt 13 — Dept switcher (CGM/MD) + Yema G prod insert (2026-06)
+- Switcher chips on My Department for rank<=2; backend 403s cross-dept for rank>=3 (both list
+  and submit — note manager submit threshold FIXED from >3 to >2). 158/158 pytest (6 new in
+  test_dept_switcher.py, 2 rewritten in test_forms.py). pgvector must be built from source for
+  the local test DB in fresh forks. Frontend E2 pass: iteration_14.json ALL PASS.
+- Prod: Yema G emp_id 1212 (+919309491145, TIME_OFFICE Manager, GEN) — count 402→403; flagged
+  + onboarding queues verified 200 via minted JWT; not whitelisted (real OTP path).
