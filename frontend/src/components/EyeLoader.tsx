@@ -75,9 +75,7 @@ export function EyeLoader({ size = 40, testID = "eye-loader" }: Props) {
   return (
     <Animated.View testID={testID} style={{ width: w, height: h, transform: [{ scaleY: lid }] }}>
       <Image source={BASE} style={styles.base} resizeMode="contain" />
-      <Animated.Image
-        source={IRIS}
-        resizeMode="contain"
+      <Animated.View
         style={{
           position: "absolute",
           width: irisD,
@@ -88,11 +86,14 @@ export function EyeLoader({ size = 40, testID = "eye-loader" }: Props) {
             { translateX: iris.interpolate({ inputRange: [-1, 1], outputRange: [-maxX, maxX] }) },
           ],
         }}
-      />
+      >
+        <Image source={IRIS} resizeMode="contain" style={styles.iris} />
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   base: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
+  iris: { width: "100%", height: "100%" },
 });

@@ -254,3 +254,13 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
 - Frontend testing agent iteration_12.json: ALL PASS — submit→success in 117ms, uploading→sent
   transition + AI card verified live (incident #835FEA22). No ActivityIndicator left (grep=0).
 - NOT web-testable (verify on v1.0.2 build): app icon/splash, video capture, BLE.
+
+## Prompt 12 — Real-logo EyeLoader + incident audio playback (2026-06)
+- EyeLoader now composes the real logo layers (eye-base.png + eye-iris.png); iris ±12%W with
+  250ms holds + full-logo blink. RN-WEB GOTCHA: Animated.Image ignores transform on web — wrap
+  iris in Animated.View. Verified: translateX -5.9→+5.9→0, blink scaleY 0.947 (computed styles),
+  webdash CSS twin frames left/mid/right.
+- Voice notes playable by approvers end-to-end: voice_note_url in incident + dashboard payloads,
+  .m4a→audio/mp4 MIME fix, mobile AudioPlayerCard (incident detail, progress+duration), webdash
+  modal <audio>. Live Marathi note verified: incident 5b3ccaa2 (DO NOT DELETE), mobile 0:03/0:10,
+  webdash duration 10.176s. iteration_13.json PASS.

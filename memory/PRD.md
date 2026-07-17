@@ -507,3 +507,32 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
   willRetryBody/uploadFailed.
 - Testing: iteration_12.json — ALL PASS (frontend agent, live prod backend; incident #835FEA22
   created). tsc + eslint clean. Icon/splash verification requires the Android build (v1.0.2).
+
+## Prompt 12 — REAL-logo EyeLoader rebuild + incident audio E2E (2026-06) ✅ DONE
+- EYELOADER REBUILT per user rejection: now a two-layer composition of the REAL logo using
+  user-supplied assets /app/frontend/assets/images/eye-base.png (502×408, socket filled white)
+  + eye-iris.png (202×202). Geometry: iris centre 51.4%W/54.7%H, diameter 40%W, travel ±12%W.
+  ~2s loop: left 280ms → hold 250 → right 460 → hold 250 → centre → blink (whole logo scaleY
+  0.08, 100+100ms). IMPORTANT WEB LESSON: Animated.Image transform does NOT apply on RN-web —
+  iris must be wrapped in Animated.View (fixed; verified translateX -5.9→+5.9→0 + scaleY 0.947
+  blink via computed styles). Same 16 call sites (color prop removed — image has brand colours).
+  Home idle blink delay 6800ms. Webdash: real-image CSS twin (.eye-base/.eye-iris in styles.css,
+  imgs imported in components.tsx Loading()); frames captured showing iris left/mid/right.
+- INCIDENT AUDIO E2E (approver playback): backend adds voice_note_url to incidents _out and
+  both dashboard payloads (overview feed + department incidents); storage._content_type maps
+  .m4a → audio/mp4 (missing from Python mimetypes). Mobile: new
+  /app/frontend/src/components/AudioPlayerCard.tsx (expo-audio useAudioPlayer +
+  useAudioPlayerStatus; play/pause, progress bar, elapsed/total) rendered in incident/[id].tsx
+  (testID incident-voice-player). Webdash IncidentModal: <audio data-testid=modal-voice-audio>
+  + i18n voiceNote key. Webdash rebuilt (yarn build → /app/backend/webdash_dist).
+- LIVE E2E PROOF (prod Neon/R2): real Marathi gTTS voice note (10.2s mp3) uploaded by worker
+  +917972540971 → incident 5b3ccaa2-1bb6-40aa-8a5a-206432a71124 (PRODUCTION,
+  machine_breakdown, voice key 2c92689108ce4f52bd785b7c5c9f703d.mp3) → CGM mobile playback
+  verified (0:03/0:10 progress) → presigned GET 200 audio/mpeg 81408 bytes → webdash modal
+  audio duration 10.176s + play() advanced. AI even transcribed the Marathi voice note into the
+  severity assessment. KEEP this incident (referenced by tests).
+- Outbox optimistic path carries voice notes as files[{field:"voice_note_key"}] (prompt 11).
+- NOTE: OTP send has 10-min rate limit (otp:send:<phone> redis key) — clear via redis_client
+  when repeated logins throttle testing. gtts pinned click conflict: click restored to >=8.4.2.
+- Testing: iteration_13.json PASS (one web-only iris finding — FIXED after, re-verified
+  numerically). User will now trigger the v1.0.2 build.
