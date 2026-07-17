@@ -123,7 +123,7 @@ export default function ReportsScreen() {
                           style={[styles.queuedChip, { backgroundColor: colors.accent }]}
                           testID={`outbox-chip-uploading-${item.id}`}
                         >
-                          <EyeLoader size={12} color="#FFFFFF" />
+                          <EyeLoader size={12} />
                           <Text style={[styles.queuedText, { color: "#FFFFFF" }]}>
                             {t("status.uploading")}
                           </Text>

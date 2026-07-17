@@ -58,7 +58,7 @@ function BlinkingLogo() {
       loop?.stop();
       lid.setValue(1);
       loop = Animated.loop(
-        Animated.sequence([Animated.delay(4200), blink(140), Animated.delay(190), blink(160)]),
+        Animated.sequence([Animated.delay(6800), blink(140), Animated.delay(190), blink(160)]),
       );
       loop.start();
     };

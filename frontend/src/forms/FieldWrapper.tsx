@@ -44,7 +44,7 @@ export function FieldWrapper({ field, error, children, onLayout, aiFilled, aiLoa
       </View>
       {aiLoading ? (
         <View style={styles.aiLoadingRow} testID={`ai-loading-${field.key}`}>
-          <EyeLoader size={14} color={colors.accent} />
+          <EyeLoader size={14} />
           <Text style={styles.aiLoadingText}>{t("ai.reading")}</Text>
         </View>
       ) : field.ai_hook && aiFilled === undefined ? (

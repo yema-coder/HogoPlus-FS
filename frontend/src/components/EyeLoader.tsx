@@ -1,22 +1,30 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, AppState, Easing, StyleSheet, View } from "react-native";
+import { Animated, AppState, Easing, Image, StyleSheet } from "react-native";
 
-import { colors } from "@/src/theme/tokens";
+// Real logo layers (user-supplied, pre-separated):
+// base 502×408 — full logo with the iris socket filled white; iris 202×202 — eyeball only.
+const BASE = require("@/assets/images/eye-base.png");
+const IRIS = require("@/assets/images/eye-iris.png");
+
+const RATIO = 502 / 408; // base width / height
+const IRIS_CX = 0.514; // iris centre, fraction of base width
+const IRIS_CY = 0.547; // iris centre, fraction of base height
+const IRIS_D = 0.4; // iris diameter, fraction of base width
+const TRAVEL = 0.12; // max iris travel each side, fraction of base width (stays inside the white opening)
 
 interface Props {
-  /** Eye height in px — width is ~1.7×. Defaults to 40 (full-screen loader). */
+  /** Logo height in px — width is ~1.23×. Defaults to 40 (full-screen loader). */
   size?: number;
-  /** Outline + iris colour. Defaults to brand primary. */
-  color?: string;
   testID?: string;
 }
 
 /**
- * Brand "eye" loader — replaces generic spinners app-wide.
- * Sequence: iris looks LEFT → hold → RIGHT → hold → centre → BLINK → repeat.
+ * Brand eye loader — the REAL app logo, animated as two layers.
+ * ~2s loop: iris looks LEFT → hold 250ms → RIGHT → hold 250ms → centre →
+ * BLINK (whole logo scaleY → 0.08 and back, ~200ms) → repeat.
  * Native-driver transforms only; pauses while the app is backgrounded.
  */
-export function EyeLoader({ size = 40, color = colors.primary, testID = "eye-loader" }: Props) {
+export function EyeLoader({ size = 40, testID = "eye-loader" }: Props) {
   const iris = useRef(new Animated.Value(0)).current;
   const lid = useRef(new Animated.Value(1)).current;
   const loop = useRef<Animated.CompositeAnimation | null>(null);
@@ -36,14 +44,14 @@ export function EyeLoader({ size = 40, color = colors.primary, testID = "eye-loa
       loop.current = Animated.loop(
         Animated.sequence([
           timing(iris, -1, 280), // look left
-          Animated.delay(340), // hold
+          Animated.delay(250), // hold
           timing(iris, 1, 460), // look right
-          Animated.delay(340), // hold
+          Animated.delay(250), // hold
           timing(iris, 0, 280), // back to centre
-          Animated.delay(160),
-          timing(lid, 0.08, 90), // blink close
-          timing(lid, 1, 140), // blink open
-          Animated.delay(220),
+          Animated.delay(120),
+          timing(lid, 0.08, 100), // blink close
+          timing(lid, 1, 100), // blink open
+          Animated.delay(200),
         ]),
       );
       loop.current.start();
@@ -59,51 +67,32 @@ export function EyeLoader({ size = 40, color = colors.primary, testID = "eye-loa
     };
   }, [iris, lid]);
 
-  const w = Math.round(size * 1.7);
-  const border = Math.max(2, Math.round(size * 0.09));
-  const irisSize = Math.round(size * 0.52);
-  const maxX = (w - irisSize) / 2 - border - Math.max(2, size * 0.08);
+  const h = size;
+  const w = size * RATIO;
+  const irisD = w * IRIS_D;
+  const maxX = w * TRAVEL;
 
   return (
-    <Animated.View testID={testID} style={{ width: w, height: size, transform: [{ scaleY: lid }] }}>
-      <View
-        style={[
-          styles.outline,
-          { borderRadius: size / 2, borderWidth: border, borderColor: color },
-        ]}
+    <Animated.View testID={testID} style={{ width: w, height: h, transform: [{ scaleY: lid }] }}>
+      <Image source={BASE} style={styles.base} resizeMode="contain" />
+      <Animated.Image
+        source={IRIS}
+        resizeMode="contain"
+        style={{
+          position: "absolute",
+          width: irisD,
+          height: irisD,
+          left: w * IRIS_CX - irisD / 2,
+          top: h * IRIS_CY - irisD / 2,
+          transform: [
+            { translateX: iris.interpolate({ inputRange: [-1, 1], outputRange: [-maxX, maxX] }) },
+          ],
+        }}
       />
-      <View style={styles.irisWrap}>
-        <Animated.View
-          style={{
-            width: irisSize,
-            height: irisSize,
-            borderRadius: irisSize / 2,
-            backgroundColor: color,
-            transform: [
-              { translateX: iris.interpolate({ inputRange: [-1, 1], outputRange: [-maxX, maxX] }) },
-            ],
-          }}
-        >
-          <View
-            style={[
-              styles.glint,
-              {
-                width: Math.max(3, Math.round(irisSize * 0.3)),
-                height: Math.max(3, Math.round(irisSize * 0.3)),
-                borderRadius: irisSize,
-                top: Math.round(irisSize * 0.14),
-                right: Math.round(irisSize * 0.14),
-              },
-            ]}
-          />
-        </Animated.View>
-      </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  outline: { ...StyleSheet.absoluteFillObject },
-  irisWrap: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
-  glint: { position: "absolute", backgroundColor: "rgba(255,255,255,0.85)" },
+  base: { ...StyleSheet.absoluteFillObject, width: "100%", height: "100%" },
 });

@@ -71,7 +71,7 @@ export function BigButton({
       ]}
     >
       {loading ? (
-        <EyeLoader size={18} color={fg} />
+        <EyeLoader size={18} />
       ) : (
         <>
           {Icon ? <Icon size={24} color={fg} strokeWidth={2.4} /> : null}

@@ -204,7 +204,7 @@ export function PhotoCaptureModal({ visible, label, onClose, onCaptured, testIDP
       <View style={styles.fillBg} testID={`${testIDPrefix}-capture-modal`}>
         {busy && !shot ? (
           <View style={styles.busyOverlay}>
-            <EyeLoader size={36} color="#FFFFFF" />
+            <EyeLoader size={36} />
           </View>
         ) : null}
         {body()}

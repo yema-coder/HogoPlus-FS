@@ -59,7 +59,7 @@ export function AnprTextInput({ label, value, onChange, onAiFilled, onAiLoading,
         style={[styles.scanBtn, busy && { opacity: 0.6 }]}
       >
         {busy ? (
-          <EyeLoader size={14} color={colors.onPrimary} />
+          <EyeLoader size={14} />
         ) : (
           <CameraIcon size={24} color={colors.onPrimary} strokeWidth={2.2} />
         )}

@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError, fileUrl, uploadFile } from "@/src/api/client";
 import { changeIncidentStatus, incidentDetail } from "@/src/api/endpoints";
 import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
+import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -289,6 +290,14 @@ export default function IncidentDetailScreen() {
             <View style={styles.card}>
               <Text style={styles.desc}>{detail.description}</Text>
             </View>
+          ) : null}
+
+          {detail.voice_note_key ? (
+            <AudioPlayerCard
+              uri={fileUrl(detail.voice_note_key)}
+              label={t("incident.voiceNote")}
+              testID="incident-voice-player"
+            />
           ) : null}
 
           {detail.resolution_note || detail.resolution_photo_key ? (

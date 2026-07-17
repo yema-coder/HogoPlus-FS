@@ -144,7 +144,7 @@ export default function IncidentSuccess() {
             }
           >
             {sending && !willRetry ? (
-              <EyeLoader size={38} color={colors.success} />
+              <EyeLoader size={38} />
             ) : isQueued || willRetry || uploadFailed ? (
               <CloudOff size={56} color={colors.warning} strokeWidth={2} />
             ) : (

@@ -22,6 +22,8 @@ class StorageAdapter(ABC):
 def _content_type(key: str) -> str:
     import mimetypes
 
+    if key.lower().endswith(".m4a"):
+        return "audio/mp4"  # missing from Python's default mimetype map
     return mimetypes.guess_type(key)[0] or "application/octet-stream"
 
 

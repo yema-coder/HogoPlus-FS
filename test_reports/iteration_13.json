@@ -1,0 +1,29 @@
+{
+  "summary": "Prompt 12 (real-logo EyeLoader + voice-note playback) end-to-end verified on both surfaces. Webdash: real logo eye-loader (.eye-base + .eye-iris) shown during 4s route-intercepted /api/dashboard/department/PRODUCTION with CSS animations eye-blink 2s + eye-look 2s applied. Incident modal for seeded incident 5b3ccaa2 shows [data-testid=modal-voice-note] with <audio data-testid=modal-voice-audio> whose metadata loaded (duration=10.176s, readyState=4) and playback advanced currentTime from 0 → 1.43s in 1.5s. Mobile (Expo web, +918483029039/OTP 123456): home-brand-eye present on Home; on /incident/{seed} the [data-testid=eye-loader] rendered with 2 layers (eye-base.png + eye-iris.png) and root scaleY dipped to 0.7996 during blink. Incident detail loaded and AudioPlayerCard (incident-voice-player + toggle + time labels) rendered under 'Voice note (optional)' with progress bar and blue play button. ONE web-only quirk observed: on Expo Web the iris <img> computed transform stayed 'none' across ~2.5s of sampling — the horizontal translateX animation is not reaching the DOM (useNativeDriver:true web fallback likely drops the Animated.Image translateX). Visual result on web is a blink-only loader; on native this is expected to render both LEFT→RIGHT gaze and blink. Not a blocker (web is a preview surface, no design regression vs previous rectangle loader), but worth noting.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "EyeLoader (web fallback)", "issue": "On Expo Web preview, the iris translateX animation does not propagate to the DOM: getComputedStyle(iris <img>).transform stays 'none' across ~2.5s. Only the outer Animated.View scaleY blink is visible (matrix scaleY seen dipping to 0.7996). Likely cause: useNativeDriver:true on web falls back to JS driver and the Animated.Image's interpolated translateX is not written to style on web. Recommended fix: wrap the animated iris in an Animated.View (not Animated.Image) OR set useNativeDriver:false on web via Platform.select, so the JS driver writes the transform to style. Reference: /app/frontend/src/components/EyeLoader.tsx:78-91. Native (iOS/Android) is expected to still work — no red screen, no console error."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "OPTIONAL/COSMETIC (web only): In /app/frontend/src/components/EyeLoader.tsx, either (a) wrap the <Animated.Image IRIS> inside an <Animated.View> that owns the translateX transform, or (b) use useNativeDriver: Platform.OS !== 'web' so the JS-driver path on web actually writes the interpolated translateX to the DOM. Currently on Expo Web the iris is stationary (only the container blink renders). Native platforms unaffected."
+  ],
+  "critical_code_review_comments": [
+    "EyeLoader base image uses StyleSheet.absoluteFillObject + width:100%/height:100% — good, covers container; iris positioned via absolute left/top + translateX interpolation. Design is clean.",
+    "webdash CSS twin (styles.css eye-look/eye-blink @keyframes) is a pure CSS translateX+scaleY loop — animates correctly on web dashboard and matches the mobile intent visually.",
+    "AudioPlayerCard uses expo-audio (correct — not deprecated expo-av). status.duration/currentTime driven from useAudioPlayerStatus. Progress bar and 'M:SS / M:SS' label both bound; toggle handles didJustFinish → seekTo(0) → play, good UX.",
+    "Webdash modal uses <audio preload='metadata' src={inc.voice_note_url}> — presigned URL from backend, correct audio content-type (metadata loaded, duration = 10.176s matches the seeded 10s Marathi note). Sits inside .loc-block[data-testid=modal-voice-note] which is what the acceptance criteria calls for."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only per request)", "frontend": "100% of prompt 12 acceptance criteria (with the one web-only cosmetic finding noted for the iris translateX)"},
+  "seed_data_creation": "No new seed data. Existing seeded incident 5b3ccaa2-1bb6-40aa-8a5a-206432a71124 (Marathi voice, 10.18s, PRODUCTION) used and preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Verified testIDs — mobile: home-brand-eye, eye-loader (contains two <img>: eye-base.png + eye-iris.png), incident-voice-player, incident-voice-player-toggle, incident-voice-player-time. Webdash: data-testid modal-voice-note (wrapper) + modal-voice-audio (<audio>), incident-item-<id>, dept-date. Webdash password login persists in localStorage.hogo_access (Bearer). Route-intercept technique to hold loader: page.route('**/api/dashboard/department/**', delay 4s) works reliably; on mobile use page.route('**/api/incidents/**', delay 4s) and remember to unroute AFTER all pending requests finish (or the next unrelated /api/incidents/... fetch will crash on Route.continue). Iris translateX web fallback is the only outstanding note.",
+  "rca_of_issue": "Iris translateX not visible on Expo Web preview: react-native-web renders Animated.Image style updates, but with useNativeDriver:true the driver is bypassed on web and the JS fallback occasionally does not push interpolated transforms into the DOM style attribute for <Animated.Image> as reliably as for <Animated.View>. Verified by getComputedStyle(iris).transform staying 'none' while the sibling Animated.View (loader root) DID show a live matrix update on scaleY. Suggested mitigation is above."
+}

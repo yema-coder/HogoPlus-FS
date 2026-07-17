@@ -293,7 +293,7 @@ export default function IncidentCapture() {
     if (gpsStatus === "searching") {
       return (
         <View style={styles.gpsChip} testID="gps-chip-searching">
-          <EyeLoader size={16} color="#FFFFFF" />
+          <EyeLoader size={16} />
           <Text style={styles.gpsChipText}>{t("incident.gpsSearching")}</Text>
         </View>
       );

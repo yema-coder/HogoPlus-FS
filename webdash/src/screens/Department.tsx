@@ -94,6 +94,18 @@ function IncidentModal({ inc, onClose }: { inc: any; onClose: () => void }) {
         ) : null}
         {locBlock(t("objectLocation"), "modal-object-location")}
         {locBlock(t("deviceLocation"), "modal-device-location")}
+        {inc.voice_note_url ? (
+          <div className="loc-block" data-testid="modal-voice-note">
+            <div className="loc-label">🎙 {t("voiceNote")}</div>
+            <audio
+              controls
+              preload="metadata"
+              src={inc.voice_note_url}
+              style={{ width: "100%", marginTop: 6 }}
+              data-testid="modal-voice-audio"
+            />
+          </div>
+        ) : null}
         {inc.description ? <div style={{ marginTop: 10 }}>{inc.description}</div> : null}
         <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
           🕐 {t("capturedAt")}: {new Date(inc.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}

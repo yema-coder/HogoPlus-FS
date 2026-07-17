@@ -164,6 +164,7 @@ const D: Record<string, [string, string, string]> = {
   copy: ["Copy", "कॉपी", "कॉपी"],
   copied: ["Copied", "कॉपी हो गया", "कॉपी झाले"],
   objectLocation: ["Object Location", "वस्तु का स्थान", "वस्तूचे स्थान"],
+  voiceNote: ["Voice note", "आवाज़ नोट", "आवाज नोट"],
   deviceLocation: ["Device Location", "डिवाइस का स्थान", "डिव्हाइसचे स्थान"],
   capturedAt: ["Captured at", "कैप्चर समय", "कॅप्चर वेळ"],
   rNoText: ["No text found in the photo", "फोटो में कोई टेक्स्ट नहीं मिला", "फोटोमध्ये मजकूर आढळला नाही"],

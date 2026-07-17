@@ -96,20 +96,20 @@ tr.red td { background: #FDF0F2; }
 .loc-block { border: 1px solid var(--border, #E7E4DC); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
 .loc-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
-/* Animated brand "eye" loader — CSS twin of the mobile EyeLoader.
-   Sequence: iris left → hold → right → hold → centre → blink. */
+/* Animated brand "eye" loader — real logo layers (base + iris), same
+   sequence as the mobile EyeLoader: left → hold → right → hold → centre → blink. */
 .eye-loading { padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-weight: 600; }
-.eye-loader { position: relative; width: 60px; height: 36px; border: 3px solid var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: eye-blink 2.6s ease-in-out infinite; }
-.eye-iris { width: 16px; height: 16px; border-radius: 50%; background: var(--primary); position: relative; animation: eye-look 2.6s ease-in-out infinite; }
-.eye-iris::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.85); }
+.eye-loader { position: relative; width: 74px; height: 60px; animation: eye-blink 2s ease-in-out infinite; }
+.eye-base { display: block; width: 100%; height: 100%; object-fit: contain; }
+.eye-iris { position: absolute; width: 40%; height: auto; left: 31.4%; top: 30.1%; animation: eye-look 2s ease-in-out infinite; }
 @keyframes eye-look {
-  0%, 6% { transform: translateX(0); }
-  12%, 32% { transform: translateX(-14px); }
-  44%, 64% { transform: translateX(14px); }
-  74%, 100% { transform: translateX(0); }
+  0%, 2% { transform: translateX(0); }
+  14%, 26.5% { transform: translateX(-30%); }
+  49.5%, 62% { transform: translateX(30%); }
+  76%, 100% { transform: translateX(0); }
 }
 @keyframes eye-blink {
-  0%, 82% { transform: scaleY(1); }
-  86% { transform: scaleY(0.08); }
+  0%, 80% { transform: scaleY(1); }
+  85% { transform: scaleY(0.08); }
   90%, 100% { transform: scaleY(1); }
 }

@@ -1,4 +1,6 @@
 import React from "react";
+import eyeBase from "./eye-base.png";
+import eyeIris from "./eye-iris.png";
 import { useI18n } from "./i18n";
 
 export function Chip({ tone, children }: { tone?: "red" | "amber" | "green" | "blue"; children: React.ReactNode }) {
@@ -15,7 +17,8 @@ export function Loading() {
   return (
     <div className="eye-loading" role="status" aria-label={t("loading")}>
       <div className="eye-loader">
-        <div className="eye-iris" />
+        <img className="eye-base" src={eyeBase} alt="" />
+        <img className="eye-iris" src={eyeIris} alt="" />
       </div>
       <div>{t("loading")}</div>
     </div>

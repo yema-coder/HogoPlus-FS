@@ -31,6 +31,7 @@ def _out(i: Incident) -> dict:
         "address_text": i.address_text,
         "description": i.description,
         "voice_note_key": i.voice_note_key,
+        "voice_note_url": f"/api/files/{i.voice_note_key}" if i.voice_note_key else None,
         "status": i.status,
         "severity": i.severity,
         "severity_reason": i.severity_reason,

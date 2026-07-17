@@ -244,6 +244,7 @@ async def overview(
                 "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
                 "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
                 "video_url": storage.url_for(i.video_key) if i.video_key else None,
+                "voice_note_url": storage.url_for(i.voice_note_key) if i.voice_note_key else None,
                 "address_text": i.address_text,
                 "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
             }
@@ -340,6 +341,7 @@ async def department_detail(
             "gps_lng": i.gps_lng,
             "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
             "video_url": storage.url_for(i.video_key) if i.video_key else None,
+            "voice_note_url": storage.url_for(i.voice_note_key) if i.voice_note_key else None,
         }
         for i in inc_rows
     ]

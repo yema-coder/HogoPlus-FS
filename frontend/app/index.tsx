@@ -13,7 +13,7 @@ export default function Index() {
     return (
       <View style={styles.splash} testID="splash-screen">
         <Text style={styles.logo}>HogoPlus-FS</Text>
-        <EyeLoader size={36} color={colors.onPrimary} />
+        <EyeLoader size={36} />
       </View>
     );
   }
