@@ -1,0 +1,32 @@
+{
+  "summary": "CGM/MD department switcher on the mobile 'My Department' tab is fully working. CGM (+918483029039) sees testID dept-selector with exactly 13 chips (dept-chip-ADMIN first and active by default, then ACCOUNTS/AGRICULTURE/CANE_YARD/CIVIL/DISTILLERY/ENGINEERING/GODOWN/PRODUCTION/PURCHASE/SECURITY/STORE/TIME_OFFICE). Header title reflects the selected department name. Tapping dept-chip-PRODUCTION reloads the forms grid with form-tile-hourly_process_log; tapping dept-chip-ENGINEERING swaps to form-tile-job_card. Cross-dept form open (PRODUCTION + hourly_process_log) opens /form/[id]?dept=PRODUCTION, renders form-fill-screen with all fields (Station chips Pan/Centrifugal/Evaporator/Lab, Gauge Reading Photo, input-brix_value, input-remarks, SUBMIT + Fill by voice). No stuck EyeLoader. Worker (+917972540971) sees NO dept-selector and NO chips; the tab is locked to own dept (ACCOUNTS) showing only form-tile-payment_note and 'My Submissions' section. Marathi language switch at the initial language picker renders all 13 chips in Devanagari (प्रशासन/लेखा/शेती/ऊस यार्ड/सिव्हिल/डिस्टिलरी/अभियांत्रिकी/गोदाम/उत्पादन/खरेदी/सुरक्षा/स्टोअर/टाइम ऑफिस) with header title 'प्रशासन'. Backend integration verified via response listener: GET /api/departments 200, GET /api/forms?department_code=ADMIN 200, GET /api/submissions?department_code=ADMIN&page_size=50 200. No react_native_issues detected in this iteration.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/10_dept_default.png (CGM default ADMIN with 13 chips)",
+    "/tmp/11_prod.png (PRODUCTION selected, hourly_process_log tile)",
+    "/tmp/12_eng.png (ENGINEERING selected, job_card tile)",
+    "/tmp/20_prod_form.png (Cross-dept form-fill-screen for PRODUCTION Hourly Process Log)",
+    "/tmp/30_worker_dept.png (Worker ACCOUNTS — no chip row)",
+    "/tmp/42_marathi_final.png (Marathi chips + प्रशासन header)"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "department.tsx: deptChips sort places own department first correctly (a.code === dept ? -1 : ...). Active state driven by activeDept = isTop ? selDept || dept : dept — sane default on first render.",
+    "department.tsx: useCachedFetch keys are per-dept (`forms-${activeDept}`, `subs-dept-${activeDept}`) — good, no cache collision across switching.",
+    "form/[id].tsx: correctly uses deptParam from route to fetch listForms(deptParam); definition lookup by id is O(n) on forms list — fine for ≤ dozen forms/dept. Header title uses tri() so labels stay localized.",
+    "Backend scoping (per E1's note) validated indirectly: cross-dept list_forms and submission for CGM went through cleanly (200s observed in network log). Worker session never fired any ?department_code query — matches the rank-gated UI."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only per request; E1 already reported 158/158 pytest)", "frontend": "100% of acceptance criteria for CGM chip row + cross-dept form render + worker lock + Marathi label rendering"},
+  "seed_data_creation": "No junk data created. Cross-dept form-fill acceptance was render-only (per instructions to avoid submissions requiring photos/GPS on prod Neon).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Language picker testIDs: language-option-en / language-option-hi / language-option-mr. Login testIDs: phone-input, send-otp-button, otp-input, verify-otp-button. Bottom tab is a plain link with href='/department' (Marathi text 'विभाग', English 'Dept'). Dept tab exposes: department-screen, dept-selector, dept-chip-<CODE> (13 codes: ADMIN, ACCOUNTS, AGRICULTURE, CANE_YARD, CIVIL, DISTILLERY, ENGINEERING, GODOWN, PRODUCTION, PURCHASE, SECURITY, STORE, TIME_OFFICE), form-tile-<code>, submission-row-<id>. Form fill exposes form-fill-screen and input-<field_name>. OTP send throttle 3/10min per phone on Upstash Redis — clear via `cd /app/backend && python3 -c \"import asyncio; from app.redis_client import redis_client; asyncio.run(redis_client.delete('otp:send:+918483029039'))\"`. Also localStorage.clear() is required between different-user sessions on the same browser context (otherwise the previous JWT stays and phone/otp screens are skipped, dropping you straight to /home for the wrong user). Departments API is slightly slow on first hit — allow 5-8s after landing on /department before asserting chips exist.",
+  "rca_of_issue": "n/a — no bugs found. One benign observation: after switching CGM to Marathi, on the very first EN-session default landing of /department, the ADMIN forms grid briefly showed 'No forms yet' before an admin-scoped fetch populated the तक्रार (Complaint) tile in the subsequent MR session — behavior consistent with useCachedFetch key `forms-ADMIN` populating after the initial paint. Not a regression."
+}

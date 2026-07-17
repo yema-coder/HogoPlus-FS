@@ -307,7 +307,8 @@
     "micPermissionBody": "छोटा वॉइस नोट रिकॉर्ड करें",
     "micDenied": "माइक की अनुमति चाहिए। सेटिंग्स में जाकर दें।",
     "dateHint": "DD/MM/YYYY HH:mm",
-    "invalidDate": "सही तारीख़ डालें"
+    "invalidDate": "सही तारीख़ डालें",
+    "viewDept": "विभाग देखें"
   },
   "swap": {
     "title": "शिफ्ट बदली",

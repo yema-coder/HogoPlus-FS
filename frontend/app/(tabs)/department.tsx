@@ -1,12 +1,12 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { ClipboardList, FileText } from "lucide-react-native";
 import React, { useCallback, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { listForms, listSubmissions } from "@/src/api/endpoints";
-import type { FormDefinitionItem, SubmissionList } from "@/src/api/types";
+import { listDepartments, listForms, listSubmissions } from "@/src/api/endpoints";
+import type { DepartmentItem, FormDefinitionItem, SubmissionList } from "@/src/api/types";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
@@ -26,13 +26,30 @@ export default function DepartmentScreen() {
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
   const isStaffClerk = rank === 4 || rank === 5;
+  const isTop = rank <= 2; // CGM / MD: may browse any department
   const dept = profile?.department_code ?? "";
   const [scope, setScope] = useState<SubScope>("mine");
+  const [selDept, setSelDept] = useState(dept);
+  const activeDept = isTop ? selDept || dept : dept;
 
-  const forms = useCachedFetch<FormDefinitionItem[]>(`forms-${dept}`, () => listForms());
-  const subsKey = scope === "mine" ? "subs-mine" : "subs-dept";
+  const departments = useCachedFetch<DepartmentItem[]>("departments-all", listDepartments);
+  // own department first, rest in seed order
+  const deptChips = isTop
+    ? [...(departments.data ?? [])].sort((a, b) => (a.code === dept ? -1 : b.code === dept ? 1 : 0))
+    : [];
+
+  const forms = useCachedFetch<FormDefinitionItem[]>(`forms-${activeDept}`, () =>
+    listForms(isTop ? activeDept : undefined),
+  );
+  const subsKey = isTop
+    ? `subs-dept-${activeDept}`
+    : scope === "mine"
+      ? "subs-mine"
+      : "subs-dept";
   const subs = useCachedFetch<SubmissionList>(subsKey, () =>
-    listSubmissions(scope === "dept" ? { scope: "department" } : {}),
+    isTop
+      ? listSubmissions({ department_code: activeDept })
+      : listSubmissions(scope === "dept" ? { scope: "department" } : {}),
   );
 
   useFocusEffect(
@@ -45,18 +62,21 @@ export default function DepartmentScreen() {
 
   // managers get dept-wide lists from the default endpoint; "mine" filters client-side
   const subItems = (subs.data?.items ?? []).filter((s) =>
-    scope === "mine" ? s.submitted_by === profile?.id : true,
+    !isTop && scope === "mine" ? s.submitted_by === profile?.id : true,
   );
 
-  const DeptIcon = departmentIcon(dept);
+  const deptRecord = isTop ? deptChips.find((d) => d.code === activeDept) : null;
+  const DeptIcon = departmentIcon(activeDept);
 
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="department-screen">
       <ScreenHeader
         title={
-          profile?.department
-            ? tri(profile.department as unknown as Record<string, unknown>, "name")
-            : t("tabs.dept")
+          deptRecord
+            ? tri(deptRecord as unknown as Record<string, unknown>, "name")
+            : profile?.department
+              ? tri(profile.department as unknown as Record<string, unknown>, "name")
+              : t("tabs.dept")
         }
         back={false}
       />
@@ -71,6 +91,37 @@ export default function DepartmentScreen() {
         }}
         ListHeaderComponent={
           <View style={styles.headerWrap}>
+            {isTop ? (
+              <View style={{ gap: spacing.sm }}>
+                <Text style={styles.selectorLabel}>{t("forms.viewDept")}</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.deptChipRow}
+                  testID="dept-selector"
+                >
+                  {deptChips.map((d) => {
+                    const active = d.code === activeDept;
+                    return (
+                      <Pressable
+                        key={d.code}
+                        testID={`dept-chip-${d.code}`}
+                        accessibilityRole="button"
+                        onPress={() => setSelDept(d.code)}
+                        style={[styles.deptChip, active && styles.deptChipActive]}
+                      >
+                        <Text
+                          style={[styles.deptChipText, active && styles.deptChipTextActive]}
+                          numberOfLines={1}
+                        >
+                          {tri(d as unknown as Record<string, unknown>, "name")}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
             <Text style={styles.sectionTitle}>{t("forms.title")}</Text>
             {forms.error && !forms.data ? (
               <ErrorRetry onRetry={() => void forms.refresh()} />
@@ -86,7 +137,12 @@ export default function DepartmentScreen() {
                     key={f.id}
                     testID={`form-tile-${f.code}`}
                     accessibilityRole="button"
-                    onPress={() => router.push({ pathname: "/form/[id]", params: { id: f.id } })}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/form/[id]",
+                        params: isTop ? { id: f.id, dept: activeDept } : { id: f.id },
+                      })
+                    }
                     style={({ pressed }) => [styles.formTile, { opacity: pressed ? 0.85 : 1 }]}
                   >
                     <View style={styles.formIconWrap}>
@@ -102,7 +158,7 @@ export default function DepartmentScreen() {
 
             <View style={styles.subsHead}>
               <Text style={styles.sectionTitle}>
-                {scope === "mine" ? t("forms.mySubs") : t("forms.deptSubs")}
+                {isTop || scope === "dept" ? t("forms.deptSubs") : t("forms.mySubs")}
               </Text>
             </View>
             {isStaffClerk ? (
@@ -138,7 +194,7 @@ export default function DepartmentScreen() {
                 {tri(item as unknown as Record<string, unknown>, "form_title") || item.form_code || t("forms.title")}
               </Text>
               <Text style={styles.subMeta} numberOfLines={1}>
-                {scope === "dept" && item.submitted_by_name
+                {(isTop || scope === "dept") && item.submitted_by_name
                   ? `${item.submitted_by_name} · ${formatDateTime(item.created_at)}`
                   : formatDateTime(item.created_at)}
               </Text>
@@ -163,6 +219,21 @@ const styles = StyleSheet.create({
   list: { padding: sizes.screenPadding, gap: spacing.md, flexGrow: 1 },
   headerWrap: { gap: spacing.md, marginBottom: spacing.sm },
   sectionTitle: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  selectorLabel: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.muted },
+  deptChipRow: { gap: spacing.sm, paddingRight: spacing.md },
+  deptChip: {
+    height: 44,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deptChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  deptChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.text },
+  deptChipTextActive: { color: colors.onPrimary },
   noFormsCard: {
     flexDirection: "row",
     alignItems: "center",

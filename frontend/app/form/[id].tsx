@@ -18,12 +18,12 @@ import { colors } from "@/src/theme/tokens";
 export default function FormFillScreen() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, dept: deptParam } = useLocalSearchParams<{ id: string; dept?: string }>();
   const profile = useAuthStore((s) => s.profile);
-  const dept = profile?.department_code ?? "";
+  const dept = deptParam || (profile?.department_code ?? "");
   const { data, error, refresh } = useCachedFetch<FormDefinitionItem[]>(
     `forms-${dept}`,
-    () => listForms(),
+    () => listForms(deptParam || undefined),
   );
 
   const definition = data?.find((f) => f.id === id) ?? null;

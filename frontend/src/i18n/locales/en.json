@@ -307,7 +307,8 @@
     "micPermissionBody": "Record a short voice note",
     "micDenied": "Microphone permission needed. Allow it in Settings.",
     "dateHint": "DD/MM/YYYY HH:mm",
-    "invalidDate": "Enter a valid date"
+    "invalidDate": "Enter a valid date",
+    "viewDept": "View department"
   },
   "swap": {
     "title": "Swap shift",

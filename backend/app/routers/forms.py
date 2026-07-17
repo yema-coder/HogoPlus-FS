@@ -63,11 +63,14 @@ async def list_forms(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    # Workers/Staff/Clerks see only their own department's forms; Manager+ can view any
-    if employee.role.rank > 3 or department_code is None:
-        dept = employee.department_code if employee.role.rank > 3 else (department_code or employee.department_code)
-    else:
-        dept = department_code
+    # CGM/MD (rank <= 2) may browse any department; everyone else is locked to their own
+    if (
+        department_code
+        and department_code != employee.department_code
+        and employee.role.rank > 2
+    ):
+        raise HTTPException(status_code=403, detail="You can only view your own department's forms")
+    dept = department_code or employee.department_code
     defs = (
         await session.execute(
             select(FormDefinition)
@@ -89,7 +92,8 @@ async def submit_form(
     definition = await session.get(FormDefinition, definition_id)
     if definition is None or not definition.is_active:
         raise HTTPException(status_code=404, detail="Form not found")
-    if employee.role.rank > 3 and definition.department_code != employee.department_code:
+    # only CGM/MD (rank <= 2) may submit on behalf of another department
+    if employee.role.rank > 2 and definition.department_code != employee.department_code:
         raise HTTPException(status_code=403, detail="You can only submit forms of your own department")
 
     errors = validate_submission(body.data_json, definition.schema_json)

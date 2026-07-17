@@ -20,22 +20,26 @@ async def _submit_valid(client, headers) -> dict:
     return r.json()
 
 
-async def test_worker_sees_only_own_dept_forms(client):
+async def test_worker_other_dept_forms_forbidden(client):
     headers = await login(client, PHONES["w_eng"])
     r = await client.get("/api/forms", headers=headers)
     assert r.status_code == 200
     assert len(r.json()) >= 1
     assert all(f["department_code"] == "ENGINEERING" for f in r.json())
-    # explicit request for another department is still scoped to own dept
+    # explicit request for another department is rejected outright
     r = await client.get("/api/forms?department_code=PRODUCTION", headers=headers)
-    assert all(f["department_code"] == "ENGINEERING" for f in r.json())
+    assert r.status_code == 403
 
 
-async def test_manager_can_view_other_dept_forms(client):
+async def test_manager_other_dept_forms_forbidden(client):
     headers = await login(client, PHONES["prod_mgr"])
+    # managers are locked to their own department too — only CGM/MD may browse
     r = await client.get("/api/forms?department_code=ENGINEERING", headers=headers)
+    assert r.status_code == 403
+    # explicitly naming their own department is fine
+    r = await client.get("/api/forms?department_code=PRODUCTION", headers=headers)
     assert r.status_code == 200
-    assert any(f["code"] == "job_card" for f in r.json())
+    assert any(f["code"] == "hourly_process_log" for f in r.json())
 
 
 async def test_submit_valid_form(client):
