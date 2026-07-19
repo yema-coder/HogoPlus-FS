@@ -8,6 +8,7 @@ import i18n, { LANGUAGES, type AppLanguage } from "@/src/i18n";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { storage } from "@/src/utils/storage";
+import { BrandFooter } from "@/src/components/BrandFooter";
 
 export default function LanguagePicker() {
   const router = useRouter();
@@ -47,7 +48,8 @@ export default function LanguagePicker() {
           </Pressable>
         ))}
       </View>
-    </SafeAreaView>
+    <BrandFooter />
+      </SafeAreaView>
   );
 }
 

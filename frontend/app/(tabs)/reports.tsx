@@ -11,6 +11,7 @@ import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { SkeletonRows } from "@/src/components/Skeleton";
 import { StatusChip } from "@/src/components/StatusChip";
 import { UpdatedNote } from "@/src/components/UpdatedNote";
 import { categoryDef } from "@/src/constants/categories";
@@ -101,7 +102,13 @@ export default function ReportsScreen() {
           refreshing={loading}
           onRefresh={() => void refresh()}
           ListHeaderComponent={
-            outboxIncidents.length > 0 && scope === "mine" ? (
+            <>
+              {loading && data ? (
+                <View style={styles.refreshStrip} testID="reports-refresh-strip">
+                  <EyeLoader size={18} />
+                </View>
+              ) : null}
+              {outboxIncidents.length > 0 && scope === "mine" ? (
               <View style={styles.outboxWrap} testID="outbox-section">
                 <Text style={styles.outboxTitle}>
                   {t("reports.outbox", { count: outboxIncidents.length })}
@@ -140,10 +147,13 @@ export default function ReportsScreen() {
                   );
                 })}
               </View>
-            ) : null
+            ) : null}
+            </>
           }
           ListEmptyComponent={
-            outboxIncidents.length === 0 || scope === "dept" ? (
+            loading && !data ? (
+              <SkeletonRows rows={6} />
+            ) : outboxIncidents.length === 0 || scope === "dept" ? (
               <EmptyState icon={ClipboardList} title={t("reports.empty")} />
             ) : null
           }
@@ -156,6 +166,7 @@ export default function ReportsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  refreshStrip: { alignItems: "center", paddingBottom: spacing.md },
   toggleRow: {
     flexDirection: "row",
     gap: spacing.sm,

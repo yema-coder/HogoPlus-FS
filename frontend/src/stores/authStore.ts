@@ -88,23 +88,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ status: "unauthenticated", langPicked });
       return;
     }
+    // cache-first: paint Home instantly from the stored profile, revalidate in background
+    const cachedRaw = await storage.getItem<string>("hogo.profile", "");
+    if (cachedRaw) {
+      try {
+        const profile = JSON.parse(cachedRaw) as EmployeeProfile;
+        await applyProfileLanguage(profile);
+        set({ status: "authenticated", profile, langPicked });
+        void get().refreshProfile();
+        return;
+      } catch {
+        // corrupt cache — fall through to the network path
+      }
+    }
     try {
       const profile = await getMe();
+      await storage.setItem("hogo.profile", JSON.stringify(profile));
       await applyProfileLanguage(profile);
       set({ status: "authenticated", profile, langPicked });
     } catch {
-      // keep cached profile-less session only if token refresh worked inside api();
-      // if we land here the session is unusable
-      const cached = await storage.getItem<string>("hogo.profile", "");
-      if (cached) {
-        try {
-          const profile = JSON.parse(cached) as EmployeeProfile;
-          set({ status: "authenticated", profile, langPicked });
-          return;
-        } catch {
-          // fallthrough
-        }
-      }
       await clearTokens();
       set({ status: "unauthenticated", langPicked });
     }

@@ -1,6 +1,5 @@
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
 import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -22,6 +21,7 @@ import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { EyeLoader } from "@/src/components/EyeLoader";
+import { MediaCard } from "@/src/components/MediaCard";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
@@ -32,14 +32,6 @@ import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, statusColors, type } from "@/src/theme/tokens";
 import { formatDateTime } from "@/src/utils/format";
-
-/** Playback for video complaints (expo-video, presigned URL via /api/files). */
-function IncidentVideo({ uri }: { uri: string }) {
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = false;
-  });
-  return <VideoView player={player} style={styles.photo} nativeControls contentFit="contain" testID="incident-video" />;
-}
 
 export default function IncidentDetailScreen() {
   const { t } = useTranslation();
@@ -163,17 +155,13 @@ export default function IncidentDetailScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           {detail.video_key || detail.photo_key ? (
-            <View style={styles.mediaCard} testID="incident-media-card">
-              {detail.video_key ? (
-                <IncidentVideo uri={fileUrl(detail.video_key)} />
-              ) : (
-                <Image
-                  source={{ uri: fileUrl(detail.photo_key as string) }}
-                  style={styles.photo}
-                  resizeMode="cover"
-                  testID="incident-photo"
-                />
-              )}
+            <View testID="incident-media-card">
+              <MediaCard
+                uri={fileUrl((detail.video_key ?? detail.photo_key) as string)}
+                kind={detail.video_key ? "video" : "photo"}
+                height={220}
+                testID="incident-media"
+              />
               <View style={styles.mediaBadge}>
                 <StatusChip status={detail.status} />
               </View>
@@ -305,10 +293,9 @@ export default function IncidentDetailScreen() {
               <Text style={styles.sectionLabel}>{t("reports.resolutionNote")}</Text>
               {detail.resolution_note ? <Text style={styles.desc}>{detail.resolution_note}</Text> : null}
               {detail.resolution_photo_key ? (
-                <Image
-                  source={{ uri: fileUrl(detail.resolution_photo_key) }}
-                  style={styles.resolutionPhoto}
-                  resizeMode="cover"
+                <MediaCard
+                  uri={fileUrl(detail.resolution_photo_key)}
+                  height={160}
                   testID="resolution-photo"
                 />
               ) : null}

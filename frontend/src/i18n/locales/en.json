@@ -42,7 +42,8 @@
     "changePhone": "Change number",
     "invalidOtp": "Wrong OTP, try again",
     "locked": "Too many attempts. Try after 30 minutes",
-    "invalidPhone": "Enter a valid 10-digit number"
+    "invalidPhone": "Enter a valid 10-digit number",
+    "otpDelay": "The OTP SMS can take 10–15 seconds to arrive"
   },
   "reg": {
     "nameTitle": "Your full name",
@@ -370,5 +371,9 @@
     "allow": "Allow",
     "bleExplain": "Nearby devices permission helps detect your factory zone",
     "gpsOffNote": "Location is off — punch will be saved but flagged for review"
+  },
+  "media": {
+    "viewFull": "View full screen",
+    "close": "Close viewer"
   }
 }

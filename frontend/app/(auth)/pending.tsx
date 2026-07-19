@@ -9,6 +9,7 @@ import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
+import { BrandFooter } from "@/src/components/BrandFooter";
 
 export default function PendingApproval() {
   const router = useRouter();
@@ -74,7 +75,8 @@ export default function PendingApproval() {
           />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    <BrandFooter />
+      </SafeAreaView>
   );
 }
 

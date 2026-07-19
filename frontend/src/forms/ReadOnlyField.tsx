@@ -1,11 +1,12 @@
 import dayjs from "dayjs";
 import { Play } from "lucide-react-native";
-import React, { useState } from "react";
-import { Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useAudioPlayer } from "expo-audio";
 import { useTranslation } from "react-i18next";
 
 import { fileUrl } from "@/src/api/client";
+import { MediaCard } from "@/src/components/MediaCard";
 import type { FormFieldDef } from "@/src/api/types";
 import { tri } from "@/src/i18n";
 import { prettyOption } from "@/src/forms/fields/SelectFieldInput";
@@ -19,7 +20,6 @@ interface Props {
 /** Read-only rendering of one submitted field (submission detail views). */
 export function ReadOnlyField({ field, value }: Props) {
   const { t } = useTranslation();
-  const [viewer, setViewer] = useState(false);
   const player = useAudioPlayer();
 
   const body = () => {
@@ -29,20 +29,12 @@ export function ReadOnlyField({ field, value }: Props) {
     switch (field.type) {
       case "photo":
         return (
-          <>
-            <Pressable testID={`view-photo-${field.key}`} onPress={() => setViewer(true)}>
-              <Image source={{ uri: fileUrl(String(value)) }} style={styles.thumb} resizeMode="cover" />
-            </Pressable>
-            <Modal visible={viewer} transparent animationType="fade" onRequestClose={() => setViewer(false)}>
-              <Pressable style={styles.viewerBackdrop} onPress={() => setViewer(false)}>
-                <Image
-                  source={{ uri: fileUrl(String(value)) }}
-                  style={styles.viewerImage}
-                  resizeMode="contain"
-                />
-              </Pressable>
-            </Modal>
-          </>
+          <MediaCard
+            uri={fileUrl(String(value))}
+            kind="photo"
+            height={140}
+            testID={`view-photo-${field.key}`}
+          />
         );
       case "voice_note":
         return (

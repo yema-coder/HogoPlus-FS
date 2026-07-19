@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api";
 import { Chip, Empty, fmtTime, Loading, VerifChip } from "../components";
+import eyeBase from "../eye-base.png";
 import { localName, useI18n } from "../i18n";
 
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -60,6 +61,10 @@ function IncidentModal({ inc, onClose }: { inc: any; onClose: () => void }) {
         {inc.photo_url || inc.video_url ? (
           <div className="result-media">
             {inc.video_url ? <video src={inc.video_url} controls /> : <img src={inc.photo_url} alt="" />}
+            <span className="media-brand-pill">
+              <img src={eyeBase} alt="" />
+              HogoPlus
+            </span>
             <span className="badge">
               <Chip tone={inc.status === "resolved" ? "green" : inc.status === "escalated" ? "red" : "blue"}>{inc.status}</Chip>
             </span>

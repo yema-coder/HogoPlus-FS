@@ -24,9 +24,12 @@ import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
+import { BrandFooter } from "@/src/components/BrandFooter";
 
-const POLL_MS = 3000;
-const MAX_POLLS = 12; // ~36s — after that the 10-min server timeout takes over
+const FAST_POLL_MS = 2000; // first 20s — land the AI card fast
+const SLOW_POLL_MS = 5000;
+const FAST_POLLS = 10;
+const MAX_POLLS = 14; // 10×2s + 4×5s ≈ 40s — after that the 10-min server timeout takes over
 
 /** Post-submit screen: success state + AI category/department confirmation card. */
 export default function IncidentSuccess() {
@@ -86,9 +89,9 @@ export default function IncidentSuccess() {
         setPollTimedOut(true);
         return;
       }
-      timer = setTimeout(() => void tick(), POLL_MS);
+      timer = setTimeout(() => void tick(), polls.current < FAST_POLLS ? FAST_POLL_MS : SLOW_POLL_MS);
     };
-    let timer = setTimeout(() => void tick(), 1500);
+    let timer = setTimeout(() => void tick(), 1200);
     return () => {
       active = false;
       clearTimeout(timer);
@@ -330,7 +333,8 @@ export default function IncidentSuccess() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    <BrandFooter />
+      </SafeAreaView>
   );
 }
 

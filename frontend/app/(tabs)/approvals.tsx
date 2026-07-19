@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import { useFocusEffect, useRouter } from "expo-router";
 import { ClipboardCheck } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -39,8 +39,10 @@ import type {
 } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { EmptyState } from "@/src/components/EmptyState";
+import { MediaViewerModal } from "@/src/components/MediaCard";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
+import { SkeletonRows } from "@/src/components/Skeleton";
 import { showToast } from "@/src/components/Toast";
 import { StatusChip } from "@/src/components/StatusChip";
 import { categoryDef } from "@/src/constants/categories";
@@ -50,6 +52,7 @@ import { useApprovalsStore, type ApprovalCounts } from "@/src/stores/approvalsSt
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatDateTime, formatTime } from "@/src/utils/format";
+import { storage } from "@/src/utils/storage";
 
 type Segment = "forms" | "regs" | "swaps" | "incidents" | "attendance";
 type AttFilter = "today" | "yesterday" | "all";
@@ -84,6 +87,25 @@ export default function ApprovalsScreen() {
   const [apDept, setApDept] = useState<string | null>(null);
   const [apRole, setApRole] = useState("Worker");
   const [apEmpId, setApEmpId] = useState("");
+  const [viewImg, setViewImg] = useState<string | null>(null);
+
+  // stale-while-revalidate: hydrate the last-seen lists instantly, refresh on focus
+  useEffect(() => {
+    void (async () => {
+      const raw = await storage.getItem<string>("hogo.cache.approvals", "");
+      if (!raw) return;
+      try {
+        const c = JSON.parse(raw) as Record<string, unknown[]>;
+        setSubs((p) => (p.length ? p : ((c.subs ?? []) as SubmissionItem[])));
+        setRegs((p) => (p.length ? p : ((c.regs ?? []) as EmployeeProfile[])));
+        setSwaps((p) => (p.length ? p : ((c.swaps ?? []) as SwapRequest[])));
+        setIncidents((p) => (p.length ? p : ((c.incidents ?? []) as Incident[])));
+        setFlagged((p) => (p.length ? p : ((c.flagged ?? []) as FlaggedAttendance[])));
+      } catch {
+        // corrupt cache — ignore
+      }
+    })();
+  }, []);
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
 
@@ -122,6 +144,19 @@ export default function ApprovalsScreen() {
     setFlagged(att.status === "fulfilled" ? (att.value as FlaggedAttendance[]) : []);
     setLoading(false);
     void refreshCounts(showAttendance);
+    void storage.setItem(
+      "hogo.cache.approvals",
+      JSON.stringify({
+        subs: [
+          ...(sub.status === "fulfilled" ? sub.value.items : []),
+          ...(esc.status === "fulfilled" ? esc.value.items : []),
+        ],
+        regs: reg.status === "fulfilled" ? reg.value : [],
+        swaps: swp.status === "fulfilled" ? swp.value : [],
+        incidents: incItems,
+        flagged: att.status === "fulfilled" ? att.value : [],
+      }),
+    );
   }, [attDate, showAttendance, refreshCounts]);
 
   useFocusEffect(
@@ -278,7 +313,14 @@ export default function ApprovalsScreen() {
         <View style={styles.regCard} testID={`approval-reg-${emp.id}`}>
           <View style={styles.regTop}>
             {emp.selfie_url ? (
-              <Image source={{ uri: resolveUri(emp.selfie_url) }} style={styles.regSelfie} />
+              <Pressable
+                onPress={() => setViewImg(resolveUri(emp.selfie_url as string))}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={t("media.viewFull")}
+                testID={`reg-selfie-${emp.id}`}
+              >
+                <Image source={{ uri: resolveUri(emp.selfie_url) }} style={styles.regSelfie} />
+              </Pressable>
             ) : (
               <View style={[styles.regSelfie, styles.regSelfieEmpty]}>
                 <Text style={styles.regInitial}>{emp.full_name.charAt(0)}</Text>
@@ -403,10 +445,16 @@ export default function ApprovalsScreen() {
       <View style={styles.regCard} testID={`approval-att-${rec.id}`}>
         <View style={styles.regTop}>
           {!isFaceMismatch ? (
-            <Image
-              source={{ uri: rec.selfie_url ? resolveUri(rec.selfie_url) : resolveUri(rec.selfie_key) }}
-              style={styles.attSelfie}
-            />
+            <Pressable
+              onPress={() => setViewImg(rec.selfie_url ? resolveUri(rec.selfie_url) : resolveUri(rec.selfie_key))}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={t("media.viewFull")}
+            >
+              <Image
+                source={{ uri: rec.selfie_url ? resolveUri(rec.selfie_url) : resolveUri(rec.selfie_key) }}
+                style={styles.attSelfie}
+              />
+            </Pressable>
           ) : null}
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.cardTitle} numberOfLines={1}>
@@ -426,7 +474,14 @@ export default function ApprovalsScreen() {
             <View style={styles.faceRow}>
               <View style={styles.faceCol}>
                 {rec.reference_selfie_url ? (
-                  <Image source={{ uri: resolveUri(rec.reference_selfie_url) }} style={styles.faceImg} />
+                  <Pressable
+                    style={{ width: "100%" }}
+                    onPress={() => setViewImg(resolveUri(rec.reference_selfie_url as string))}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={t("media.viewFull")}
+                  >
+                    <Image source={{ uri: resolveUri(rec.reference_selfie_url) }} style={styles.faceImg} />
+                  </Pressable>
                 ) : (
                   <View style={[styles.faceImg, styles.faceImgEmpty]} />
                 )}
@@ -434,7 +489,14 @@ export default function ApprovalsScreen() {
               </View>
               <View style={styles.faceCol}>
                 {rec.selfie_url ? (
-                  <Image source={{ uri: resolveUri(rec.selfie_url) }} style={styles.faceImg} />
+                  <Pressable
+                    style={{ width: "100%" }}
+                    onPress={() => setViewImg(resolveUri(rec.selfie_url as string))}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={t("media.viewFull")}
+                  >
+                    <Image source={{ uri: resolveUri(rec.selfie_url) }} style={styles.faceImg} />
+                  </Pressable>
                 ) : (
                   <View style={[styles.faceImg, styles.faceImgEmpty]} />
                 )}
@@ -540,7 +602,7 @@ export default function ApprovalsScreen() {
         contentContainerStyle={styles.list}
         refreshing={loading}
         onRefresh={() => void loadAll()}
-        ListEmptyComponent={empty}
+        ListEmptyComponent={loading && listData.length === 0 ? <SkeletonRows /> : empty}
       />
 
       <Modal
@@ -665,6 +727,7 @@ export default function ApprovalsScreen() {
           </View>
         </View>
       </Modal>
+      <MediaViewerModal uri={viewImg} kind="photo" onClose={() => setViewImg(null)} />
     </SafeAreaView>
   );
 }

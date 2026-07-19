@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, canUseDashboard, isTopMgmt, useAuth } from "./auth";
 import { LangSwitcher, Loading } from "./components";
+import eyeBase from "./eye-base.png";
 import { LangProvider, useI18n } from "./i18n";
 import Admin from "./screens/Admin";
 import Approvals from "./screens/Approvals";
@@ -113,6 +114,10 @@ function Layout() {
       <main className="main">
         <Outlet />
       </main>
+      <footer className="brand-footer" data-testid="brand-footer">
+        <img src={eyeBase} alt="" />
+        <span>HogoPlus-FS</span>
+      </footer>
       {pwdModal && <ChangePasswordModal onClose={() => setPwdModal(false)} />}
     </div>
   );

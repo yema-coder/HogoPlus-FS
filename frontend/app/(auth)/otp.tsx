@@ -16,6 +16,8 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/src/api/client";
 import { sendOtp, verifyOtp } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
+import { BrandFooter } from "@/src/components/BrandFooter";
+import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
@@ -94,6 +96,10 @@ export default function OtpEntry() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>{t("auth.otpTitle")}</Text>
           <Text style={styles.hint}>{t("auth.otpSent", { phone })}</Text>
+          <View style={styles.delayRow} testID="otp-delay-hint">
+            <EyeLoader size={16} />
+            <Text style={styles.delayText}>{t("auth.otpDelay")}</Text>
+          </View>
 
           <Pressable
             style={styles.boxes}
@@ -145,6 +151,7 @@ export default function OtpEntry() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <BrandFooter />
     </SafeAreaView>
   );
 }
@@ -154,6 +161,8 @@ const styles = StyleSheet.create({
   scroll: { padding: sizes.screenPadding, flexGrow: 1, paddingTop: spacing.xxxl },
   title: { fontFamily: fonts.bold, fontSize: type.xl, color: colors.text },
   hint: { fontFamily: fonts.regular, fontSize: type.base, color: colors.muted, marginTop: spacing.xs },
+  delayRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md },
+  delayText: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted, flex: 1 },
   boxes: {
     flexDirection: "row",
     gap: spacing.sm,
