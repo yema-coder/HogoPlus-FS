@@ -114,10 +114,6 @@ function Layout() {
       <main className="main">
         <Outlet />
       </main>
-      <footer className="brand-footer" data-testid="brand-footer">
-        <img src={eyeBase} alt="" />
-        <span>HogoPlus-FS</span>
-      </footer>
       {pwdModal && <ChangePasswordModal onClose={() => setPwdModal(false)} />}
     </div>
   );

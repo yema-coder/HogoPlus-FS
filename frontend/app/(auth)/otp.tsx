@@ -16,7 +16,6 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/src/api/client";
 import { sendOtp, verifyOtp } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
-import { BrandFooter } from "@/src/components/BrandFooter";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
@@ -151,7 +150,6 @@ export default function OtpEntry() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <BrandFooter />
     </SafeAreaView>
   );
 }

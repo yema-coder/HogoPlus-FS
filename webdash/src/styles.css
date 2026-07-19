@@ -114,10 +114,6 @@ tr.red td { background: #FDF0F2; }
   90%, 100% { transform: scaleY(1); }
 }
 
-/* Maroon brand footer band (mirrors mobile BrandFooter) */
-.brand-footer { height: 38px; background: #7A1F2B; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-weight: 700; font-size: 12px; letter-spacing: 0.4px; flex-shrink: 0; }
-.brand-footer img { height: 18px; background: #fff; border-radius: 5px; padding: 2px 3px; }
-
 /* Branded media card in the incident modal */
 .result-media { position: relative; border: 2px solid var(--primary); border-radius: 14px; overflow: hidden; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15); }
 .result-media img, .result-media video { display: block; width: 100%; border-radius: 0; }

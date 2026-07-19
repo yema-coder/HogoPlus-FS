@@ -24,7 +24,6 @@ import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { BrandFooter } from "@/src/components/BrandFooter";
 
 const FAST_POLL_MS = 2000; // first 20s — land the AI card fast
 const SLOW_POLL_MS = 5000;
@@ -333,7 +332,6 @@ export default function IncidentSuccess() {
           </View>
         </View>
       </Modal>
-    <BrandFooter />
       </SafeAreaView>
   );
 }

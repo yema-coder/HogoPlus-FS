@@ -18,7 +18,6 @@ import { sendOtp } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { BrandFooter } from "@/src/components/BrandFooter";
 
 export default function PhoneEntry() {
   const router = useRouter();
@@ -108,7 +107,6 @@ export default function PhoneEntry() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
-    <BrandFooter />
       </SafeAreaView>
   );
 }

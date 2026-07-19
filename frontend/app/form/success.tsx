@@ -8,7 +8,6 @@ import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
-import { BrandFooter } from "@/src/components/BrandFooter";
 
 export default function FormSuccess() {
   const router = useRouter();
@@ -52,7 +51,6 @@ export default function FormSuccess() {
         height={64}
         onPress={() => router.replace("/(tabs)/department")}
       />
-    <BrandFooter />
       </SafeAreaView>
   );
 }
