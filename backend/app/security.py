@@ -132,6 +132,22 @@ def require_role(min_rank: int):
     return _dep
 
 
+def require_real_role(min_rank: int):
+    """Like require_role but ALSO blocks demo showcase accounts — used on endpoints
+    that mutate SHARED factory configuration (settings, beacons, forms, SOPs, SMS,
+    reports). Demo users may read shared config but never change it."""
+
+    async def _dep(employee: Employee = Depends(require_role(min_rank))) -> Employee:
+        if employee.is_demo:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo accounts cannot modify shared factory configuration",
+            )
+        return employee
+
+    return _dep
+
+
 async def is_dept_manager(session: AsyncSession, employee: Employee, department_code: str) -> bool:
     """True if the employee manages the department: CGM/MD always, explicit dept manager,
     or role Manager belonging to that department."""

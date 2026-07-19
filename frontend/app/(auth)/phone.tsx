@@ -22,7 +22,7 @@ import { BrandFooter } from "@/src/components/BrandFooter";
 
 export default function PhoneEntry() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [digits, setDigits] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -40,7 +40,17 @@ export default function PhoneEntry() {
       router.push({ pathname: "/(auth)/otp", params: { phone } });
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) showToast(t("auth.locked"), "error");
-      else if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
+      else if (
+        e instanceof ApiError &&
+        e.status === 403 &&
+        typeof e.detail === "object" &&
+        e.detail !== null
+      ) {
+        // registration guard: backend sends a friendly trilingual {en,hi,mr} message
+        const d = e.detail as Record<string, string>;
+        const lang = (i18n.language || "mr").slice(0, 2);
+        showToast(d[lang] || d.en || t("errors.server"), "error");
+      } else if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
       else showToast(t("errors.server"), "error");
     } finally {
       setLoading(false);

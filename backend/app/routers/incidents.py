@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit
 from app.database import get_session
+from app.demo import get_role_holder, resolve_dept_manager_id
 from app.models import Department, Employee, Incident, IncidentTimeline
 from app.notify import dispatcher, template
 from app.schemas import ConfirmRoutingIn, IncidentCreateIn, IncidentStatusIn
@@ -79,17 +80,14 @@ async def create_incident(
     if dept is None:
         raise HTTPException(status_code=404, detail="Department not found")
 
-    assigned = dept.manager_employee_id
+    assigned = await resolve_dept_manager_id(session, dept, employee.is_demo)
     if assigned is None:
-        cgm = (
-            await session.execute(
-                select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
-            )
-        ).scalar_one_or_none()
+        cgm = await get_role_holder(session, "CGM", employee.is_demo)
         assigned = cgm.id if cgm else None
 
     incident = Incident(
         reported_by=employee.id,
+        is_demo=employee.is_demo,
         department_code=body.department_code,
         category=body.category,
         photo_key=body.photo_key,
@@ -154,13 +152,9 @@ async def apply_incident_routing(
     incident.department_code = department_code
     incident.severity = severity
     incident.ai_confirmed_by = confirmed_by
-    assigned = dept.manager_employee_id
+    assigned = await resolve_dept_manager_id(session, dept, incident.is_demo)
     if assigned is None:
-        cgm = (
-            await session.execute(
-                select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
-            )
-        ).scalar_one_or_none()
+        cgm = await get_role_holder(session, "CGM", incident.is_demo)
         assigned = cgm.id if cgm else None
     incident.assigned_manager_id = assigned
     session.add(
@@ -175,7 +169,11 @@ async def apply_incident_routing(
         await dispatcher.notify(session, assigned, "incident_assigned", title, notif_body, "incident", str(incident.id))
     if severity == "critical":
         tops = (
-            await session.execute(select(Employee).where(Employee.is_active.is_(True)))
+            await session.execute(
+                select(Employee).where(
+                    Employee.is_active.is_(True), Employee.is_demo.is_(incident.is_demo)
+                )
+            )
         ).scalars().all()
         title, notif_body = template("incident_critical", f"{category} — {dept.name_en}")
         for e in tops:
@@ -191,7 +189,7 @@ async def confirm_routing(
     session: AsyncSession = Depends(get_session),
 ):
     incident = await session.get(Incident, incident_id)
-    if incident is None:
+    if incident is None or incident.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Incident not found")
     if incident.reported_by != employee.id and employee.role.rank > 3:
         raise HTTPException(status_code=403, detail="Not allowed")
@@ -232,7 +230,7 @@ async def incident_detail(
     session: AsyncSession = Depends(get_session),
 ):
     incident = await session.get(Incident, incident_id)
-    if incident is None:
+    if incident is None or incident.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Incident not found")
     allowed = (
         incident.reported_by == employee.id
@@ -259,7 +257,7 @@ async def list_incidents(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    query = select(Incident)
+    query = select(Incident).where(Incident.is_demo == employee.is_demo)
     rank = employee.role.rank
     if rank <= 2:
         if department_code:
@@ -283,7 +281,7 @@ async def change_status(
     session: AsyncSession = Depends(get_session),
 ):
     incident = await session.get(Incident, incident_id)
-    if incident is None:
+    if incident is None or incident.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Incident not found")
     allowed = (
         incident.assigned_manager_id == employee.id

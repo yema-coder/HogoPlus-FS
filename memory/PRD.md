@@ -592,3 +592,15 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
   build pgvector v0.8.0 from source, CREATE ROLE hogo + db hogoplus_test + EXTENSION vector.
 - Untested (needs device/build): video full-screen viewer with a real video incident,
   pull-to-refresh gesture (native-only). v1.0.3 build next.
+
+## Prompt 14 — DEMO SHOWCASE BUBBLE (2026-06) ✅ COMPLETE
+- `is_demo` on employees + 7 data tables, `is_demo_seed` on the 7 data tables (migration 0008, applied to Neon prod).
+- Write tagging: incidents, form_submissions, attendance, shift_swaps, chat_messages set is_demo from creator; notifications inherit recipient class (app/notify.py); audit_events inherit actor class (app/audit.py).
+- Read isolation: ALL lists/details/aggregates in incidents.py, forms.py, attendance.py, shifts.py, dashboard.py (overview, dept detail, approvals aging, plate search, audit trail, reports list), admin.py (employee search, pending) filter by viewer's is_demo. AI usage counters split (ai:usage:demo:* keys). Nightly report + escalation sweep + face-mismatch routing are class-aware (app/demo.py resolve_dept_manager_id / get_role_holder).
+- Demo cast: 28 accounts (+919000000001..013 workers, ..101..113 managers, 500 CGM, 600 MD), seeded via scripts/seed_demo_cast.py. Login: fixed OTP 123456 driven by is_demo flag (env whitelist kept for 2 real admin numbers). Demo numbers NEVER receive SMS.
+- Showcase seed (scripts/seed_demo_showcase.py): 14 form submissions (PURCHASE approved indent w/ trail, STORE pending, ENGINEERING rejected+approved, CANE_YARD plate MH16AB1234, etc), 7 incidents (submitted/seen/in_progress/resolved+photo/escalated critical), 18 attendance rows (1 flagged), R2 photos under demo-seed-* keys. All is_demo_seed=true.
+- Cleanup: scheduler job demo_cleanup_sweep (every 15 min) purges is_demo & !is_demo_seed rows older than 60 min incl. R2 media (app/demo_cleanup.py). POST /api/admin/purge-demo-data {dry_run, include_seed} — real CGM/MD only.
+- ALLOW_NEW_REGISTRATION env (default true): false blocks OTP for unknown numbers with trilingual 403 (mobile phone.tsx shows localized message). User sets false in Deployment Secrets during contest.
+- Demo users cannot mutate shared config (settings, beacons, forms, SOPs, test-sms, reports, backup) — require_real_role.
+- Tests: 158 → 170 (tests/test_demo_isolation.py: cross-bubble, dept-scoping, scheduler/report exclusion, mocked-clock cleanup, login matrix, purge, shared-config guard).
+- Webdash demo logins: D500/Demo@7547 (CGM), D600/Demo@1751 (MD).

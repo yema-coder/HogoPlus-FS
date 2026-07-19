@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     backup_keep_last: int = 14
     demo_otp_enabled: bool = True
     demo_otp: str = "123456"
+    # contest guard: when false, OTP requests from unknown numbers are blocked (no SMS)
+    allow_new_registration: bool = True
     demo_otp_whitelist: str = ""  # comma-separated +91 numbers allowed to use DEMO_OTP
 
     @property

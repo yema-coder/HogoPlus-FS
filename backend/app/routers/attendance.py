@@ -138,6 +138,7 @@ async def punch_in(
 
     record = Attendance(
         employee_id=employee.id,
+        is_demo=employee.is_demo,
         date=att_date,
         punch_in_at=now_utc,
         gps_lat=body.gps_lat,
@@ -238,7 +239,11 @@ async def flagged_attendance(
             Employee.reference_selfie_key,
         )
         .join(Employee, Attendance.employee_id == Employee.id)
-        .where(Attendance.verification_level == "flagged", Attendance.approved_by.is_(None))
+        .where(
+            Attendance.verification_level == "flagged",
+            Attendance.approved_by.is_(None),
+            Attendance.is_demo == employee.is_demo,
+        )
     )
     if date:
         query = query.where(Attendance.date == datetime.fromisoformat(date).date())
@@ -271,7 +276,11 @@ async def department_attendance(
         await session.execute(
             select(Attendance, Employee.full_name, Employee.emp_id)
             .join(Employee, Attendance.employee_id == Employee.id)
-            .where(Employee.department_code == code, Attendance.date == target)
+            .where(
+                Employee.department_code == code,
+                Attendance.date == target,
+                Attendance.is_demo == employee.is_demo,
+            )
             .order_by(Attendance.punch_in_at)
         )
     ).all()
@@ -287,7 +296,7 @@ async def approve_flagged(
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
     record = await session.get(Attendance, attendance_id)
-    if record is None:
+    if record is None or record.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     if record.verification_level != "flagged":
         raise HTTPException(status_code=409, detail="Only flagged records need approval")
@@ -311,7 +320,7 @@ async def reject_flagged(
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
     record = await session.get(Attendance, attendance_id)
-    if record is None:
+    if record is None or record.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     if record.verification_level != "flagged" or record.approved_by is not None:
         raise HTTPException(status_code=409, detail="Only pending flagged records can be rejected")
@@ -344,7 +353,7 @@ async def attendance_summary(
         await session.execute(
             select(Attendance, Employee.department_code)
             .join(Employee, Attendance.employee_id == Employee.id)
-            .where(Attendance.date == target)
+            .where(Attendance.date == target, Attendance.is_demo == employee.is_demo)
         )
     ).all()
     depts = (await session.execute(select(Department.code))).scalars().all()

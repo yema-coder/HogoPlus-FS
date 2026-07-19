@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Notification
+from app.models import Employee, Notification
 
 logger = logging.getLogger("hogo.notify")
 
@@ -35,7 +35,11 @@ class NotificationDispatcher:
         entity_type: str | None = None,
         entity_id: str | None = None,
     ) -> Notification:
+        # demo bubble: a notification's class always matches its recipient's class
+        # (fanout never crosses the boundary — session.get hits the identity map)
+        recipient = await session.get(Employee, recipient_id)
         row = Notification(
+            is_demo=bool(recipient.is_demo) if recipient else False,
             recipient_id=recipient_id,
             type=type_,
             title_en=title.get("en", ""),

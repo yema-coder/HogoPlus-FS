@@ -28,6 +28,7 @@ from app.schemas import (
     FormDefCreateIn,
     FormDefPatchIn,
     GenerateReportIn,
+    PurgeDemoIn,
     RejectIn,
     SetPasswordIn,
     SettingsPatchIn,
@@ -38,6 +39,7 @@ from app.security import (
     get_approved_employee,
     hash_password,
     is_dept_manager,
+    require_real_role,
     require_role,
 )
 from app.shift_logic import now_ist
@@ -66,7 +68,7 @@ async def get_settings(
 @router.patch("/settings")
 async def patch_settings(
     body: SettingsPatchIn,
-    employee: Employee = Depends(require_role(2)),
+    employee: Employee = Depends(require_real_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
     s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
@@ -94,7 +96,7 @@ async def patch_employee(
 ):
     await _require_time_office_or_top(session, actor)
     emp = await session.get(Employee, employee_id)
-    if emp is None:
+    if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
 
     changes = {}
@@ -170,7 +172,7 @@ async def approve_employee(
     session: AsyncSession = Depends(get_session),
 ):
     emp = await session.get(Employee, employee_id)
-    if emp is None:
+    if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
     # Time Office assigns everything: TIME_OFFICE manager or CGM/MD only
     allowed = actor.role.rank <= 2 or await is_dept_manager(session, actor, "TIME_OFFICE")
@@ -226,7 +228,7 @@ async def set_employee_password(
     if actor.role.rank > 2:
         raise HTTPException(status_code=403, detail="Only CGM/MD can set passwords")
     emp = await session.get(Employee, employee_id)
-    if emp is None:
+    if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
     emp.password_hash = hash_password(body.password)
     emp.must_change_password = True
@@ -246,7 +248,7 @@ async def reject_employee(
     session: AsyncSession = Depends(get_session),
 ):
     emp = await session.get(Employee, employee_id)
-    if emp is None:
+    if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
     allowed = await is_dept_manager(session, actor, "TIME_OFFICE") or await is_dept_manager(
         session, actor, emp.department_code
@@ -269,7 +271,10 @@ async def pending_employees(
     allowed = await is_dept_manager(session, actor, "TIME_OFFICE") or actor.role.rank <= 3
     if not allowed:
         raise HTTPException(status_code=403, detail="Not allowed")
-    query = select(Employee).where(Employee.onboarding_status == "pending_approval")
+    query = select(Employee).where(
+        Employee.onboarding_status == "pending_approval",
+        Employee.is_demo == actor.is_demo,
+    )
     if actor.role.rank == 3 and not await is_dept_manager(session, actor, "TIME_OFFICE"):
         query = query.where(Employee.department_code == actor.department_code)
     rows = (await session.execute(query.order_by(Employee.created_at.desc()))).scalars().all()
@@ -293,7 +298,9 @@ async def search_employees(
     session: AsyncSession = Depends(get_session),
 ):
     """Employee lookup for the MD Command Center admin screen (CGM/MD only)."""
-    query = select(Employee).where(Employee.is_active.is_(True))
+    query = select(Employee).where(
+        Employee.is_active.is_(True), Employee.is_demo == actor.is_demo
+    )
     if missing_phone:
         query = query.where(Employee.phone.is_(None))
     if search:
@@ -313,7 +320,7 @@ async def search_employees(
 async def assign_manager(
     code: str,
     body: AssignManagerIn,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
     dept = (await session.execute(select(Department).where(Department.code == code))).scalar_one_or_none()
@@ -361,7 +368,7 @@ async def list_beacons(
 @router.post("/beacons")
 async def create_beacon(
     body: BeaconIn,
-    actor: Employee = Depends(require_role(3)),
+    actor: Employee = Depends(require_real_role(3)),
     session: AsyncSession = Depends(get_session),
 ):
     beacon = BleBeacon(**body.model_dump())
@@ -384,7 +391,7 @@ async def create_beacon(
 async def patch_beacon(
     beacon_id: uuid.UUID,
     body: BeaconPatchIn,
-    actor: Employee = Depends(require_role(3)),
+    actor: Employee = Depends(require_real_role(3)),
     session: AsyncSession = Depends(get_session),
 ):
     beacon = await session.get(BleBeacon, beacon_id)
@@ -406,7 +413,7 @@ async def patch_beacon(
 @router.delete("/beacons/{beacon_id}")
 async def delete_beacon(
     beacon_id: uuid.UUID,
-    actor: Employee = Depends(require_role(3)),
+    actor: Employee = Depends(require_real_role(3)),
     session: AsyncSession = Depends(get_session),
 ):
     beacon = await session.get(BleBeacon, beacon_id)
@@ -426,6 +433,8 @@ async def create_form(
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
+    if actor.is_demo:
+        raise HTTPException(status_code=403, detail="Demo accounts cannot modify shared factory configuration")
     if not await is_dept_manager(session, actor, body.department_code):
         raise HTTPException(status_code=403, detail="Only the department Manager or above")
     dept = (
@@ -465,6 +474,8 @@ async def patch_form(
     form = await session.get(FormDefinition, form_id)
     if form is None:
         raise HTTPException(status_code=404, detail="Form not found")
+    if actor.is_demo:
+        raise HTTPException(status_code=403, detail="Demo accounts cannot modify shared factory configuration")
     if not await is_dept_manager(session, actor, form.department_code):
         raise HTTPException(status_code=403, detail="Only the department Manager or above")
     updates = body.model_dump(exclude_none=True)
@@ -494,7 +505,7 @@ async def reset_reference_selfie(
     """Clears the face reference; the employee's NEXT punch-in selfie re-bootstraps it."""
     await _require_time_office_or_top(session, actor)
     emp = await session.get(Employee, employee_id)
-    if emp is None:
+    if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
     old_key = emp.reference_selfie_key
     emp.reference_selfie_key = None
@@ -509,7 +520,7 @@ async def reset_reference_selfie(
 
 @router.post("/backup-now")
 async def backup_now(
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
 ):
     """Manual DB backup trigger (CGM/MD only) — pg_dump → gzip → R2, keep last 14."""
     from starlette.concurrency import run_in_threadpool
@@ -526,7 +537,7 @@ async def backup_now(
 @router.post("/test-sms")
 async def test_sms(
     body: TestSmsIn,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
     """Send a REAL OTP SMS via SMSGatewayHub (regardless of OTP_MODE) and return the
@@ -564,7 +575,7 @@ MAX_SOP_SIZE = 20 * 1024 * 1024
 async def upload_sop_doc(
     file: UploadFile,
     background: BackgroundTasks,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
     """SOP PDF upload (CGM/MD only) → R2 → in-process: extract, chunk, embed into pgvector."""
@@ -624,7 +635,7 @@ async def list_sop_docs(
 @router.delete("/sop-docs/{doc_id}")
 async def delete_sop_doc(
     doc_id: uuid.UUID,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
     session: AsyncSession = Depends(get_session),
 ):
     from starlette.concurrency import run_in_threadpool
@@ -656,12 +667,12 @@ async def ai_usage(
     from app import ai_core
 
     target = date or now_ist().date().isoformat()
-    result = await ai_core.usage_for_date(target)
+    result = await ai_core.usage_for_date(target, actor.is_demo)
     today = now_ist().date()
     history = []
     for i in range(6, -1, -1):
         d = (today - timedelta(days=i)).isoformat()
-        day = await ai_core.usage_for_date(d)
+        day = await ai_core.usage_for_date(d, actor.is_demo)
         history.append({"date": d, "total": sum(day["counts"].values()), "counts": day["counts"]})
     result["history"] = history
     return result
@@ -670,7 +681,7 @@ async def ai_usage(
 @router.post("/generate-report")
 async def generate_report(
     body: GenerateReportIn,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(require_real_role(2)),
 ):
     """Manual factory-report trigger for demos (CGM/MD only)."""
     from datetime import timedelta
@@ -682,3 +693,33 @@ async def generate_report(
         return await generate_report_async(target)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Report generation failed: {type(e).__name__}")
+
+
+# ---------------- Prompt 14: demo bubble purge ----------------
+
+@router.post("/purge-demo-data")
+async def purge_demo_data(
+    body: PurgeDemoIn,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """REAL CGM/MD only: purge judge-created demo data of ANY age (and their R2
+    media). dry_run=true reports what would be deleted without touching anything.
+    include_seed=true additionally wipes the permanent showcase seed data."""
+    if actor.is_demo:
+        raise HTTPException(status_code=403, detail="Real CGM/MD only")
+    from app.demo_cleanup import run_demo_cleanup
+
+    result = await run_demo_cleanup(
+        session,
+        dry_run=body.dry_run,
+        include_seed=body.include_seed,
+        older_than_minutes=None,
+    )
+    if not body.dry_run:
+        await write_audit(
+            session, actor.id, "admin.purge_demo_data", "demo_data", None,
+            {**result, "include_seed": body.include_seed}, is_demo=False,
+        )
+        await session.commit()
+    return result

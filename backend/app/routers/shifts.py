@@ -125,6 +125,7 @@ async def swap_candidates(
                     Employee.is_active.is_(True),
                     Employee.shift_swap_eligible.is_(True),
                     Employee.onboarding_status == "approved",
+                    Employee.is_demo == employee.is_demo,
                     Employee.id != employee.id,
                 )
             )
@@ -150,7 +151,7 @@ async def create_swap(
     session: AsyncSession = Depends(get_session),
 ):
     target = await session.get(Employee, body.target_employee_id)
-    if target is None or not target.is_active:
+    if target is None or not target.is_active or target.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Target employee not found")
     if target.id == employee.id:
         raise HTTPException(status_code=400, detail="Cannot swap with yourself")
@@ -171,6 +172,7 @@ async def create_swap(
     swap = ShiftSwapRequest(
         requester_id=employee.id,
         target_id=target.id,
+        is_demo=employee.is_demo,
         swap_date=body.swap_date,
         reason=body.reason,
         status="pending_target",
@@ -207,13 +209,11 @@ async def respond_swap(
         dept = (
             await session.execute(select(Department).where(Department.code == employee.department_code))
         ).scalar_one_or_none()
-        recipient = dept.manager_employee_id if dept else None
+        from app.demo import get_role_holder, resolve_dept_manager_id
+
+        recipient = await resolve_dept_manager_id(session, dept, employee.is_demo)
         if recipient is None:
-            cgm = (
-                await session.execute(
-                    select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
-                )
-            ).scalar_one_or_none()
+            cgm = await get_role_holder(session, "CGM", employee.is_demo)
             recipient = cgm.id if cgm else None
         if recipient:
             title, notif_body = template("swap_manager_pending", f"{swap.swap_date.isoformat()}")
@@ -237,7 +237,7 @@ async def decide_swap(
     session: AsyncSession = Depends(get_session),
 ):
     swap = await session.get(ShiftSwapRequest, swap_id)
-    if swap is None:
+    if swap is None or swap.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Swap request not found")
     requester = await session.get(Employee, swap.requester_id)
     if not await is_dept_manager(session, employee, requester.department_code):
@@ -336,7 +336,10 @@ async def pending_swaps(
     employee: Employee = Depends(require_role(3)),
     session: AsyncSession = Depends(get_session),
 ):
-    query = select(ShiftSwapRequest).where(ShiftSwapRequest.status == "pending_manager")
+    query = select(ShiftSwapRequest).where(
+        ShiftSwapRequest.status == "pending_manager",
+        ShiftSwapRequest.is_demo == employee.is_demo,
+    )
     if employee.role.rank == 3:
         query = query.join(Employee, ShiftSwapRequest.requester_id == Employee.id).where(
             Employee.department_code == employee.department_code

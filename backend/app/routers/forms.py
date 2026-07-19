@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit
 from app.database import get_session
+from app.demo import get_role_holder, resolve_dept_manager_id
 from app.form_validation import validate_submission
 from app.models import Department, Employee, FormDefinition, FormSubmission
 from app.notify import dispatcher, template
@@ -104,6 +105,7 @@ async def submit_form(
         form_definition_id=definition.id,
         form_version=definition.version,
         submitted_by=employee.id,
+        is_demo=employee.is_demo,
         department_code=definition.department_code,
         data_json=body.data_json,
         photos=body.photos,
@@ -119,13 +121,9 @@ async def submit_form(
         dept = (
             await session.execute(select(Department).where(Department.code == definition.department_code))
         ).scalar_one_or_none()
-        recipient = dept.manager_employee_id if dept else None
+        recipient = await resolve_dept_manager_id(session, dept, employee.is_demo)
         if recipient is None:
-            cgm = (
-                await session.execute(
-                    select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
-                )
-            ).scalar_one_or_none()
+            cgm = await get_role_holder(session, "CGM", employee.is_demo)
             recipient = cgm.id if cgm else None
         if recipient:
             title, notif_body = template("submission_pending", f"{definition.title_en} — {employee.full_name}")
@@ -151,7 +149,7 @@ async def _decide(
     session: AsyncSession,
 ) -> dict:
     submission = await session.get(FormSubmission, submission_id)
-    if submission is None:
+    if submission is None or submission.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Submission not found")
     if not await is_dept_manager(session, employee, submission.department_code):
         raise HTTPException(status_code=403, detail="Only the department Manager (or CGM/MD) can decide")
@@ -209,7 +207,7 @@ async def list_submissions(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    query = select(FormSubmission)
+    query = select(FormSubmission).where(FormSubmission.is_demo == employee.is_demo)
     rank = employee.role.rank
     if rank <= 2:
         if department_code:
@@ -260,7 +258,7 @@ async def submission_detail(
     session: AsyncSession = Depends(get_session),
 ):
     submission = await session.get(FormSubmission, submission_id)
-    if submission is None:
+    if submission is None or submission.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Submission not found")
     rank = employee.role.rank
     allowed = (

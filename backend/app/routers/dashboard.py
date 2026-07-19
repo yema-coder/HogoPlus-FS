@@ -49,7 +49,7 @@ async def plate_search(
             sa_text(
                 "EXISTS (SELECT 1 FROM jsonb_array_elements_text(form_submissions.detected_plates) AS p "
                 "WHERE p ILIKE :needle)"
-            ).bindparams(needle=needle)
+            ).bindparams(needle=needle),
         )
     )
     if rank == 3:
@@ -109,7 +109,7 @@ def _age_hours(dt) -> float:
     return round((datetime.now(timezone.utc) - dt).total_seconds() / 3600, 1)
 
 
-async def _pending_counts(session: AsyncSession, dept: str | None) -> dict[str, int]:
+async def _pending_counts(session: AsyncSession, dept: str | None, is_demo: bool) -> dict[str, int]:
     """pending approvals per department (submissions + registrations + swaps + incidents)."""
     counts: dict[str, int] = {}
 
@@ -119,12 +119,13 @@ async def _pending_counts(session: AsyncSession, dept: str | None) -> dict[str, 
                 counts[dc] = counts.get(dc, 0) + n
 
     q = select(FormSubmission.department_code, safunc.count()).where(
-        FormSubmission.status == "submitted"
+        FormSubmission.status == "submitted", FormSubmission.is_demo.is_(is_demo)
     ).group_by(FormSubmission.department_code)
     add((await session.execute(q)).all())
 
     q = select(Employee.department_code, safunc.count()).where(
-        Employee.onboarding_status.in_(["self_registered", "pending_approval"])
+        Employee.onboarding_status.in_(["self_registered", "pending_approval"]),
+        Employee.is_demo.is_(is_demo),
     ).group_by(Employee.department_code)
     add((await session.execute(q)).all())
 
@@ -132,13 +133,16 @@ async def _pending_counts(session: AsyncSession, dept: str | None) -> dict[str, 
         select(Employee.department_code, safunc.count())
         .select_from(ShiftSwapRequest)
         .join(Employee, ShiftSwapRequest.requester_id == Employee.id)
-        .where(ShiftSwapRequest.status.in_(["pending_target", "pending_manager"]))
+        .where(
+            ShiftSwapRequest.status.in_(["pending_target", "pending_manager"]),
+            ShiftSwapRequest.is_demo.is_(is_demo),
+        )
         .group_by(Employee.department_code)
     )
     add((await session.execute(q)).all())
 
     q = select(Incident.department_code, safunc.count()).where(
-        Incident.status.in_(["submitted", "escalated"])
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo)
     ).group_by(Incident.department_code)
     add((await session.execute(q)).all())
 
@@ -162,7 +166,8 @@ async def overview(
     depts = (await session.execute(dept_q)).scalars().all()
 
     emp_q = select(Employee.department_code, safunc.count()).where(
-        Employee.is_active.is_(True), Employee.onboarding_status == "approved"
+        Employee.is_active.is_(True), Employee.onboarding_status == "approved",
+        Employee.is_demo == user.is_demo,
     ).group_by(Employee.department_code)
     totals = dict((await session.execute(emp_q)).all())
 
@@ -170,7 +175,7 @@ async def overview(
         select(Employee.department_code, Attendance.is_late, Attendance.verification_level, safunc.count())
         .select_from(Attendance)
         .join(Employee, Attendance.employee_id == Employee.id)
-        .where(Attendance.date == today)
+        .where(Attendance.date == today, Attendance.is_demo == user.is_demo)
         .group_by(Employee.department_code, Attendance.is_late, Attendance.verification_level)
     )
     att = {}
@@ -183,7 +188,8 @@ async def overview(
             e["flagged"] += n
 
     inc_q = select(Incident.department_code, Incident.severity, safunc.count()).where(
-        Incident.status.in_(["submitted", "seen", "in_progress", "escalated"])
+        Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
+        Incident.is_demo == user.is_demo,
     ).group_by(Incident.department_code, Incident.severity)
     open_inc = {}
     for dc, sev, n in (await session.execute(inc_q)).all():
@@ -193,11 +199,12 @@ async def overview(
             e["critical"] += n
 
     sub_q = select(FormSubmission.department_code, safunc.count()).where(
-        safunc.date(FormSubmission.created_at) == today
+        safunc.date(FormSubmission.created_at) == today,
+        FormSubmission.is_demo == user.is_demo,
     ).group_by(FormSubmission.department_code)
     subs = dict((await session.execute(sub_q)).all())
 
-    pending = await _pending_counts(session, dept)
+    pending = await _pending_counts(session, dept, user.is_demo)
 
     tiles = []
     for d in depts:
@@ -230,6 +237,7 @@ async def overview(
     feed_q = (
         select(Incident, Employee.full_name)
         .join(Employee, Incident.reported_by == Employee.id)
+        .where(Incident.is_demo == user.is_demo)
         .order_by(Incident.created_at.desc())
         .limit(40)
     )
@@ -278,7 +286,11 @@ async def department_detail(
         await session.execute(
             select(Attendance, Employee.full_name, Employee.emp_id)
             .join(Employee, Attendance.employee_id == Employee.id)
-            .where(Employee.department_code == code, Attendance.date == target)
+            .where(
+                Employee.department_code == code,
+                Attendance.date == target,
+                Attendance.is_demo == user.is_demo,
+            )
             .order_by(Attendance.punch_in_at)
         )
     ).all()
@@ -301,6 +313,7 @@ async def department_detail(
             .where(
                 FormSubmission.department_code == code,
                 safunc.date(FormSubmission.created_at) == target,
+                FormSubmission.is_demo == user.is_demo,
             )
             .order_by(FormSubmission.created_at.desc())
         )
@@ -319,6 +332,7 @@ async def department_detail(
             await session.execute(
                 select(Incident).where(
                     Incident.department_code == code,
+                    Incident.is_demo == user.is_demo,
                     Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
                 ).order_by(Incident.created_at.desc())
             )
@@ -353,6 +367,7 @@ async def department_detail(
             select(safunc.count()).select_from(Employee).where(
                 Employee.department_code == code, Employee.is_active.is_(True),
                 Employee.onboarding_status == "approved",
+                Employee.is_demo == user.is_demo,
             )
         )
     ).scalar() or 0
@@ -360,7 +375,10 @@ async def department_detail(
         await session.execute(
             select(Attendance.date, safunc.count())
             .join(Employee, Attendance.employee_id == Employee.id)
-            .where(Employee.department_code == code, Attendance.date >= start, Attendance.date <= target)
+            .where(
+                Employee.department_code == code, Attendance.date >= start,
+                Attendance.date <= target, Attendance.is_demo == user.is_demo,
+            )
             .group_by(Attendance.date)
         )
     ).all()
@@ -411,7 +429,9 @@ async def approvals_aging(
         else:
             mgr_names[d.code] = None
 
-    q = select(FormSubmission).where(FormSubmission.status == "submitted")
+    q = select(FormSubmission).where(
+        FormSubmission.status == "submitted", FormSubmission.is_demo == user.is_demo
+    )
     if dept:
         q = q.where(FormSubmission.department_code == dept)
     for s in (await session.execute(q)).scalars().all():
@@ -430,7 +450,10 @@ async def approvals_aging(
     q = (
         select(ShiftSwapRequest, Employee.department_code)
         .join(Employee, ShiftSwapRequest.requester_id == Employee.id)
-        .where(ShiftSwapRequest.status.in_(["pending_target", "pending_manager"]))
+        .where(
+            ShiftSwapRequest.status.in_(["pending_target", "pending_manager"]),
+            ShiftSwapRequest.is_demo == user.is_demo,
+        )
     )
     if dept:
         q = q.where(Employee.department_code == dept)
@@ -439,7 +462,9 @@ async def approvals_aging(
                       "manager": mgr_names.get(dc), "age_hours": _age_hours(sw.created_at),
                       "escalated": False, "created_at": sw.created_at.isoformat()})
 
-    q = select(Incident).where(Incident.status.in_(["submitted", "escalated"]))
+    q = select(Incident).where(
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo == user.is_demo
+    )
     if dept:
         q = q.where(Incident.department_code == dept)
     for i in (await session.execute(q)).scalars().all():
@@ -470,6 +495,9 @@ async def reports_list(
     from app.config import settings
     from app.storage import S3Storage
 
+    # nightly PDF reports cover REAL factory data only — demo users get none
+    if user.is_demo:
+        return {"reports": []}
     if settings.file_storage_mode != "s3":
         return {"reports": []}
     s3 = S3Storage()
@@ -499,6 +527,7 @@ async def audit_trail(
         await session.execute(
             select(AuditEvent, Employee.full_name)
             .outerjoin(Employee, AuditEvent.actor_id == Employee.id)
+            .where(AuditEvent.is_demo == user.is_demo)
             .order_by(AuditEvent.created_at.desc())
             .limit(limit)
         )

@@ -153,16 +153,21 @@ async def cache_set(endpoint: str, resource_key: str, payload: dict) -> None:
     )
 
 
-async def incr_usage(kind: str) -> None:
-    key = f"ai:usage:{now_ist().date().isoformat()}:{kind}"
+def usage_key_prefix(is_demo: bool) -> str:
+    """Demo AI calls are counted separately so real dashboards never include them."""
+    return "ai:usage:demo" if is_demo else "ai:usage"
+
+
+async def incr_usage(kind: str, is_demo: bool = False) -> None:
+    key = f"{usage_key_prefix(is_demo)}:{now_ist().date().isoformat()}:{kind}"
     n = await redis_client.incr(key)
     if n == 1:
         await redis_client.expire(key, 8 * 86400)
 
 
-async def usage_for_date(date_str: str) -> dict:
+async def usage_for_date(date_str: str, is_demo: bool = False) -> dict:
     counts: dict[str, int] = {}
-    async for key in redis_client.scan_iter(f"ai:usage:{date_str}:*"):
+    async for key in redis_client.scan_iter(f"{usage_key_prefix(is_demo)}:{date_str}:*"):
         kind = key.rsplit(":", 1)[-1]
         val = await redis_client.get(key)
         counts[kind] = int(val or 0)

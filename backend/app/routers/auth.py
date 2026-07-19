@@ -55,6 +55,27 @@ def _hash(otp: str) -> str:
 @router.post("/auth/send-otp")
 async def send_otp(body: SendOtpIn, session: AsyncSession = Depends(get_session)):
     phone = body.phone
+    employee = (
+        await session.execute(select(Employee).where(Employee.phone == phone))
+    ).scalar_one_or_none()
+
+    # Demo showcase accounts never receive real SMS — they log in with the fixed demo OTP.
+    if employee is not None and employee.is_demo:
+        return {"message": "OTP sent", "otp_mode": "demo_account", "expires_in": OTP_TTL_SECONDS}
+
+    # Registration guard (contest window): unknown numbers get a friendly trilingual
+    # block and NO SMS is sent — protects SMS credits.
+    if employee is None and not settings.allow_new_registration:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "registration_closed",
+                "en": "New registration is temporarily closed. Please contact the Time Office.",
+                "hi": "नया पंजीकरण अभी बंद है। कृपया टाइम ऑफिस से संपर्क करें।",
+                "mr": "नवीन नोंदणी सध्या बंद आहे. कृपया टाइम ऑफिसशी संपर्क साधा.",
+            },
+        )
+
     rate_key = f"otp:send:{phone}"
     count = await redis_client.incr(rate_key)
     if count == 1:
@@ -85,14 +106,15 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
     employee = (
         await session.execute(select(Employee).where(Employee.phone == phone))
     ).scalar_one_or_none()
-    # DEMO_OTP shortcut requires ALL of: DEMO_OTP_ENABLED, the phone explicitly listed
-    # in DEMO_OTP_WHITELIST, and an existing employee row. It can never be used for
-    # unknown phones or non-whitelisted seeded numbers.
+    # DEMO_OTP shortcut requires ALL of: DEMO_OTP_ENABLED, an existing employee row,
+    # and EITHER employee.is_demo=true (demo showcase cast) OR the phone explicitly
+    # listed in DEMO_OTP_WHITELIST (real admin numbers). Real non-whitelisted
+    # employees and unknown phones always need a real SMS OTP.
     demo_ok = (
         settings.demo_otp_enabled
         and otp == settings.demo_otp
         and employee is not None
-        and phone in settings.demo_otp_whitelist_set
+        and (employee.is_demo or phone in settings.demo_otp_whitelist_set)
     )
     if not ((stored and _hash(otp) == stored) or demo_ok):
         fails = await redis_client.incr(f"otp:fail:{phone}")
@@ -195,7 +217,10 @@ async def register(
         approver_ids.add(to_dept.manager_employee_id)
     cgm = (
         await session.execute(
-            select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
+            select(Employee).where(
+                Employee.role_code == "CGM", Employee.is_active.is_(True),
+                Employee.is_demo.is_(False),
+            ).limit(1)
         )
     ).scalar_one_or_none()
     if cgm:

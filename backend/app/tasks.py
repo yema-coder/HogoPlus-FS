@@ -60,6 +60,18 @@ def escalation_sweep() -> dict:
     return counts
 
 
+async def _demo_cleanup_sweep_async() -> dict:
+    """Purge judge-created demo records older than 60 min (seed rows spared)."""
+    from app.demo_cleanup import run_demo_cleanup
+
+    engine, sm = _session_factory()
+    try:
+        async with sm() as session:
+            return await run_demo_cleanup(session)
+    finally:
+        await engine.dispose()
+
+
 @celery.task(name="app.tasks.nightly_backup")
 def nightly_backup() -> dict:
     """pg_dump -> gzip -> S3 backups/YYYY-MM-DD.sql.gz; keep the newest 14, delete older."""
@@ -278,17 +290,20 @@ async def _verify_face_async(attendance_id: str) -> dict:
                 att.face_verified = False
                 att.verification_level = "flagged"
                 att.flagged_reason = "face_mismatch"
-                # notify Time Office manager
+                # notify Time Office manager (class-aware: demo punches → Demo TO manager)
+                from app.demo import resolve_dept_manager_id
+
                 dept = (
                     await session.execute(select(Department).where(Department.code == "TIME_OFFICE"))
                 ).scalar_one_or_none()
-                if dept and dept.manager_employee_id:
+                to_mgr_id = await resolve_dept_manager_id(session, dept, emp.is_demo)
+                if to_mgr_id:
                     title, body = template(
                         "attendance_face_mismatch",
                         f"{emp.full_name} ({emp.emp_id}) — score {att.face_match_score}",
                     )
                     await dispatcher.notify(
-                        session, dept.manager_employee_id, "attendance_face_mismatch",
+                        session, to_mgr_id, "attendance_face_mismatch",
                         title, body, "attendance", str(att.id),
                     )
             # 80-89: borderline — face_verified stays null, verification_level unchanged, score stored
@@ -415,7 +430,9 @@ async def _classify_incident_async(incident_id: str) -> dict:
 
             r = _fresh_redis()
             try:
-                uk = f"ai:usage:{now_ist().date().isoformat()}:classify"
+                from app.ai_core import usage_key_prefix
+
+                uk = f"{usage_key_prefix(inc.is_demo)}:{now_ist().date().isoformat()}:classify"
                 if r.incr(uk) == 1:
                     r.expire(uk, 8 * 86400)
             finally:
@@ -576,13 +593,16 @@ async def _detect_plate_async(kind: str, record_id: str) -> dict:
             if calls or vision_calls:
                 r = _fresh_redis()
                 try:
+                    from app.ai_core import usage_key_prefix
+
                     day = now_ist().date().isoformat()
+                    prefix = usage_key_prefix(bool(rec.is_demo))
                     if calls:
-                        uk = f"ai:usage:{day}:detect_text"
+                        uk = f"{prefix}:{day}:detect_text"
                         if r.incrby(uk, calls) == calls:
                             r.expire(uk, 8 * 86400)
                     if vision_calls:
-                        vk = f"ai:usage:{day}:anpr_vision"
+                        vk = f"{prefix}:{day}:anpr_vision"
                         if r.incrby(vk, vision_calls) == vision_calls:
                             r.expire(vk, 8 * 86400)
                 finally:
@@ -820,7 +840,7 @@ async def _report_data(session, target_date) -> dict:
         await session.execute(
             select(Attendance, Employee.department_code)
             .join(Employee, Attendance.employee_id == Employee.id)
-            .where(Attendance.date == target_date)
+            .where(Attendance.date == target_date, Attendance.is_demo.is_(False))
         )
     ).all()
     att = {d.code: {"present": 0, "late": 0, "flagged": 0} for d in depts}
@@ -835,7 +855,10 @@ async def _report_data(session, target_date) -> dict:
     sub_rows = (
         await session.execute(
             select(FormSubmission.department_code, safunc.count())
-            .where(safunc.date(FormSubmission.created_at) == target_date)
+            .where(
+                safunc.date(FormSubmission.created_at) == target_date,
+                FormSubmission.is_demo.is_(False),
+            )
             .group_by(FormSubmission.department_code)
         )
     ).all()
@@ -843,19 +866,25 @@ async def _report_data(session, target_date) -> dict:
 
     opened = (
         await session.execute(
-            select(safunc.count()).select_from(Incident).where(safunc.date(Incident.created_at) == target_date)
+            select(safunc.count()).select_from(Incident).where(
+                safunc.date(Incident.created_at) == target_date, Incident.is_demo.is_(False)
+            )
         )
     ).scalar() or 0
     resolved = (
         await session.execute(
-            select(safunc.count()).select_from(Incident).where(safunc.date(Incident.resolved_at) == target_date)
+            select(safunc.count()).select_from(Incident).where(
+                safunc.date(Incident.resolved_at) == target_date, Incident.is_demo.is_(False)
+            )
         )
     ).scalar() or 0
     critical_rows = (
         (
             await session.execute(
                 select(Incident).where(
-                    safunc.date(Incident.created_at) == target_date, Incident.severity == "critical"
+                    safunc.date(Incident.created_at) == target_date,
+                    Incident.severity == "critical",
+                    Incident.is_demo.is_(False),
                 )
             )
         )
@@ -871,7 +900,7 @@ async def _report_data(session, target_date) -> dict:
                 safunc.count(),
                 safunc.min(FormSubmission.created_at),
             )
-            .where(FormSubmission.status == "submitted")
+            .where(FormSubmission.status == "submitted", FormSubmission.is_demo.is_(False))
             .group_by(FormSubmission.department_code)
         )
     ).all()
@@ -941,7 +970,10 @@ async def generate_report_async(target_date) -> dict:
             # CGM language (mr default) + English copy
             cgm = (
                 await session.execute(
-                    select(Employee).where(Employee.role_code == "CGM", Employee.is_active.is_(True)).limit(1)
+                    select(Employee).where(
+                        Employee.role_code == "CGM", Employee.is_active.is_(True),
+                        Employee.is_demo.is_(False),
+                    ).limit(1)
                 )
             ).scalar_one_or_none()
             primary_lang = (cgm.language_pref if cgm and cgm.language_pref in ("en", "hi", "mr") else "mr")
@@ -960,10 +992,14 @@ async def generate_report_async(target_date) -> dict:
                     p.write_bytes(pdf_bytes)
                 keys[lang] = key
 
-            # notify CGM + MD with presigned link
+            # notify real CGM + MD with presigned link (report covers real data only)
             tops = (
                 (
-                    await session.execute(select(Employee).where(Employee.is_active.is_(True)))
+                    await session.execute(
+                        select(Employee).where(
+                            Employee.is_active.is_(True), Employee.is_demo.is_(False)
+                        )
+                    )
                 )
                 .scalars()
                 .all()

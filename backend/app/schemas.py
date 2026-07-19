@@ -268,3 +268,8 @@ class ChatIn(BaseModel):
 
 class GenerateReportIn(BaseModel):
     date: _datetime.date | None = None
+
+
+class PurgeDemoIn(BaseModel):
+    dry_run: bool = True
+    include_seed: bool = False

@@ -70,14 +70,14 @@ async def anpr(
         confidence = float(result.get("confidence") or 0.0)
     except Exception as e:
         logger.warning("ANPR vision failed: %s", e)
-    await ai_core.incr_usage("anpr")
+    await ai_core.incr_usage("anpr", employee.is_demo)
 
     valid = bool(plate and PLATE_REGEX.match(plate))
     if not valid or confidence < 0.7:
         # fallback: Rekognition DetectText, re-validate against Indian plate regex
         try:
             lines = await run_in_threadpool(detect_text, image)
-            await ai_core.incr_usage("anpr_detect_text")
+            await ai_core.incr_usage("anpr_detect_text", employee.is_demo)
             best = None
             for line in lines:
                 cand = _normalize_plate(line["text"])
@@ -126,7 +126,7 @@ async def gauge_read(
             unit = result.get("unit")
         except Exception as e:
             logger.warning("Gauge read failed: %s", e)
-        await ai_core.incr_usage("gauge_read")
+        await ai_core.incr_usage("gauge_read", employee.is_demo)
         payload = {
             "value": value,
             "unit": unit,
@@ -164,7 +164,7 @@ async def voice_fill(
     except Exception as e:
         logger.warning("Voice-fill STT failed: %s", e)
         raise HTTPException(status_code=502, detail="Transcription failed")
-    await ai_core.incr_usage("voice_fill")
+    await ai_core.incr_usage("voice_fill", employee.is_demo)
 
     fillable = [
         {
@@ -255,7 +255,7 @@ async def sop_chat(
     session.add(
         ChatMessage(
             employee_id=employee.id, conversation_id=conversation_id,
-            role="user", content=body.message,
+            role="user", content=body.message, is_demo=employee.is_demo,
         )
     )
 
@@ -276,7 +276,7 @@ async def sop_chat(
     ).all()
     relevant = [r for r in rows if r.dist <= CHAT_DISTANCE_THRESHOLD]
 
-    await ai_core.incr_usage("chat")
+    await ai_core.incr_usage("chat", employee.is_demo)
 
     if not relevant:
         answer, citations = CHAT_FALLBACK[lang], []
@@ -312,7 +312,7 @@ async def sop_chat(
     session.add(
         ChatMessage(
             employee_id=employee.id, conversation_id=conversation_id,
-            role="assistant", content=answer, citations=citations,
+            role="assistant", content=answer, citations=citations, is_demo=employee.is_demo,
         )
     )
     await session.commit()
