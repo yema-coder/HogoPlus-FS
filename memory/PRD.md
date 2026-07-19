@@ -564,3 +564,31 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - E2 frontend pass iteration_14.json: ALL PASS (13 chips, ADMIN first/default for CGM,
   cross-dept form renders, worker sees no chips, Marathi labels OK).
 - Ships in v1.0.3 consolidated build (mobile side); Yema's record already live.
+
+## Prompt 13 (user numbering) — Speed Pass #2 + Media Viewer + Brand Polish (2026-06) ✅ DONE
+- A SPEED: authStore.hydrate is now CACHE-FIRST (paint Home from stored hogo.profile, getMe
+  revalidates in background → 0 blocking startup API calls); Approvals lists SWR-cached
+  (AsyncStorage hogo.cache.approvals, hydrate on mount + persist after loadAll); SkeletonRows
+  component (/src/components/Skeleton.tsx) on Approvals + My Reports first load; reports
+  refresh strip (EyeLoader, testID reports-refresh-strip); OTP delay hint (testID
+  otp-delay-hint, i18n auth.otpDelay); success AI polling 2s×10 then 5s (MAX_POLLS 14).
+  Measured (Expo web): cold→interactive 691ms, login→home 3309ms, home→reports 101ms,
+  approvals skeleton 200ms/ready 785ms.
+- B MEDIA: MediaCard.tsx (branded card: 14px radius, 2px colors.primary border (#0B4F6C —
+  app's actual brand primary used instead of the suggested #3A5DAE for palette consistency),
+  shadow, HogoPlus eye badge bottom-right, expand pill TOP-LEFT to avoid the status chip) +
+  MediaViewerModal (photo pinch-zoom ScrollView / video expo-video nativeControls).
+  Used in: incident/[id] main media + resolution photo, ReadOnlyField photo case (submission
+  detail), approvals selfies + face-compare (Pressable → shared MediaViewerModal).
+  Old IncidentVideo inline player + ReadOnlyField's own modal removed.
+- D FOOTER: BrandFooter.tsx — maroon #7A1F2B, 36px + safe-area, untinted eye logo in a white
+  chip + "HogoPlus-FS". On: language, phone, otp, pending, incident/success, form/success.
+  NOT on tab screens/camera/viewers. Webdash: .brand-footer band + .result-media branded card
+  + .media-brand-pill in incident modal (MUST import eyeBase in Department.tsx — vite build
+  does NOT typecheck; a missing import crashed the modal at runtime once).
+- Tests: 158/158 pytest, i18n parity 329/329/329 keys. E2 iteration_15.json ALL PASS.
+- LESSON: apt-installed test infra (postgres/redis/pgvector) VANISHES between sessions —
+  reinstall per runbook: apt postgresql redis-server postgresql-server-dev-15 build-essential,
+  build pgvector v0.8.0 from source, CREATE ROLE hogo + db hogoplus_test + EXTENSION vector.
+- Untested (needs device/build): video full-screen viewer with a real video incident,
+  pull-to-refresh gesture (native-only). v1.0.3 build next.

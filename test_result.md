@@ -272,3 +272,9 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   the local test DB in fresh forks. Frontend E2 pass: iteration_14.json ALL PASS.
 - Prod: Yema G emp_id 1212 (+919309491145, TIME_OFFICE Manager, GEN) — count 402→403; flagged
   + onboarding queues verified 200 via minted JWT; not whitelisted (real OTP path).
+
+## Prompt 13 — Speed Pass #2 + Media Viewer + Brand Polish (2026-06)
+- Cache-first profile startup, approvals SWR cache, skeletons, OTP hint, 2s AI polling.
+- MediaCard + MediaViewerModal everywhere media renders (mobile + webdash modal). BrandFooter
+  maroon #7A1F2B on tab-bar-less screens + webdash. 158/158 pytest, i18n 329 parity,
+  E2 iteration_15 ALL PASS. Video viewer + pull-gesture = device-only verification.
