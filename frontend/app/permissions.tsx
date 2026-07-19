@@ -1,6 +1,5 @@
 import { useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { Bell, Camera, MapPin } from "lucide-react-native";
 import React, { useState } from "react";
@@ -9,6 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
+import { requestNotificationPermissionsSafe } from "@/src/notifications/safeNotifications";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
@@ -34,11 +34,8 @@ export default function PermissionsPrimer() {
     } catch {
       // ignore
     }
-    try {
-      await Notifications.requestPermissionsAsync();
-    } catch {
-      // ignore
-    }
+    // lazy + guarded: silent no-op where the push native module is absent (Expo Go iOS / web)
+    await requestNotificationPermissionsSafe();
     await markPermsPrimed();
     router.replace("/(tabs)/home");
   };
