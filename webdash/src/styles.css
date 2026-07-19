@@ -119,3 +119,6 @@ tr.red td { background: #FDF0F2; }
 .result-media img, .result-media video { display: block; width: 100%; border-radius: 0; }
 .media-brand-pill { position: absolute; bottom: 8px; right: 8px; display: flex; align-items: center; gap: 4px; background: rgba(17, 24, 39, 0.65); border-radius: 999px; padding: 3px 8px; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.3px; }
 .media-brand-pill img { height: 15px; width: 18px; }
+
+/* Prompt 16: Factory Pulse line atop Overview */
+.pulse-line { background: #FFF7E8; border: 1px solid #F0C464; border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-weight: 600; font-size: 14px; color: #6B4E0C; }

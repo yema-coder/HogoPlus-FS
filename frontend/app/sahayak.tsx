@@ -35,8 +35,8 @@ export default function SahayakScreen() {
   const conversationId = useRef<string | null>(null);
   const listRef = useRef<FlatList<Bubble>>(null);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (preset?: string) => {
+    const text = (preset ?? input).trim();
     if (!text || busy) return;
     setInput("");
     setBusy(true);
@@ -96,6 +96,19 @@ export default function SahayakScreen() {
             </View>
             <Text style={styles.emptyTitle}>{t("sahayak.empty")}</Text>
             <Text style={styles.emptyHint}>{t("sahayak.emptyHint")}</Text>
+            <View style={styles.chipsWrap} testID="sahayak-starter-chips">
+              {(["chips.q1", "chips.q2", "chips.q3", "chips.q4"] as const).map((k) => (
+                <Pressable
+                  key={k}
+                  testID={`sahayak-chip-${k.slice(-2)}`}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.chip, { opacity: pressed ? 0.7 : 1 }]}
+                  onPress={() => void send(t(k))}
+                >
+                  <Text style={styles.chipText}>{t(k)}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
         ) : (
           <FlatList
@@ -173,6 +186,24 @@ const styles = StyleSheet.create({
   },
   citeText: { fontFamily: fonts.semiBold, fontSize: 11, color: colors.primary },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, padding: spacing.xl },
+  chipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  chip: {
+    backgroundColor: colors.brandTertiary,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  chipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.primary },
   emptyIcon: {
     width: 88,
     height: 88,

@@ -273,3 +273,9 @@ class GenerateReportIn(BaseModel):
 class PurgeDemoIn(BaseModel):
     dry_run: bool = True
     include_seed: bool = False
+
+
+class AppVersionIn(BaseModel):
+    latest_version: str = Field(min_length=1, max_length=20)
+    apk_url: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=1000)

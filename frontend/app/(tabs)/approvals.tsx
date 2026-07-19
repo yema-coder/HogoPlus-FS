@@ -51,7 +51,7 @@ import { tri } from "@/src/i18n";
 import { useApprovalsStore, type ApprovalCounts } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { formatDateTime, formatTime } from "@/src/utils/format";
+import { formatTime, isOlderThan24h, timeAgo } from "@/src/utils/format";
 import { storage } from "@/src/utils/storage";
 
 type Segment = "forms" | "regs" | "swaps" | "incidents" | "attendance";
@@ -301,7 +301,12 @@ export default function ApprovalsScreen() {
             <Text style={styles.cardMeta} numberOfLines={1}>
               {s.submitted_by_name ?? ""} · {deptName(s.department_code)}
             </Text>
-            <Text style={styles.cardMeta}>{formatDateTime(s.created_at)}</Text>
+            <Text style={styles.cardMeta}>
+              {timeAgo(s.created_at)}
+              {s.status === "submitted" && isOlderThan24h(s.created_at) ? (
+                <Text style={styles.agingChip}>  ⏰ 24h+</Text>
+              ) : null}
+            </Text>
           </View>
           <StatusChip status={s.status} />
         </Pressable>
@@ -420,7 +425,10 @@ export default function ApprovalsScreen() {
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.cardTitle} numberOfLines={1}>{t(def.tKey)}</Text>
             <Text style={styles.cardMeta}>
-              {deptName(inc.department_code)} · {formatDateTime(inc.created_at)}
+              {deptName(inc.department_code)} · {timeAgo(inc.created_at)}
+              {inc.status !== "resolved" && isOlderThan24h(inc.created_at) ? (
+                <Text style={styles.agingChip}>  ⏰ 24h+</Text>
+              ) : null}
             </Text>
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
@@ -799,6 +807,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.text },
   cardMeta: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
+  agingChip: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.danger },
   regCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

@@ -9,6 +9,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import "@/src/i18n";
 import { ToastHost } from "@/src/components/Toast";
+import { OfflineStrip } from "@/src/components/OfflineStrip";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors } from "@/src/theme/tokens";
@@ -62,6 +63,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <OfflineStrip />
         <Stack
           screenOptions={{
             headerShown: false,

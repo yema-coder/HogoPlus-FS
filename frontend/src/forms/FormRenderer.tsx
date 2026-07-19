@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,7 @@ import { ToggleFieldInput } from "@/src/forms/fields/ToggleFieldInput";
 import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { tri } from "@/src/i18n";
 import { useOutboxStore, type OutboxFile } from "@/src/offline/outbox";
-import { sizes, spacing } from "@/src/theme/tokens";
+import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 
 interface Props {
   definition: FormDefinitionItem;
@@ -391,6 +392,11 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           </FieldWrapper>
         ))}
         <View style={{ height: spacing.md }} />
+        {Object.keys(aiFilled).length > 0 ? (
+          <Text style={styles.voiceHint} testID="voice-check-hint">
+            🎙 {t("voice.checkHint")}
+          </Text>
+        ) : null}
         <BigButton
           testID="form-submit-button"
           label={t("forms.submit")}
@@ -414,4 +420,11 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
 
 const styles = StyleSheet.create({
   scroll: { padding: sizes.screenPadding, paddingBottom: spacing.xxl },
+  voiceHint: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.sm,
+    color: colors.accent,
+    textAlign: "center",
+    marginBottom: spacing.md,
+  },
 });

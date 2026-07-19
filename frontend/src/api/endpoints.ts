@@ -191,3 +191,9 @@ export const aiChat = (message: string, conversationId?: string | null) =>
     method: "POST",
     body: { message, conversation_id: conversationId ?? null },
   });
+
+export const getAppVersion = () =>
+  api<{ latest_version: string | null; apk_url: string | null; notes: string | null }>(
+    "/app-version",
+    { auth: false },
+  );

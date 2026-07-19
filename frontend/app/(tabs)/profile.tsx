@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, LogOut, MessageCircleQuestion } from "lucide-react-native";
+import { ChevronRight, IdCard, LogOut, MessageCircleQuestion } from "lucide-react-native";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -104,6 +104,22 @@ export default function ProfileScreen() {
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.sahayakTitle}>{t("sahayak.title")}</Text>
             <Text style={styles.sahayakSub}>{t("profile.sahayak")}</Text>
+          </View>
+          <ChevronRight size={24} color={colors.muted} strokeWidth={2.2} />
+        </Pressable>
+
+        <Pressable
+          testID="idcard-entry"
+          accessibilityRole="button"
+          onPress={() => router.push("/id-card")}
+          style={({ pressed }) => [styles.sahayakCard, pressed && { opacity: 0.85 }]}
+        >
+          <View style={[styles.sahayakIcon, { backgroundColor: colors.accent }]}>
+            <IdCard size={26} color={colors.onPrimary} strokeWidth={2.2} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={styles.sahayakTitle}>{t("idcard.title")}</Text>
+            <Text style={styles.sahayakSub}>{t("idcard.hint")}</Text>
           </View>
           <ChevronRight size={24} color={colors.muted} strokeWidth={2.2} />
         </Pressable>

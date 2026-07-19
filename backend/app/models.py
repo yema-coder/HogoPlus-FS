@@ -385,6 +385,16 @@ class Notification(Base):
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
 
+class AppVersion(TimestampMixin, Base):
+    """Single-row table driving the mobile 'update available' banner (Prompt 16)."""
+
+    __tablename__ = "app_versions"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    latest_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    apk_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class SopDoc(TimestampMixin, Base):
     __tablename__ = "sop_docs"
     id: Mapped[uuid.UUID] = uuid_pk()

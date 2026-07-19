@@ -19,7 +19,7 @@ import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { formatDateTime } from "@/src/utils/format";
+import { formatDateTime, timeAgo } from "@/src/utils/format";
 
 type Scope = "mine" | "dept";
 
@@ -62,7 +62,7 @@ export default function ReportsScreen() {
             {t(def.tKey)}
           </Text>
           <Text style={styles.rowSub} numberOfLines={1}>
-            {formatDateTime(item.created_at)}
+            {timeAgo(item.created_at)}
           </Text>
         </View>
         <StatusChip status={item.status} />

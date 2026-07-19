@@ -1,11 +1,12 @@
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CheckCircle2, CloudOff, Flag, Home, ShieldCheck } from "lucide-react-native";
-import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { myAttendance } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatTime } from "@/src/utils/format";
@@ -24,6 +25,23 @@ export default function PunchResultScreen() {
   }>();
 
   const isQueued = queued === "1";
+
+  // Prompt 16: dignified 0.6s tick pop + attendance streak
+  const scale = useRef(new Animated.Value(0.4)).current;
+  const [streak, setStreak] = useState<{ days: number; total: number } | null>(null);
+  useEffect(() => {
+    Animated.spring(scale, {
+      toValue: 1,
+      friction: 4,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
+    if (!isQueued) {
+      void myAttendance(new Date().toISOString().slice(0, 7))
+        .then((rows) => setStreak({ days: rows.length, total: new Date().getDate() }))
+        .catch(() => undefined);
+    }
+  }, [scale, isQueued]);
 
   useEffect(() => {
     void Haptics.notificationAsync(
@@ -75,11 +93,21 @@ export default function PunchResultScreen() {
   return (
     <SafeAreaView style={styles.safe} testID="punch-result-screen">
       <View style={styles.center}>
-        <View style={[styles.circle, { backgroundColor: r.bg }]} testID={r.testID}>
+        <Animated.View
+          style={[styles.circle, { backgroundColor: r.bg, transform: [{ scale }] }]}
+          testID={r.testID}
+        >
           {r.icon}
-        </View>
+        </Animated.View>
         <Text style={styles.title}>{r.title}</Text>
         <Text style={styles.body}>{r.body}</Text>
+        {streak && streak.days > 0 ? (
+          <View style={styles.streakChip} testID="punch-streak-chip">
+            <Text style={styles.streakText}>
+              🔥 {t("today.streak", { days: streak.days, total: streak.total })}
+            </Text>
+          </View>
+        ) : null}
         {!isQueued && time ? (
           <Text style={styles.time}>
             {t("att.punchedInAt")}: {formatTime(time)}
@@ -171,4 +199,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   lateChipText: { fontFamily: fonts.bold, fontSize: type.base },
+  streakChip: {
+    backgroundColor: "#DDF5E5",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 6,
+    marginTop: spacing.sm,
+  },
+  streakText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.success },
 });

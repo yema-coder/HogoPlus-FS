@@ -46,6 +46,7 @@ import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import i18n, { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
+import { storage } from "@/src/utils/storage";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { burnInSafe } from "@/src/utils/burnIn";
@@ -99,6 +100,17 @@ export default function IncidentCapture() {
   const [address, setAddress] = useState<string | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("searching");
   const [dept, setDept] = useState(profile?.department_code ?? "PRODUCTION");
+  // Prompt 16: one-time camera coach overlay (AsyncStorage flag)
+  const [coach, setCoach] = useState(false);
+  useEffect(() => {
+    void storage.getItem<string>("hogo.coach.incidentCamera", "").then((v) => {
+      if (!v) setCoach(true);
+    });
+  }, []);
+  const dismissCoach = () => {
+    setCoach(false);
+    void storage.setItem("hogo.coach.incidentCamera", "1");
+  };
   const [desc, setDesc] = useState("");
   const [voiceUri, setVoiceUri] = useState<string | undefined>(undefined);
   const [deptModal, setDeptModal] = useState(false);
@@ -371,6 +383,25 @@ export default function IncidentCapture() {
           mode={mode}
           videoQuality="720p"
         />
+        {coach ? (
+          <View style={styles.coachWrap} testID="camera-coach-overlay">
+            <View style={styles.coachCard}>
+              <View style={styles.coachSteps}>
+                <Text style={styles.coachStep}>📷 {t("coach.photo")}</Text>
+                <Text style={styles.coachArrow}>→</Text>
+                <Text style={styles.coachStep}>🎙 {t("coach.speak")}</Text>
+                <Text style={styles.coachArrow}>→</Text>
+                <Text style={styles.coachStep}>✅ {t("coach.send")}</Text>
+              </View>
+              <BigButton
+                testID="camera-coach-gotit"
+                label={t("coach.gotIt")}
+                height={52}
+                onPress={dismissCoach}
+              />
+            </View>
+          </View>
+        ) : null}
         <SafeAreaView style={styles.cameraOverlay}>
           <View style={styles.cameraTop}>
             <Pressable
@@ -658,6 +689,32 @@ export default function IncidentCapture() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   fill: { flex: 1, backgroundColor: "#000000" },
+  coachWrap: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+    zIndex: 50,
+    elevation: 50,
+  },
+  coachCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.lg,
+    width: "100%",
+    maxWidth: 420,
+  },
+  coachSteps: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  coachStep: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  coachArrow: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.primary },
   cameraOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",

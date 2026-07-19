@@ -29,19 +29,28 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "@/src/api/client";
-import { myAttendance, myIncidents, myNotifications, myShifts, punchOut } from "@/src/api/endpoints";
+import {
+  listIncidents,
+  listSubmissions,
+  myAttendance,
+  myIncidents,
+  myNotifications,
+  myShifts,
+  punchOut,
+} from "@/src/api/endpoints";
 import type { AttendanceRecord, Incident, NotificationList, ShiftDay } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
 import { GridTile } from "@/src/components/GridTile";
 import { showToast } from "@/src/components/Toast";
+import { UpdateBanner } from "@/src/components/UpdateBanner";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
-import { tri } from "@/src/i18n";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, shadow, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatShiftTime, formatTime } from "@/src/utils/format";
+import { tri } from "@/src/i18n";
 
 /** Idle brand animation: the eye logo blinks softly every few seconds (native driver,
  * paused while the app is backgrounded — battery-friendly). */
@@ -117,6 +126,37 @@ export default function HomeScreen() {
   const today = dayjs().format("YYYY-MM-DD");
   const todayRec = att.data?.find((r) => r.date === today) ?? null;
   const todayShift = shifts.data?.[0] ?? null;
+
+  // Prompt 16: manager morning card (rank<=3) — dept pending counts from existing endpoints
+  const mgrSubs = useCachedFetch(
+    "mgr-pending-subs",
+    () => listSubmissions({ status: "submitted" }),
+    { enabled: rank <= 3 },
+  );
+  const mgrIncs = useCachedFetch<Incident[]>("mgr-open-incs", () => listIncidents(), {
+    enabled: rank <= 3,
+  });
+
+  // time-of-day greeting in the user's language
+  const hour = dayjs().hour();
+  const greetKey = hour < 12 ? "greet.morning" : hour < 17 ? "greet.afternoon" : "greet.evening";
+  const greetEmoji = hour < 12 ? "🌅" : hour < 17 ? "☀️" : "🌆";
+  const firstName = (profile?.full_name ?? "").split(/\s+/)[0] ?? "";
+
+  // today strip: punch status + my open complaints
+  const myOpen = (incidents.data ?? []).filter((i) => i.status !== "resolved").length;
+  const todayStrip = [
+    todayRec
+      ? t("today.punched", { time: formatTime(todayRec.punch_in_at) })
+      : t("today.notPunched"),
+    myOpen > 0 ? t("today.open", { count: myOpen }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // attendance streak: presence days this month (from cached month rows)
+  const monthDays = att.data?.length ?? 0;
+  const workDaysSoFar = dayjs().date();
 
   // My Reports strip: last 7 days summary
   const weekAgo = dayjs().subtract(7, "day");
@@ -222,12 +262,11 @@ export default function HomeScreen() {
         </View>
         <View style={styles.subRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerName} numberOfLines={1}>
-              {t("home.hello")}, {profile?.full_name}
+            <Text style={styles.headerName} numberOfLines={1} testID="home-greeting">
+              {t(greetKey)}, {firstName} {greetEmoji}
             </Text>
-            <Text style={styles.headerSub} numberOfLines={1}>
-              {dayjs().format("DD/MM/YYYY")}
-              {profile?.department ? ` · ${tri(profile.department as unknown as Record<string, unknown>, "name")}` : ""}
+            <Text style={styles.headerSub} numberOfLines={1} testID="home-today-strip">
+              {todayStrip}
             </Text>
           </View>
           {eligible && todayShift?.shift_code ? (
@@ -255,6 +294,31 @@ export default function HomeScreen() {
           />
         }
       >
+        <UpdateBanner />
+        {rank <= 3 ? (
+          <Pressable
+            testID="manager-morning-card"
+            accessibilityRole="button"
+            onPress={() => router.push("/(tabs)/approvals")}
+            style={({ pressed }) => [styles.mgrCard, { opacity: pressed ? 0.88 : 1 }]}
+          >
+            <Text style={styles.mgrCardText} numberOfLines={2}>
+              {t("mgr.card", {
+                fresh: (mgrIncs.data ?? []).filter(
+                  (i) => i.status === "submitted" || i.status === "escalated",
+                ).length,
+                pending: (mgrSubs.data?.items ?? []).length,
+              })}
+              {(() => {
+                const aged = (mgrSubs.data?.items ?? []).filter(
+                  (s) => Date.now() - dayjs(s.created_at).valueOf() > 86400000,
+                ).length;
+                return aged > 0 ? ` (${t("mgr.aging", { count: aged })})` : "";
+              })()}
+            </Text>
+            <ChevronRight size={20} color={colors.primary} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
         <Pressable
           testID="report-incident-tile"
           accessibilityRole="button"
@@ -287,6 +351,13 @@ export default function HomeScreen() {
         <View style={[styles.attCard, shadow.card]} testID="attendance-card">
           <View style={styles.attHead}>
             <Text style={styles.attTitle}>{t("att.title")}</Text>
+            {monthDays > 0 ? (
+              <View style={styles.streakChip} testID="attendance-streak-chip">
+                <Text style={styles.streakText}>
+                  🔥 {t("today.streak", { days: monthDays, total: workDaysSoFar })}
+                </Text>
+              </View>
+            ) : null}
             <Pressable
               testID="attendance-history-link"
               onPress={() => router.push("/attendance/history")}
@@ -476,4 +547,26 @@ const styles = StyleSheet.create({
     marginTop: -spacing.xs,
   },
   stripText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.accent, flex: 1 },
+  mgrCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    minHeight: 52,
+  },
+  mgrCardText: { flex: 1, fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.primary },
+  streakChip: {
+    backgroundColor: "#DDF5E5",
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginLeft: spacing.sm,
+    flexShrink: 1,
+  },
+  streakText: { fontFamily: fonts.semiBold, fontSize: 11, color: colors.success },
 });

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import write_audit
 from app.database import get_session
 from app.models import (
+    AppVersion,
     BleBeacon,
     Department,
     Employee,
@@ -20,6 +21,7 @@ from app.models import (
 )
 from app.notify import dispatcher, template
 from app.schemas import (
+    AppVersionIn,
     AssignManagerIn,
     ApproveRegistrationIn,
     BeaconIn,
@@ -723,3 +725,25 @@ async def purge_demo_data(
         )
         await session.commit()
     return result
+
+
+@router.put("/app-version")
+async def set_app_version(
+    body: AppVersionIn,
+    actor: Employee = Depends(require_real_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 16: update the single app-version row that drives the mobile update banner."""
+    row = (
+        await session.execute(select(AppVersion).order_by(AppVersion.updated_at.desc()).limit(1))
+    ).scalar_one_or_none()
+    if row is None:
+        row = AppVersion(latest_version=body.latest_version)
+        session.add(row)
+    row.latest_version = body.latest_version
+    row.apk_url = body.apk_url
+    row.notes = body.notes
+    await write_audit(session, actor.id, "admin.app_version", "app_version", None,
+                      {"latest_version": body.latest_version}, is_demo=False)
+    await session.commit()
+    return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}

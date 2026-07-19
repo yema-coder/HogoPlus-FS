@@ -28,6 +28,96 @@ from app.storage import get_storage
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
+@router.get("/pulse")
+async def factory_pulse(
+    user: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 16: one warm AI sentence summarizing today's factory status (CGM/MD).
+    Cached 10 min per class+language; static fallback if the LLM call fails."""
+    if user.role.rank > 2:
+        raise HTTPException(status_code=403, detail="CGM / MD only")
+    from app.redis_client import redis_client
+
+    lang = user.language_pref or "mr"
+    cache_key = f"pulse:{int(user.is_demo)}:{lang}"
+    cached = await redis_client.get(cache_key)
+    if cached:
+        return {"pulse": cached, "cached": True}
+
+    today = now_ist().date()
+    present = (
+        await session.execute(
+            select(safunc.count()).select_from(Attendance).where(
+                Attendance.date == today, Attendance.is_demo == user.is_demo
+            )
+        )
+    ).scalar() or 0
+    total = (
+        await session.execute(
+            select(safunc.count()).select_from(Employee).where(
+                Employee.is_active.is_(True), Employee.onboarding_status == "approved",
+                Employee.is_demo == user.is_demo,
+            )
+        )
+    ).scalar() or 0
+    open_inc = (
+        await session.execute(
+            select(safunc.count()).select_from(Incident).where(
+                Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
+                Incident.is_demo == user.is_demo,
+            )
+        )
+    ).scalar() or 0
+    crit_row = (
+        await session.execute(
+            select(Incident.department_code).where(
+                Incident.severity == "critical",
+                Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
+                Incident.is_demo == user.is_demo,
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    pend_subs = (
+        await session.execute(
+            select(safunc.count()).select_from(FormSubmission).where(
+                FormSubmission.status == "submitted", FormSubmission.is_demo == user.is_demo
+            )
+        )
+    ).scalar() or 0
+
+    pct = round(present * 100 / total) if total else 0
+    lang_name = {"mr": "Marathi", "hi": "Hindi", "en": "English"}.get(lang, "Marathi")
+    fallback = {
+        "mr": f"आज: उपस्थिती {pct}% · {open_inc} खुल्या तक्रारी · {pend_subs} फॉर्म प्रलंबित"
+              + (f" · १ गंभीर — {crit_row}" if crit_row else ""),
+        "hi": f"आज: उपस्थिति {pct}% · {open_inc} खुली शिकायतें · {pend_subs} फॉर्म लंबित"
+              + (f" · 1 गंभीर — {crit_row}" if crit_row else ""),
+        "en": f"Today: attendance {pct}% · {open_inc} open complaints · {pend_subs} forms pending"
+              + (f" · 1 critical — {crit_row}" if crit_row else ""),
+    }.get(lang) or ""
+    text = fallback
+    try:
+        from app import ai_core
+
+        prompt = (
+            f"Factory status today: attendance {present}/{total} ({pct}%), "
+            f"{open_inc} open complaints, {pend_subs} form approvals pending"
+            + (f", 1 CRITICAL incident in {crit_row}" if crit_row else "")
+            + f". Write EXACTLY ONE short, warm sentence in {lang_name} for the MD's dashboard. "
+              "Max 25 words. Plain text only, no preamble, no quotes."
+        )
+        out = await ai_core.chat_answer("You summarize a sugar factory's daily dashboard.", prompt)
+        out = (out or "").strip().strip('"')
+        if 0 < len(out) <= 300:
+            text = out
+            await ai_core.incr_usage("pulse", user.is_demo)
+    except Exception:
+        pass
+    await redis_client.setex(cache_key, 600, text)
+    return {"pulse": text, "cached": False}
+
+
 @router.get("/plates/search")
 async def plate_search(
     q: str = Query(min_length=2, max_length=20),
@@ -41,11 +131,14 @@ async def plate_search(
         raise HTTPException(status_code=403, detail="Not allowed")
     needle = f"%{q.upper().replace(' ', '')}%"
 
-    inc_q = select(Incident).where(Incident.detected_plate.ilike(needle))
+    inc_q = select(Incident).where(
+        Incident.detected_plate.ilike(needle), Incident.is_demo == employee.is_demo
+    )
     sub_q = (
         select(FormSubmission, FormDefinition.title_en)
         .join(FormDefinition, FormSubmission.form_definition_id == FormDefinition.id)
         .where(
+            FormSubmission.is_demo == employee.is_demo,
             sa_text(
                 "EXISTS (SELECT 1 FROM jsonb_array_elements_text(form_submissions.detected_plates) AS p "
                 "WHERE p ILIKE :needle)"

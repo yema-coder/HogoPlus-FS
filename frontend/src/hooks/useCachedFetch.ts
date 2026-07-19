@@ -16,8 +16,14 @@ interface CachedFetchResult<T> {
   refresh: () => Promise<void>;
 }
 
-/** Cache-first data hook: renders cached data instantly, refreshes in background. */
-export function useCachedFetch<T>(key: string, fetcher: () => Promise<T>): CachedFetchResult<T> {
+/** Cache-first data hook: renders cached data instantly, refreshes in background.
+ * Pass { enabled: false } to skip fetching entirely (role-gated data). */
+export function useCachedFetch<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  options: { enabled?: boolean } = {},
+): CachedFetchResult<T> {
+  const enabled = options.enabled !== false;
   const [data, setData] = useState<T | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,7 @@ export function useCachedFetch<T>(key: string, fetcher: () => Promise<T>): Cache
   const mounted = useRef(true);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     setError(null);
     try {
       const fresh = await fetcherRef.current();
@@ -41,10 +48,16 @@ export function useCachedFetch<T>(key: string, fetcher: () => Promise<T>): Cache
       setLoading(false);
       setError(e instanceof ApiError && e.status === 0 ? "network" : "server");
     }
-  }, [key]);
+  }, [key, enabled]);
 
   useEffect(() => {
     mounted.current = true;
+    if (!enabled) {
+      setLoading(false);
+      return () => {
+        mounted.current = false;
+      };
+    }
     void (async () => {
       const raw = await storage.getItem<string>(`hogo.cache.${key}`, "");
       if (raw && mounted.current) {

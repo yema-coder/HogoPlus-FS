@@ -98,7 +98,7 @@
     "descriptionOptional": "Say more (optional)",
     "descriptionHint": "Short description",
     "submitIncident": "SUBMIT",
-    "successTitle": "Complaint sent!",
+    "successTitle": "Thank you! Complaint sent ✅",
     "sentToManager": "Sent to the manager",
     "incidentId": "Complaint ID",
     "queuedTitle": "Saved!",
@@ -151,7 +151,7 @@
   },
   "reports": {
     "title": "My Complaints",
-    "empty": "No complaints yet",
+    "empty": "🎉 All clear! No complaints yet — great work.",
     "outbox": "{{count}} waiting to send",
     "waitingToSend": "Waiting to send",
     "timeline": "Timeline",
@@ -206,7 +206,7 @@
   },
   "notif": {
     "title": "Alerts",
-    "empty": "No alerts yet",
+    "empty": "🔔 All quiet — new alerts will appear here.",
     "unread": "New"
   },
   "profile": {
@@ -240,7 +240,7 @@
     "approve": "Approve",
     "reject": "Reject",
     "rejectReason": "Why rejecting?",
-    "empty": "Nothing pending",
+    "empty": "✅ All caught up! Nothing waiting for you.",
     "allDepts": "All",
     "wantsToJoin": "Wants to join {{dept}}",
     "actionDone": "Done",
@@ -252,12 +252,12 @@
   },
   "errors": {
     "network": "No internet. Check your connection.",
-    "server": "Something went wrong. Try again.",
+    "server": "Something went wrong on our side — please try once more.",
     "generic": "Could not complete. Try again.",
     "sessionExpired": "Session expired. Log in again.",
     "cameraDenied": "Camera permission needed. Allow it in Settings.",
     "locationDenied": "Location permission needed. Allow it in Settings.",
-    "uploadFailed": "Upload failed",
+    "uploadFailed": "Couldn't upload right now — we'll keep it safe, try again.",
     "uploadRejected": "Photo was rejected by the server. Retake and try again."
   },
   "week": {
@@ -289,8 +289,8 @@
     "fixErrors": "Fix the marked fields",
     "submit": "SUBMIT",
     "draftResumed": "Draft resumed",
-    "successTitle": "Form sent!",
-    "successBody": "Sent to the manager",
+    "successTitle": "Well done! Form sent ✅",
+    "successBody": "Your manager has been informed.",
     "takePhoto": "Take photo",
     "photoDone": "Photo added",
     "record": "Record voice note",
@@ -350,7 +350,7 @@
     "empty": "Ask anything about factory SOPs",
     "emptyHint": "e.g. What is the boiler set pressure?",
     "page": "p.",
-    "error": "Could not answer. Try again.",
+    "error": "Sorry, I couldn't find that. Please ask once more.",
     "thinking": "Sahayak is thinking…"
   },
   "severity": {
@@ -375,5 +375,54 @@
   "media": {
     "viewFull": "View full screen",
     "close": "Close viewer"
+  },
+  "time": {
+    "justNow": "just now",
+    "minsAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hr ago",
+    "yesterday": "yesterday",
+    "daysAgo": "{{count}} days ago"
+  },
+  "greet": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "today": {
+    "punched": "Today: punched in {{time}} ✓",
+    "notPunched": "Today: not punched in yet",
+    "open": "{{count}} complaints in progress",
+    "streak": "{{days}}/{{total}} days this month ✓"
+  },
+  "mgr": {
+    "card": "In your department today: {{fresh}} new complaints · {{pending}} pending",
+    "aging": "{{count}} over 24 hrs"
+  },
+  "update": {
+    "banner": "New version {{version}} is available — tap to update"
+  },
+  "offline": {
+    "banner": "Offline — your work is saved and will be sent when the network returns"
+  },
+  "coach": {
+    "photo": "Take a photo",
+    "speak": "Speak",
+    "send": "Send",
+    "gotIt": "Got it!"
+  },
+  "idcard": {
+    "title": "My ID Card",
+    "open": "My ID Card / माझे ओळखपत्र",
+    "share": "Share card",
+    "hint": "Show this card at the gate"
+  },
+  "chips": {
+    "q1": "What are the safety rules?",
+    "q2": "How do I take leave?",
+    "q3": "Show the boiler SOP",
+    "q4": "How does shift swap work?"
+  },
+  "voice": {
+    "checkHint": "Did we hear you right? Please check the filled fields before submitting."
   }
 }

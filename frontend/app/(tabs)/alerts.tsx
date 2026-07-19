@@ -15,7 +15,7 @@ import { tri } from "@/src/i18n";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { formatDateTime } from "@/src/utils/format";
+import { timeAgo } from "@/src/utils/format";
 
 export default function AlertsScreen() {
   const router = useRouter();
@@ -81,7 +81,7 @@ export default function AlertsScreen() {
           <Text style={styles.text} numberOfLines={2}>
             {tri(item as unknown as Record<string, unknown>, "body")}
           </Text>
-          <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
+          <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
         </View>
       </Pressable>
     );

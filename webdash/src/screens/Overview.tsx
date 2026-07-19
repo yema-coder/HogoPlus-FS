@@ -13,10 +13,13 @@ export default function Overview() {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState("");
+  const [pulse, setPulse] = useState("");
 
   const load = () => api("/dashboard/overview").then(setData).catch((e) => setErr(e.message));
   useEffect(() => {
     load();
+    // Factory Pulse: one AI sentence, cached 10 min server-side, silent on failure
+    api("/dashboard/pulse").then((r: any) => setPulse(r.pulse || "")).catch(() => undefined);
     const id = setInterval(load, 60000);
     return () => clearInterval(id);
   }, []);
@@ -39,6 +42,9 @@ export default function Overview() {
         <h1 data-testid="overview-title">{t("nav_overview")} — {data.date}</h1>
         <button className="btn ghost" onClick={load}>↻ {t("refresh")}</button>
       </div>
+      {pulse ? (
+        <div className="pulse-line" data-testid="factory-pulse">💡 {pulse}</div>
+      ) : null}
 
       <div className="kpis" data-testid="overview-kpis">
         <KPI label={t("attendancePct")} value={`${kpis.attendance_pct}%`} />

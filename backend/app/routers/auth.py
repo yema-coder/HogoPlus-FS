@@ -13,7 +13,7 @@ from sqlalchemy.types import Integer as SAInteger
 from app.audit import write_audit
 from app.config import settings
 from app.database import get_session
-from app.models import Department, Employee, OtpAttempt, ShiftAssignment
+from app.models import AppVersion, Department, Employee, OtpAttempt, ShiftAssignment
 from app.notify import dispatcher, template
 from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
@@ -340,3 +340,14 @@ async def update_me(
     await session.commit()
     await session.refresh(employee)
     return employee_profile(employee)
+
+
+@router.get("/app-version")
+async def app_version(session: AsyncSession = Depends(get_session)):
+    """Prompt 16: public version check for the mobile update-available banner."""
+    row = (
+        await session.execute(select(AppVersion).order_by(AppVersion.updated_at.desc()).limit(1))
+    ).scalar_one_or_none()
+    if row is None:
+        return {"latest_version": None, "apk_url": None, "notes": None}
+    return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}
