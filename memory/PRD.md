@@ -604,3 +604,7 @@ just stale Metro cache). i18n parity: 176 keys × 3 languages, script passes.
 - Demo users cannot mutate shared config (settings, beacons, forms, SOPs, test-sms, reports, backup) — require_real_role.
 - Tests: 158 → 170 (tests/test_demo_isolation.py: cross-bubble, dept-scoping, scheduler/report exclusion, mocked-clock cleanup, login matrix, purge, shared-config guard).
 - Webdash demo logins: D500/Demo@7547 (CGM), D600/Demo@1751 (MD).
+
+## Prompt 15 — enriched demo showcase seed (2026-06) ✅ COMPLETE
+- seed_demo_showcase.py now seeds: 17 incidents covering ALL 13 depts (dept-appropriate Marathi/English content, photos on all, WAV voice notes on 3, plate MH16AB1234 on CANE_YARD, 2 resolved w/ photo, 1 escalated critical), 5 shift swaps (2 pending_target / 2 pending_manager / 1 approved) between same-dept demo workers (added 4 "Worker 2" accounts D021-D024), 1 pending registration (D700), 40 matching notifications, 14 submissions, 18 attendance rows — all is_demo=true AND is_demo_seed=true.
+- Verified live: Demo CGM overview shows 15 open complaints / 22 pending across all 13 tiles; approvals mix = 6 submissions + 11 incidents + 4 swaps + 1 registration; Demo ENG Manager sees only ENG items; real CGM counts unchanged (32 open / 397 total); 0 non-seed demo rows (cleanup-proof).

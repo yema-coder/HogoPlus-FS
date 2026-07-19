@@ -36,6 +36,8 @@ from app.models import (
     Incident,
     IncidentTimeline,
     Notification,
+    ShiftAssignment,
+    ShiftSwapRequest,
 )
 from app.notify import T as NOTIF_TEMPLATES
 
@@ -117,6 +119,47 @@ def _save_seed_image(storage, label: str) -> str:
     return key
 
 
+def _make_wav(seconds: int = 4) -> bytes:
+    """Soft two-tone hum with fade — a playable placeholder 'voice note'."""
+    import math
+    import struct
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        n = 16000 * seconds
+        frames = bytearray()
+        for i in range(n):
+            env = min(i, n - i, 3000) / 3000
+            wobble = 1 + 0.15 * math.sin(2 * math.pi * 2.1 * i / 16000)
+            v = 0.22 * math.sin(2 * math.pi * 170 * wobble * i / 16000)
+            v += 0.12 * math.sin(2 * math.pi * 260 * i / 16000)
+            frames += struct.pack("<h", int(v * env * 32767))
+        w.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+def _save_seed_audio(storage) -> str:
+    from app.storage import S3Storage
+
+    key = f"demo-seed-{uuid.uuid4().hex}.wav"
+    body = _make_wav()
+    if isinstance(storage, S3Storage):
+        storage.client.put_object(
+            Bucket=storage.bucket, Key=key, Body=body, ContentType="audio/wav"
+        )
+    else:
+        (storage.base / key).write_bytes(body)
+    return key
+
+
+def _title(dept: str) -> str:
+    return dept.replace("_", " ").title()
+
+
 def _ago(hours: float) -> datetime:
     return NOW - timedelta(hours=hours)
 
@@ -139,11 +182,47 @@ async def main() -> None:
         demo_emps = (
             await session.execute(select(Employee).where(Employee.is_demo.is_(True)))
         ).scalars().all()
-        workers = {e.department_code: e for e in demo_emps if e.role_code == "Worker"}
+        workers = {
+            e.department_code: e
+            for e in demo_emps
+            if e.role_code == "Worker" and not e.full_name.endswith("2")
+        }
         managers = {e.department_code: e for e in demo_emps if e.role_code == "Manager"}
         cgm = next((e for e in demo_emps if e.role_code == "CGM"), None)
         if len(workers) < 13 or len(managers) < 13 or cgm is None:
             raise SystemExit("Demo cast missing — run scripts/seed_demo_cast.py first")
+
+        # ---------- extra cast: second Workers (swap partners) + 1 pending registration ----------
+        async def ensure_employee(emp_id, name, phone, dept, status="approved"):
+            emp = (
+                await session.execute(select(Employee).where(Employee.phone == phone))
+            ).scalar_one_or_none()
+            if emp is None:
+                emp = Employee(
+                    emp_id=emp_id, full_name=name, phone=phone, department_code=dept,
+                    designation=name, role_code="Worker", language_pref="en",
+                    shift_swap_eligible=True, onboarding_status=status,
+                    is_active=True, is_demo=True,
+                )
+                session.add(emp)
+                await session.flush()
+                session.add(ShiftAssignment(
+                    employee_id=emp.id, shift_code="GEN",
+                    effective_date=datetime(2025, 1, 1).date(), source="baseline",
+                ))
+            else:
+                emp.onboarding_status = status  # reset (judge may have approved the pending one)
+            return emp
+
+        workers2 = {}
+        for i, dept in enumerate(["SECURITY", "PRODUCTION", "ENGINEERING", "STORE"], start=21):
+            workers2[dept] = await ensure_employee(
+                f"D{i:03d}", f"Demo {_title(dept)} Worker 2", f"+91{9000000000 + i}", dept
+            )
+        pending_reg = await ensure_employee(
+            "D700", "Demo Pending Worker", "+919000000700", "PRODUCTION",
+            status="pending_approval",
+        )
 
         forms = {}
         for d in DEPTS:
@@ -225,32 +304,63 @@ async def main() -> None:
                       "form_submission", sub.id, sub.approved_at)
             n_subs += 1
 
-        # ---------- incidents: 7 across departments, varied states ----------
+        # ---------- incidents: EVERY department gets 1-2 open ones, varied states ----------
+        # keys: dept, category, status, severity, desc, label, voice, plate
         inc_plan = [
-            ("PRODUCTION", "machine_breakdown", "in_progress", "high",
-             "मिल रोलर #2 मधून मोठा आवाज — उत्पादन कमी झाले", "Mill roller noise"),
-            ("ENGINEERING", "electrical", "submitted", "normal",
-             "Panel room MCB वारंवार ट्रिप होत आहे", "MCB panel tripping"),
-            ("SECURITY", "security", "resolved", "normal",
-             "Gate 2 वर अनोळखी वाहन उभे होते / Unknown vehicle at Gate 2", "Unknown vehicle Gate 2"),
-            ("CIVIL", "water_leakage", "submitted", "normal",
-             "गोदामाजवळ पाईपलाईन गळती / Pipeline leakage near godown", "Pipeline leakage"),
-            ("DISTILLERY", "fire", "escalated", "critical",
-             "Boiler section जवळ धूर दिसला — तातडीने तपासा", "Smoke near boiler"),
-            ("CANE_YARD", "safety", "seen", "high",
-             "Weighbridge जवळ ऊस ट्रक चुकीच्या रांगेत — अपघाताचा धोका", "Truck queue hazard"),
-            ("GODOWN", "safety", "submitted", "normal",
-             "पोत्यांची थप्पी झुकलेली आहे / Bag stack leaning", "Bag stack leaning"),
+            {"dept": "ACCOUNTS", "category": "other", "status": "submitted", "severity": "normal",
+             "desc": "प्रिंटर खराब आहे — पगार शीट निघत नाही / ledger mismatch in cash book", "label": "Printer error screen"},
+            {"dept": "ADMIN", "category": "other", "status": "submitted", "severity": "normal",
+             "desc": "Meeting hall AC गळत आहे — फायली भिजण्याचा धोका", "label": "AC water leak"},
+            {"dept": "AGRICULTURE", "category": "other", "status": "in_progress", "severity": "normal",
+             "desc": "Nursery पंप वारंवार बंद पडतो — रोपांना पाणी देता येत नाही", "label": "Nursery pump"},
+            {"dept": "CANE_YARD", "category": "machine_breakdown", "status": "submitted", "severity": "normal",
+             "desc": "Weighbridge display फ्लिकर होत आहे — वजन नीट दिसत नाही", "label": "Weighbridge display + truck MH16AB1234",
+             "voice": True, "plate": "MH16AB1234"},
+            {"dept": "CANE_YARD", "category": "safety", "status": "seen", "severity": "high",
+             "desc": "ऊस ट्रक चुकीच्या रांगेत — weighbridge जवळ अपघाताचा धोका", "label": "Truck queue hazard"},
+            {"dept": "CIVIL", "category": "water_leakage", "status": "submitted", "severity": "normal",
+             "desc": "गोदामाच्या छताला गळती — पावसात पोती भिजतील / godown roof leakage", "label": "Roof leakage"},
+            {"dept": "DISTILLERY", "category": "machine_breakdown", "status": "in_progress", "severity": "normal",
+             "desc": "Spent wash line चोक झाली आहे — flow पूर्ण बंद", "label": "Spent wash line choke"},
+            {"dept": "DISTILLERY", "category": "fire", "status": "escalated", "severity": "critical",
+             "desc": "Boiler section जवळ धूर दिसला — तातडीने तपासा", "label": "Smoke near boiler"},
+            {"dept": "ENGINEERING", "category": "machine_breakdown", "status": "in_progress", "severity": "high",
+             "desc": "Mill bearing गरम होत आहे — तापमान ८५°C च्या वर / mill bearing overheating", "label": "Hot bearing IR reading",
+             "voice": True},
+            {"dept": "ENGINEERING", "category": "electrical", "status": "resolved", "severity": "normal",
+             "desc": "Panel room MCB वारंवार ट्रिप होत होता", "label": "MCB panel",
+             "resolution": "MCB बदलला — लोड टेस्ट ओके / MCB replaced, load tested OK"},
+            {"dept": "GODOWN", "category": "safety", "status": "submitted", "severity": "normal",
+             "desc": "पोत्यांची थप्पी झुकलेली आहे — bag stacking unsafe", "label": "Bag stack leaning"},
+            {"dept": "PRODUCTION", "category": "machine_breakdown", "status": "submitted", "severity": "normal",
+             "desc": "Pan section steam pressure कमी आहे — batch उशिरा होईल", "label": "Steam pressure gauge",
+             "voice": True},
+            {"dept": "PURCHASE", "category": "other", "status": "submitted", "severity": "normal",
+             "desc": "Urgent indent चे material अजून आले नाही — vendor उत्तर देत नाही", "label": "Pending indent file"},
+            {"dept": "SECURITY", "category": "machine_breakdown", "status": "resolved", "severity": "normal",
+             "desc": "Gate 1 barrier जाम झाला होता — वाहने अडकली होती", "label": "Gate barrier jam",
+             "resolution": "Barrier motor greasing केले — आता व्यवस्थित चालतो"},
+            {"dept": "SECURITY", "category": "security", "status": "submitted", "severity": "normal",
+             "desc": "CCTV camera क्र. ६ बंद आहे — मागचे गेट दिसत नाही", "label": "CCTV cam 6 offline"},
+            {"dept": "STORE", "category": "safety", "status": "submitted", "severity": "high",
+             "desc": "Rack क्र. १२ वाकला आहे — कोसळण्याचा धोका / rack collapse risk", "label": "Bent rack 12"},
+            {"dept": "TIME_OFFICE", "category": "other", "status": "submitted", "severity": "normal",
+             "desc": "Biometric machine बंद आहे — कामगारांची रांग लागली आहे", "label": "Biometric machine down"},
         ]
         n_incs = 0
-        for dept, category, status, severity, desc, label in inc_plan:
-            created = _ago(rng.uniform(6, 70))
-            photo_key = _save_seed_image(storage, label)
+        for spec in inc_plan:
+            dept, category = spec["dept"], spec["category"]
+            status, severity = spec["status"], spec["severity"]
+            created = _ago(rng.uniform(4, 70))
+            photo_key = _save_seed_image(storage, spec["label"])
             inc = Incident(
                 reported_by=workers[dept].id, department_code=dept, category=category,
-                photo_key=photo_key, gps_lat=19.001, gps_lng=74.702,
+                photo_key=photo_key,
+                voice_note_key=_save_seed_audio(storage) if spec.get("voice") else None,
+                detected_plate=spec.get("plate"),
+                gps_lat=19.001, gps_lng=74.702,
                 address_text="Hogo Sugar Factory premises",
-                description=desc, status=status, severity=severity,
+                description=spec["desc"], status=status, severity=severity,
                 severity_reason="Seeded showcase incident",
                 assigned_manager_id=managers[dept].id,
                 ai_confirmed_by="explicit", is_demo=True, is_demo_seed=True,
@@ -258,8 +368,8 @@ async def main() -> None:
             )
             if status == "resolved":
                 inc.resolved_at = created + timedelta(hours=2)
-                inc.resolution_note = "Vehicle verified and moved out — vendor delivery."
-                inc.resolution_photo_key = _save_seed_image(storage, f"Resolved: {label}")
+                inc.resolution_note = spec.get("resolution", "Resolved on site.")
+                inc.resolution_photo_key = _save_seed_image(storage, f"Resolved: {spec['label']}")
             if status == "escalated":
                 inc.escalated_to = cgm.id
                 inc.escalated_at = created + timedelta(hours=1)
@@ -283,9 +393,60 @@ async def main() -> None:
                 ))
                 notif(cgm.id, "incident_escalated", f"{category} — {dept_names.get(dept, dept)}",
                       "incident", inc.id, inc.escalated_at)
+            if severity == "critical":
+                notif(cgm.id, "incident_critical", f"{category} — {dept_names.get(dept, dept)}",
+                      "incident", inc.id, created)
             notif(managers[dept].id, "incident_assigned",
                   f"{category} — {dept_names.get(dept, dept)}", "incident", inc.id, created)
             n_incs += 1
+
+        # ---------- shift swaps: pending_target ×2, pending_manager ×2, approved ×1 ----------
+        swap_plan = [
+            ("SECURITY", "pending_target", 3, "गावी लग्नाला जायचे आहे / family wedding in village"),
+            ("PRODUCTION", "pending_target", 4, "Doctor appointment — दवाखान्यात जायचे आहे"),
+            ("ENGINEERING", "pending_manager", 3, "मुलाच्या शाळेत पालक सभा आहे"),
+            ("STORE", "pending_manager", 5, "Panchayat कामासाठी सुट्टी हवी आहे"),
+            ("SECURITY", "approved", 2, "Night shift adjust करायची आहे — परस्पर सहमती"),
+        ]
+        n_swaps = 0
+        today_local = NOW.astimezone(IST).date()
+        for dept, status, days_ahead, reason in swap_plan:
+            requester = workers[dept] if status != "approved" else workers2[dept]
+            target = workers2[dept] if status != "approved" else workers[dept]
+            created = _ago(rng.uniform(3, 30))
+            swap = ShiftSwapRequest(
+                requester_id=requester.id, target_id=target.id,
+                swap_date=today_local + timedelta(days=days_ahead),
+                status=status, reason=reason,
+                is_demo=True, is_demo_seed=True,
+                created_at=created, updated_at=created,
+            )
+            if status in ("pending_manager", "approved"):
+                swap.target_responded_at = created + timedelta(hours=1)
+            if status == "approved":
+                swap.manager_id = managers[dept].id
+                swap.manager_responded_at = created + timedelta(hours=3)
+            session.add(swap)
+            await session.flush()
+            if status == "pending_target":
+                notif(target.id, "swap_request",
+                      f"{requester.full_name} → {swap.swap_date.isoformat()}: {reason}",
+                      "shift_swap", swap.id, created)
+            elif status == "pending_manager":
+                notif(managers[dept].id, "swap_manager_pending",
+                      f"{requester.full_name} ⇄ {target.full_name} — {swap.swap_date.isoformat()}",
+                      "shift_swap", swap.id, swap.target_responded_at)
+            else:
+                notif(requester.id, "swap_decided",
+                      f"Approved — {swap.swap_date.isoformat()}", "shift_swap", swap.id,
+                      swap.manager_responded_at)
+            n_swaps += 1
+
+        # ---------- pending registration notifications (record itself is the employee) ----------
+        notif(managers["TIME_OFFICE"].id, "registration_pending",
+              f"{pending_reg.full_name} — Production", "employee", pending_reg.id, _ago(6))
+        notif(cgm.id, "registration_pending",
+              f"{pending_reg.full_name} — Production", "employee", pending_reg.id, _ago(6))
 
         # ---------- attendance: last 3 days for 6 demo workers ----------
         att_depts = ["ACCOUNTS", "PRODUCTION", "ENGINEERING", "SECURITY", "STORE", "TIME_OFFICE"]
@@ -313,7 +474,10 @@ async def main() -> None:
 
         await session.commit()
     await engine.dispose()
-    print(f"Showcase seeded: {n_subs} form submissions, {n_incs} incidents, {n_atts} attendance rows")
+    print(
+        f"Showcase seeded: {n_subs} form submissions, {n_incs} incidents, "
+        f"{n_swaps} shift swaps, {n_atts} attendance rows, 1 pending registration"
+    )
 
 
 if __name__ == "__main__":
