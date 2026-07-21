@@ -115,11 +115,11 @@ class Employee(TimestampMixin, Base):
 
     role: Mapped["Role"] = relationship(
         "Role", primaryjoin="Employee.role_code == Role.code",
-        foreign_keys=[role_code], lazy="selectin", viewonly=True,
+        foreign_keys=[role_code], lazy="joined", viewonly=True,
     )
     department: Mapped["Department"] = relationship(
         "Department", primaryjoin="Employee.department_code == Department.code",
-        foreign_keys=[department_code], lazy="selectin", viewonly=True,
+        foreign_keys=[department_code], lazy="joined", viewonly=True,
     )
 
 

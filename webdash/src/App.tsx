@@ -8,10 +8,10 @@ import Admin from "./screens/Admin";
 import Approvals from "./screens/Approvals";
 import Attendance from "./screens/Attendance";
 import Department from "./screens/Department";
+import Incidents from "./screens/Incidents";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
 import Reports from "./screens/Reports";
-import Vehicles from "./screens/Vehicles";
 import logo from "./logo.png";
 import { api } from "./api";
 
@@ -86,12 +86,15 @@ function Layout() {
             <div style={{ fontSize: 12, opacity: 0.7 }}>{t("commandCenter")}</div>
           </div>
         </div>
-        <NavLink to="/" end>{t("nav_overview")}</NavLink>
-        <NavLink to="/approvals">{t("nav_approvals")}</NavLink>
-        <NavLink to="/attendance">{t("nav_attendance")}</NavLink>
-        <NavLink to="/reports">{t("nav_reports")}</NavLink>
-        <NavLink to="/vehicles">🚗 {t("nav_vehicles")}</NavLink>
-        {isTopMgmt(user) && <NavLink to="/admin">{t("nav_admin")}</NavLink>}
+        <NavLink to="/" end>⚠️ {t("nav_incidents")}</NavLink>
+        <NavLink to="/departments">🏭 {t("nav_overview")}</NavLink>
+        <NavLink to="/approvals">✅ {t("nav_approvals")}</NavLink>
+        <NavLink to="/reports">📊 {t("nav_reports")}</NavLink>
+        {isTopMgmt(user) && <NavLink to="/admin">⚙️ {t("nav_admin")}</NavLink>}
+        <details className="nav-more">
+          <summary>{t("more")} ▾</summary>
+          <NavLink to="/attendance">🕐 {t("nav_attendance")}</NavLink>
+        </details>
         <div style={{ flex: 1 }} />
         <div style={{ padding: "10px 12px", fontSize: 13, opacity: 0.85 }}>
           <b>{user.full_name}</b>
@@ -137,12 +140,12 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginGate />} />
             <Route element={<Layout />}>
-              <Route path="/" element={<Overview />} />
+              <Route path="/" element={<Incidents />} />
+              <Route path="/departments" element={<Overview />} />
               <Route path="/dept/:code" element={<Department />} />
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/reports" element={<Reports />} />
-              <Route path="/vehicles" element={<Vehicles />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

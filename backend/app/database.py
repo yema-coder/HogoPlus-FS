@@ -6,7 +6,17 @@ from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
-_engine_kwargs = {"pool_pre_ping": True}
+_engine_kwargs = {
+    # Neon is ~400ms RTT away: pre-ping added a full round trip to EVERY request.
+    # Instead recycle connections well inside Neon's idle timeout (Prompt 18 speed fix).
+    "pool_pre_ping": False,
+    "pool_recycle": 280,
+    # Prompt 18 load rehearsal: 300 concurrent users exhausted 10+20 conns on a
+    # ~425ms-RTT Neon pooler (pgbouncer multiplexes these cheaply server-side).
+    "pool_size": 40,
+    "max_overflow": 110,
+    "pool_timeout": 45,
+}
 if os.environ.get("TESTING"):
     _engine_kwargs = {"poolclass": NullPool}
 

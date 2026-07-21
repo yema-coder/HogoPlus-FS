@@ -19,6 +19,9 @@ class StorageAdapter(ABC):
     def delete(self, key: str) -> None: ...
 
 
+_PRESIGN_CACHE: dict[str, tuple[float, str]] = {}
+
+
 def _content_type(key: str) -> str:
     import mimetypes
 
@@ -80,7 +83,15 @@ class S3Storage(StorageAdapter):
         return key
 
     def url_for(self, key: str) -> str:
-        return self.client.generate_presigned_url(
+        # Prompt 18: presigning costs ~20-30ms each; feed responses sign 40-60 keys.
+        # Cache signed URLs for 1h (they stay valid 24h).
+        import time as _time
+
+        hit = _PRESIGN_CACHE.get(key)
+        now = _time.monotonic()
+        if hit and now - hit[0] < 3600:
+            return hit[1]
+        url = self.client.generate_presigned_url(
             "get_object",
             Params={
                 "Bucket": self.bucket,
@@ -90,6 +101,10 @@ class S3Storage(StorageAdapter):
             },
             ExpiresIn=86400,
         )
+        if len(_PRESIGN_CACHE) > 5000:
+            _PRESIGN_CACHE.clear()
+        _PRESIGN_CACHE[key] = (now, url)
+        return url
 
     def get(self, key: str) -> bytes:
         return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()

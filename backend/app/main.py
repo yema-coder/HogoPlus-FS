@@ -84,6 +84,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Prompt 18: compress JSON payloads (dashboard aggregates ~17KB → ~4KB on slow links)
+from starlette.middleware.gzip import GZipMiddleware  # noqa: E402
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 
 @app.on_event("startup")
 async def _startup():
@@ -136,6 +141,24 @@ async def _startup():
         from app.scheduler import start_scheduler
 
         start_scheduler()
+
+        # Prompt 18: keep MD dashboard aggregates hot — first paint is then
+        # cache-served (~0.6s) instead of a 10-query cold fanout (~5s on Neon).
+        async def _overview_warmer():
+            import asyncio as _asyncio
+
+            from app.routers.dashboard import warm_overview_cache
+
+            while True:
+                try:
+                    await warm_overview_cache()
+                except Exception:
+                    logging.getLogger("hogo").warning("overview cache warm failed", exc_info=True)
+                await _asyncio.sleep(15)
+
+        import asyncio as _asyncio
+
+        _asyncio.get_running_loop().create_task(_overview_warmer())
     # NOTE (Prompt 7 launch fix): the embedding model is intentionally NOT warmed at
     # startup. Eager warm-up put ~500MB of ONNX weights into the API process at boot,
     # which OOM-crash-looped 1Gi production containers (backend RSS ~700MB + celery).

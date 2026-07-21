@@ -3,14 +3,16 @@
 Access: Manager rank and above ONLY (rank<=3). Managers are scoped server-side to
 their own department; CGM/MD (rank<=2) see everything. Never widened by the UI.
 """
+import asyncio
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func as safunc, select, text as sa_text
+from sqlalchemy import case as sa_case, func as safunc, or_, select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_session
+from app.database import SessionLocal, get_session
 from app.models import (
     Attendance,
     AuditEvent,
@@ -244,35 +246,168 @@ async def _pending_counts(session: AsyncSession, dept: str | None, is_demo: bool
     return counts
 
 
+_OVERVIEW_CACHE: dict[tuple, tuple[float, dict]] = {}
+_OVERVIEW_TTL = 45.0  # background warmer refreshes hot keys every 15s
+OPEN_INCIDENT_STATUSES = ["submitted", "seen", "in_progress", "escalated"]
+
+
+def _feed_item(i: Incident, reporter_name: str, storage) -> dict:
+    return {
+        "id": str(i.id), "category": i.category, "department_code": i.department_code,
+        "reporter_name": reporter_name, "status": i.status, "severity": i.severity,
+        "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
+        "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
+        "video_url": storage.url_for(i.video_key) if i.video_key else None,
+        "voice_note_url": storage.url_for(i.voice_note_key) if i.voice_note_key else None,
+        "address_text": i.address_text, "description": i.description,
+        "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
+    }
+
+
+@router.get("/incidents-feed")
+async def incidents_feed(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=50),
+    q: str | None = None,
+    user: Employee = Depends(get_dashboard_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 18: paginated incident feed for the webdash landing view.
+    Ordering is stable across pages: OPEN CRITICAL incidents first, then newest.
+    `q` searches plate / category / department / reporter / description."""
+    dept = _scope(user)
+    storage = get_storage()
+    base = (
+        select(Incident, Employee.full_name)
+        .join(Employee, Incident.reported_by == Employee.id)
+        .where(Incident.is_demo == user.is_demo)
+    )
+    if dept:
+        base = base.where(Incident.department_code == dept)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        base = base.where(
+            or_(
+                Incident.detected_plate.ilike(like),
+                Incident.category.ilike(like),
+                Incident.department_code.ilike(like),
+                Employee.full_name.ilike(like),
+                Incident.description.ilike(like),
+                Incident.address_text.ilike(like),
+            )
+        )
+    crit_first = sa_case(
+        ((Incident.severity == "critical") & Incident.status.in_(OPEN_INCIDENT_STATUSES), 0),
+        else_=1,
+    )
+    rows = (
+        await session.execute(
+            base.order_by(crit_first, Incident.created_at.desc())
+            .offset(offset)
+            .limit(limit + 1)
+        )
+    ).all()
+    has_more = len(rows) > limit
+    items = [_feed_item(i, name, storage) for i, name in rows[:limit]]
+    return {"items": items, "has_more": has_more, "offset": offset, "limit": limit}
+
+
 @router.get("/overview")
 async def overview(
     user: Employee = Depends(get_dashboard_user),
     session: AsyncSession = Depends(get_session),
 ):
     dept = _scope(user)
+    cache_key = (dept, user.is_demo)
+    hit = _OVERVIEW_CACHE.get(cache_key)
+    if hit and time.monotonic() - hit[0] < _OVERVIEW_TTL:
+        return hit[1]
+    return await compute_overview(dept, user.is_demo)
+
+
+async def compute_overview(dept: str | None, is_demo: bool) -> dict:
+    """Aggregate compute shared by the endpoint and the startup cache warmer."""
     today = now_ist().date()
     storage = get_storage()
+
+    # Neon RTT is ~400ms per query — run all 10 aggregate queries CONCURRENTLY
+    # on separate pooled connections instead of sequentially (Prompt 18 speed fix).
+    async def run(stmt):
+        async with SessionLocal() as s:
+            return (await s.execute(stmt)).all()
 
     dept_q = select(Department).where(Department.is_active.is_(True)).order_by(Department.code)
     if dept:
         dept_q = dept_q.where(Department.code == dept)
-    depts = (await session.execute(dept_q)).scalars().all()
 
     emp_q = select(Employee.department_code, safunc.count()).where(
         Employee.is_active.is_(True), Employee.onboarding_status == "approved",
-        Employee.is_demo == user.is_demo,
+        Employee.is_demo == is_demo,
     ).group_by(Employee.department_code)
-    totals = dict((await session.execute(emp_q)).all())
 
     att_q = (
         select(Employee.department_code, Attendance.is_late, Attendance.verification_level, safunc.count())
         .select_from(Attendance)
         .join(Employee, Attendance.employee_id == Employee.id)
-        .where(Attendance.date == today, Attendance.is_demo == user.is_demo)
+        .where(Attendance.date == today, Attendance.is_demo == is_demo)
         .group_by(Employee.department_code, Attendance.is_late, Attendance.verification_level)
     )
+
+    inc_q = select(Incident.department_code, Incident.severity, safunc.count()).where(
+        Incident.status.in_(OPEN_INCIDENT_STATUSES),
+        Incident.is_demo == is_demo,
+    ).group_by(Incident.department_code, Incident.severity)
+
+    sub_q = select(FormSubmission.department_code, safunc.count()).where(
+        safunc.date(FormSubmission.created_at) == today,
+        FormSubmission.is_demo == is_demo,
+    ).group_by(FormSubmission.department_code)
+
+    # _pending_counts split into its 4 independent queries so they parallelize too
+    p_sub_q = select(FormSubmission.department_code, safunc.count()).where(
+        FormSubmission.status == "submitted", FormSubmission.is_demo.is_(is_demo)
+    ).group_by(FormSubmission.department_code)
+    p_reg_q = select(Employee.department_code, safunc.count()).where(
+        Employee.onboarding_status.in_(["self_registered", "pending_approval"]),
+        Employee.is_demo.is_(is_demo),
+    ).group_by(Employee.department_code)
+    p_swap_q = (
+        select(Employee.department_code, safunc.count())
+        .select_from(ShiftSwapRequest)
+        .join(Employee, ShiftSwapRequest.requester_id == Employee.id)
+        .where(
+            ShiftSwapRequest.status.in_(["pending_target", "pending_manager"]),
+            ShiftSwapRequest.is_demo.is_(is_demo),
+        )
+        .group_by(Employee.department_code)
+    )
+    p_inc_q = select(Incident.department_code, safunc.count()).where(
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo)
+    ).group_by(Incident.department_code)
+
+    feed_q = (
+        select(Incident, Employee.full_name)
+        .join(Employee, Incident.reported_by == Employee.id)
+        .where(Incident.is_demo == is_demo)
+        .order_by(Incident.created_at.desc())
+        .limit(40)
+    )
+    if dept:
+        feed_q = feed_q.where(Incident.department_code == dept)
+
+    (
+        dept_rows, emp_rows, att_rows, inc_rows, sub_rows,
+        p_sub, p_reg, p_swap, p_inc, feed_rows,
+    ) = await asyncio.gather(
+        run(dept_q), run(emp_q), run(att_q), run(inc_q), run(sub_q),
+        run(p_sub_q), run(p_reg_q), run(p_swap_q), run(p_inc_q), run(feed_q),
+    )
+
+    depts = [r[0] for r in dept_rows]
+    totals = dict(emp_rows)
+
     att = {}
-    for dc, late, level, n in (await session.execute(att_q)).all():
+    for dc, late, level, n in att_rows:
         e = att.setdefault(dc, {"present": 0, "late": 0, "flagged": 0})
         e["present"] += n
         if late:
@@ -280,24 +415,22 @@ async def overview(
         if level == "flagged":
             e["flagged"] += n
 
-    inc_q = select(Incident.department_code, Incident.severity, safunc.count()).where(
-        Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
-        Incident.is_demo == user.is_demo,
-    ).group_by(Incident.department_code, Incident.severity)
     open_inc = {}
-    for dc, sev, n in (await session.execute(inc_q)).all():
+    for dc, sev, n in inc_rows:
         e = open_inc.setdefault(dc, {"total": 0, "critical": 0})
         e["total"] += n
         if sev == "critical":
             e["critical"] += n
 
-    sub_q = select(FormSubmission.department_code, safunc.count()).where(
-        safunc.date(FormSubmission.created_at) == today,
-        FormSubmission.is_demo == user.is_demo,
-    ).group_by(FormSubmission.department_code)
-    subs = dict((await session.execute(sub_q)).all())
+    subs = dict(sub_rows)
 
-    pending = await _pending_counts(session, dept, user.is_demo)
+    pending: dict[str, int] = {}
+    for rows in (p_sub, p_reg, p_swap, p_inc):
+        for dc, n in rows:
+            if dc:
+                pending[dc] = pending.get(dc, 0) + n
+    if dept:
+        pending = {dept: pending.get(dept, 0)}
 
     tiles = []
     for d in depts:
@@ -327,34 +460,21 @@ async def overview(
     }
     kpis["attendance_pct"] = round(kpis["present"] * 100 / kpis["total"]) if kpis["total"] else 0
 
-    feed_q = (
-        select(Incident, Employee.full_name)
-        .join(Employee, Incident.reported_by == Employee.id)
-        .where(Incident.is_demo == user.is_demo)
-        .order_by(Incident.created_at.desc())
-        .limit(40)
-    )
-    if dept:
-        feed_q = feed_q.where(Incident.department_code == dept)
-    rows = (await session.execute(feed_q)).all()
     feed = sorted(
-        (
-            {
-                "id": str(i.id), "category": i.category, "department_code": i.department_code,
-                "reporter_name": name, "status": i.status, "severity": i.severity,
-                "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
-                "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
-                "video_url": storage.url_for(i.video_key) if i.video_key else None,
-                "voice_note_url": storage.url_for(i.voice_note_key) if i.voice_note_key else None,
-                "address_text": i.address_text,
-                "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
-            }
-            for i, name in rows
-        ),
+        (_feed_item(i, name, storage) for i, name in feed_rows),
         key=lambda x: (SEV_RANK.get(x["severity"], 2), -datetime.fromisoformat(x["created_at"]).timestamp()),
     )[:15]
 
-    return {"date": today.isoformat(), "kpis": kpis, "departments": tiles, "incidents": feed}
+    payload = {"date": today.isoformat(), "kpis": kpis, "departments": tiles, "incidents": feed}
+    _OVERVIEW_CACHE[(dept, is_demo)] = (time.monotonic(), payload)
+    return payload
+
+
+async def warm_overview_cache() -> None:
+    """Prompt 18: keep the MD/CGM landing aggregates permanently hot (real + demo
+    class, unscoped). Called every 15s by a startup task in main.py."""
+    for is_demo in (False, True):
+        await compute_overview(None, is_demo)
 
 
 @router.get("/department/{code}")

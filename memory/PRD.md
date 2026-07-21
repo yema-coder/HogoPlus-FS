@@ -656,3 +656,32 @@ Tests: 170 → 173 (tests/test_prompt16.py). useCachedFetch now supports {enable
   (apt PG15+redis, pgvector v0.8.0 from source).
 - LESSON: a search_replace batch dropped the @router.get("/incidents/{incident_id}") decorator (route
   vanished, 11 tests failed) — always run the FULL suite after router edits.
+
+## Prompt 18 — MD Dashboard Simplify + Speed + Launch-Eve Test Sweep (2026-06) ✅ (webdash+backend only; mobile FROZEN)
+Part A (shipped-ready, re-publish required):
+- Webdash: NEW landing = Incidents feed (src/screens/Incidents.tsx, route "/"): open-critical pinned first + newest,
+  photo/video thumbnails (lazy), severity chips, time-ago, plate chips, detail modal, server search q (plate/category/
+  dept/reporter/description), first 20 + infinite scroll, localStorage SWR cache-first (src/swr.ts), skeletons.
+- Overview.tsx → "Departments" second tab (/departments): KPIs + tiles + chart + pulse; live-incident column removed.
+- Vehicles screen DELETED (nav+route+i18n keys plateSearchHint/searchBtn/results/noPlateResults/t_incident/t_submission/
+  nav_vehicles); plate search lives as filter on incidents list. Backend /dashboard/plates/search kept (unused, harmless).
+- Nav minimal: Complaints · Departments · Approvals · Reports · Admin + "More ▾"(Attendance). Renames: Overview→Departments,
+  "Reports & AI"→Reports. Base font 17px, sidebar 17px.
+- Backend speed (Neon RTT ~425ms/query was the killer): Employee.role/department lazy selectin→joined (3→1 auth round
+  trips, EVERY request −0.85s); dashboard overview 10 aggregate queries now run CONCURRENTLY (asyncio.gather, own sessions)
+  + in-process 45s TTL cache + 15s background warmer in main.py (both classes, unscoped) → overview 4.2-8.9s → 0.63-0.85s;
+  NEW GET /dashboard/incidents-feed (offset/limit/q, crit-first stable order); GZipMiddleware (17.4KB→4KB);
+  R2 presign 1h in-process cache in storage.py (60 signs/feed was ~2s); pool: pre_ping OFF + recycle 280 + size 40/overflow
+  110/timeout 45 (load test exhausted 10+20 → 500s).
+- Timings after: auth/me 1.89→0.64-0.85s, overview→0.63-0.85s warm-cached (always warm via warmer), feed ~1.2-1.5s warm
+  (first-ever call ~4s while presigns cache), login→rows-visible ~3.3s incl OTP verify; warm tab switches 29ms-1.3s.
+Part B sweep results (see final report in chat): B1 matrix 106/108 checks PASS across all 13 depts (2 "fails" were
+test-script artifacts — server correctly validated form fields); punch idempotency 409 ✓; swap lifecycle approved ✓
+(PRODUCTION; other depts lacked different-shift candidates — data condition); registration E2E ✓ then real-bubble test
+row deleted, ALLOW_NEW_REGISTRATION reverted to false; load: 300 VU/230s → 4853 req, 0 server 5xx, 0.14% client timeouts
+(fixed from 10.6% 5xx by pool sizing), RSS ~390MB peak (1Gi ok); scheduler 6 jobs registered ✓; R2 backup today 105KB,
+dump contains 1705 INSERT rows ✓; demo isolation PERFECT (real counts 403/35/8/1/88 unchanged after full assault).
+v1.0.8 list: POST /incidents idempotency client_ref (dup risk on network retry), wrong-OTP inline error visibility on
+device, device-only QA (hardware back, airplane-mode outbox, app-kill, voice-fill live audio, BLE), swap candidates
+seeding for more demo depts.
+DO NOT DEPLOY without owner's go — launch day runs current build; re-publish ships Part A when owner decides.
