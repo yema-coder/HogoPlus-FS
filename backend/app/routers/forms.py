@@ -221,6 +221,8 @@ async def list_submissions(
         query = query.where(FormSubmission.submitted_by == employee.id)
 
     if status:
+        if status not in ("submitted", "approved", "rejected", "escalated"):
+            raise HTTPException(status_code=422, detail="Invalid status filter")
         query = query.where(FormSubmission.status == status)
     if date_from:
         query = query.where(FormSubmission.created_at >= datetime.fromisoformat(date_from).replace(tzinfo=timezone.utc))

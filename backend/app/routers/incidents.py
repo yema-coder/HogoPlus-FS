@@ -390,6 +390,8 @@ async def list_incidents(
     else:
         query = query.where(Incident.reported_by == employee.id)
     if status:
+        if status not in ("submitted", "seen", "in_progress", "resolved", "escalated"):
+            raise HTTPException(status_code=422, detail="Invalid status filter")
         query = query.where(Incident.status == status)
     rows = (await session.execute(query.order_by(Incident.created_at.desc()))).scalars().all()
     return [_out(i) for i in rows]
