@@ -11,14 +11,40 @@ logger = logging.getLogger("hogo.notify")
 
 class PushSender(ABC):
     @abstractmethod
-    async def push(self, expo_push_token: str | None, title: str, body: str) -> None: ...
+    async def push(self, expo_push_token: str | None, title: str, body: str, data: dict | None = None) -> None: ...
 
 
 class NoopPushSender(PushSender):
-    """Actual Expo push delivery is wired in the mobile phase."""
+    """Used in tests; production uses ExpoPushSender."""
 
-    async def push(self, expo_push_token: str | None, title: str, body: str) -> None:
+    async def push(self, expo_push_token: str | None, title: str, body: str, data: dict | None = None) -> None:
         logger.debug("Noop push: %s — %s", title, body)
+
+
+class ExpoPushSender(PushSender):
+    """Fire-and-forget delivery via the Expo Push API. In-app notifications stay
+    the source of truth — push is only the wake-up tap. Works in built APKs
+    (Expo Go iOS has no push native module; tokens are simply never registered)."""
+
+    async def push(self, expo_push_token: str | None, title: str, body: str, data: dict | None = None) -> None:
+        if not expo_push_token or not expo_push_token.startswith("ExponentPushToken"):
+            return
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=8) as client:
+                await client.post(
+                    "https://exp.host/--/api/v2/push/send",
+                    json={
+                        "to": expo_push_token,
+                        "title": title,
+                        "body": body,
+                        "data": data or {},
+                        "sound": "default",
+                    },
+                )
+        except Exception:
+            logger.warning("expo push failed (non-blocking)")
 
 
 class NotificationDispatcher:
@@ -52,14 +78,49 @@ class NotificationDispatcher:
             entity_id=str(entity_id) if entity_id else None,
         )
         session.add(row)
-        await self.push_sender.push(None, row.title_en, row.body_en)
+        # push mirrors the in-app notification, in the recipient's language
+        lang = (recipient.language_pref if recipient else "mr") or "mr"
+        await self.push_sender.push(
+            recipient.expo_push_token if recipient else None,
+            title.get(lang, row.title_en) or row.title_en,
+            body.get(lang, row.body_en) or row.body_en,
+            {"type": type_, "entity_type": entity_type, "entity_id": row.entity_id},
+        )
         return row
 
 
-dispatcher = NotificationDispatcher()
+import os as _os  # noqa: E402
+
+dispatcher = NotificationDispatcher(
+    NoopPushSender() if _os.environ.get("TESTING") else ExpoPushSender()
+)
 
 # Trilingual notification templates
 T = {
+    "welcome": {
+        "title": {
+            "en": "Welcome to HogoPlus! 🎉",
+            "hi": "HogoPlus में आपका स्वागत है! 🎉",
+            "mr": "HogoPlus मध्ये स्वागत आहे! 🎉",
+        },
+    },
+    "announcement": {
+        "title": {"en": "📢 Announcement", "hi": "📢 सूचना", "mr": "📢 सूचना"},
+    },
+    "incident_reassigned": {
+        "title": {
+            "en": "Incident assigned to you",
+            "hi": "घटना आपको सौंपी गई",
+            "mr": "घटना तुमच्याकडे सोपवली",
+        },
+    },
+    "incident_forwarded": {
+        "title": {
+            "en": "Your complaint was forwarded",
+            "hi": "आपकी शिकायत आगे भेजी गई",
+            "mr": "तुमची तक्रार पुढे पाठवली",
+        },
+    },
     "incident_assigned": {
         "title": {"en": "New incident reported", "hi": "नई घटना दर्ज हुई", "mr": "नवीन घटना नोंदवली"},
     },
@@ -104,6 +165,13 @@ T = {
     },
     "report_ready": {
         "title": {"en": "Daily factory report is ready", "hi": "दैनिक कारखाना रिपोर्ट तैयार", "mr": "दैनिक कारखाना अहवाल तयार"},
+    },
+    "face_enrolled": {
+        "title": {
+            "en": "New face reference enrolled",
+            "hi": "नया चेहरा संदर्भ दर्ज हुआ",
+            "mr": "नवीन चेहरा संदर्भ नोंदवला",
+        },
     },
     "punchout_reminder": {
         "title": {"en": "Forgot to punch out?", "hi": "पंच आउट करना भूल गए?", "mr": "पंच आउट करायला विसरलात?"},

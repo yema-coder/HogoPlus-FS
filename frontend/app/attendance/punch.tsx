@@ -10,6 +10,7 @@ import { ApiError, uploadFile } from "@/src/api/client";
 import { beaconMacs, punchIn } from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
 import { EyeLoader } from "@/src/components/EyeLoader";
+import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
@@ -30,6 +31,15 @@ interface Steps {
 
 /** Punch-in: selfie → GPS → BLE zone → upload. Degrades gracefully offline. */
 export default function PunchInScreen() {
+  // Prompt 17 Part D: camera/location/GPS/Bluetooth guards before the selfie
+  return (
+    <CaptureGuards camera location gps bluetooth>
+      <PunchInInner />
+    </CaptureGuards>
+  );
+}
+
+function PunchInInner() {
   const router = useRouter();
   const { t } = useTranslation();
   const enqueue = useOutboxStore((s) => s.enqueue);

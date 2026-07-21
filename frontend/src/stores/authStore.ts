@@ -48,6 +48,7 @@ interface AuthState {
   pendingPhone: string | null;
   langPicked: boolean;
   permsPrimed: boolean;
+  faceEnrollAsked: boolean;
   hydrate: () => Promise<void>;
   setSession: (
     tokens: { access_token: string; refresh_token: string },
@@ -57,6 +58,7 @@ interface AuthState {
   setRegistration: (token: string | null, phone: string | null) => void;
   markLangPicked: () => Promise<void>;
   markPermsPrimed: () => Promise<void>;
+  markFaceEnrollAsked: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -73,6 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   pendingPhone: null,
   langPicked: false,
   permsPrimed: false,
+  faceEnrollAsked: false,
 
   hydrate: async () => {
     setSessionExpiredHandler(() => {
@@ -82,7 +85,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const lang = await storage.getItem<string>("hogo.lang", "");
     if (lang && i18n.language !== lang) await i18n.changeLanguage(lang);
     const permsPrimed = await resolvePermsPrimed();
-    set({ permsPrimed });
+    const faceEnrollAsked = Boolean(await storage.getItem<boolean>("hogo.faceEnrollAsked", false));
+    set({ permsPrimed, faceEnrollAsked });
     const hasTokens = await hydrateTokens();
     if (!hasTokens) {
       set({ status: "unauthenticated", langPicked });
@@ -140,6 +144,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   markPermsPrimed: async () => {
     await storage.setItem("hogo.permsPrimed", true);
     set({ permsPrimed: true });
+  },
+
+  markFaceEnrollAsked: async () => {
+    await storage.setItem("hogo.faceEnrollAsked", true);
+    set({ faceEnrollAsked: true });
   },
 
   logout: async () => {

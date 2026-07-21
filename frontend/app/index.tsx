@@ -7,7 +7,7 @@ import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, type } from "@/src/theme/tokens";
 
 export default function Index() {
-  const { status, profile, langPicked, permsPrimed } = useAuthStore();
+  const { status, profile, langPicked, permsPrimed, faceEnrollAsked } = useAuthStore();
 
   if (status === "loading") {
     return (
@@ -21,6 +21,11 @@ export default function Index() {
   if (status !== "authenticated") return <Redirect href="/(auth)/phone" />;
   if (profile && profile.onboarding_status !== "approved") return <Redirect href="/(auth)/pending" />;
   if (Platform.OS !== "web" && !permsPrimed) return <Redirect href="/permissions" />;
+  // Prompt 17 Part C: one-time face enrollment when no reference selfie exists yet
+  // (strict === false: older cached profiles without the field never trigger it)
+  if (Platform.OS !== "web" && !faceEnrollAsked && profile?.has_face_reference === false) {
+    return <Redirect href="/face-enroll" />;
+  }
   return <Redirect href="/(tabs)/home" />;
 }
 

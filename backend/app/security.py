@@ -187,4 +187,5 @@ def employee_profile(employee: Employee) -> dict:
         "onboarding_status": employee.onboarding_status,
         "selfie_url": employee.selfie_url,
         "is_active": employee.is_active,
+        "has_face_reference": bool(employee.reference_selfie_key),
     }

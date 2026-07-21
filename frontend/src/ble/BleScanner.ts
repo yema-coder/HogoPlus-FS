@@ -123,3 +123,22 @@ export async function ensureBlePermissions(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Prompt 17 Part D: Bluetooth radio state for the pre-capture guard.
+ * 'unknown' (Expo Go / web / errors) is treated as a pass by callers.
+ */
+export async function getBleState(): Promise<"on" | "off" | "unknown"> {
+  const scanner = getBleScanner();
+  if (!scanner.isReal) return "unknown";
+  try {
+    const manager = (scanner as unknown as { manager?: { state?: () => Promise<string> } }).manager;
+    if (!manager?.state) return "unknown";
+    const state = await manager.state();
+    if (state === "PoweredOn") return "on";
+    if (state === "PoweredOff") return "off";
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}

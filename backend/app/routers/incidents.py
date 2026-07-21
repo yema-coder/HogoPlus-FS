@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import write_audit
 from app.database import get_session
 from app.demo import get_role_holder, resolve_dept_manager_id
-from app.models import Department, Employee, Incident, IncidentTimeline
+from app.models import Department, Employee, Incident, IncidentTimeline, Role
 from app.notify import dispatcher, template
-from app.schemas import ConfirmRoutingIn, IncidentCreateIn, IncidentStatusIn
+from app.schemas import ConfirmRoutingIn, EscalateIn, IncidentCreateIn, IncidentStatusIn
 from app.security import get_approved_employee, get_current_employee, is_dept_manager
 
 router = APIRouter(tags=["incidents"])
@@ -221,6 +221,129 @@ async def my_incidents(
         )
     ).scalars().all()
     return [_out(i) for i in rows]
+
+
+@router.get("/incidents/escalation-targets")
+async def escalation_targets(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 17 Part E: people a manager can manually escalate to —
+    active Manager/CGM/MD accounts in the caller's class, excluding self."""
+    if employee.role.rank > 3:
+        raise HTTPException(status_code=403, detail="Manager / CGM / MD only")
+    rows = (
+        await session.execute(
+            select(Employee)
+            .join(Role, Role.code == Employee.role_code)
+            .where(
+                Employee.is_active.is_(True),
+                Employee.onboarding_status == "approved",
+                Employee.is_demo.is_(employee.is_demo),
+                Employee.id != employee.id,
+                Role.rank <= 3,
+            )
+            .order_by(Role.rank, Employee.department_code, Employee.full_name)
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": str(e.id),
+            "emp_id": e.emp_id,
+            "full_name": e.full_name,
+            "department_code": e.department_code,
+            "role_code": e.role_code,
+            "role_rank": e.role.rank if e.role else None,
+        }
+        for e in rows
+    ]
+
+
+@router.post("/incidents/{incident_id}/escalate")
+async def escalate_incident(
+    incident_id: uuid.UUID,
+    body: EscalateIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 17 Part E: MANUAL escalation to a department (its manager, CGM
+    fallback) or to a specific Manager/CGM/MD. Reason is mandatory."""
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.is_demo != employee.is_demo:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    allowed = employee.role.rank <= 2 or (
+        employee.role.rank == 3
+        and (
+            incident.assigned_manager_id == employee.id
+            or incident.escalated_to == employee.id
+            or await is_dept_manager(session, employee, incident.department_code)
+        )
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Only the handling Manager / CGM / MD can escalate")
+    if incident.status == "resolved":
+        raise HTTPException(status_code=409, detail="Resolved incidents cannot be escalated")
+
+    if body.mode == "department":
+        if not body.department_code:
+            raise HTTPException(status_code=422, detail="department_code required")
+        dept = (
+            await session.execute(select(Department).where(Department.code == body.department_code))
+        ).scalar_one_or_none()
+        if dept is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+        target_id = await resolve_dept_manager_id(session, dept, incident.is_demo)
+        if target_id is None:
+            cgm = await get_role_holder(session, "CGM", incident.is_demo)
+            target_id = cgm.id if cgm else None
+        if target_id is None or target_id == employee.id:
+            raise HTTPException(status_code=409, detail="No escalation target available for this department")
+        target = await session.get(Employee, target_id)
+    else:
+        if not body.employee_id:
+            raise HTTPException(status_code=422, detail="employee_id required")
+        target = await session.get(Employee, body.employee_id)
+        if (
+            target is None
+            or not target.is_active
+            or target.is_demo != employee.is_demo
+            or target.id == employee.id
+        ):
+            raise HTTPException(status_code=404, detail="Employee not found")
+        target_role = (
+            await session.execute(select(Role).where(Role.code == target.role_code))
+        ).scalar_one_or_none()
+        if target_role is None or target_role.rank > 3:
+            raise HTTPException(status_code=422, detail="Escalation target must be a Manager / CGM / MD")
+
+    incident.status = "escalated"
+    incident.escalated_to = target.id
+    incident.escalated_at = datetime.now(timezone.utc)
+    session.add(
+        IncidentTimeline(
+            incident_id=incident.id, actor_id=employee.id, event="escalated",
+            detail_json={
+                "mode": body.mode, "reason": body.reason,
+                "escalated_to": str(target.id),
+                "department_code": body.department_code if body.mode == "department" else target.department_code,
+                "manual": True,
+            },
+        )
+    )
+    title, notif_body = template(
+        "incident_escalated", f"{incident.category} — {body.reason}"
+    )
+    await dispatcher.notify(session, target.id, "incident_escalated", title, notif_body, "incident", str(incident.id))
+    if incident.reported_by not in (employee.id, target.id):
+        f_title, f_body = template("incident_forwarded", body.reason)
+        await dispatcher.notify(session, incident.reported_by, "incident_forwarded", f_title, f_body, "incident", str(incident.id))
+    await write_audit(
+        session, employee.id, "incident.escalated_manual", "incident", str(incident.id),
+        {"mode": body.mode, "to": str(target.id), "reason": body.reason},
+    )
+    await session.commit()
+    await session.refresh(incident)
+    return _out(incident)
 
 
 @router.get("/incidents/{incident_id}")

@@ -13,7 +13,16 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 type NotificationsModule = {
-  requestPermissionsAsync: () => Promise<unknown>;
+  requestPermissionsAsync: () => Promise<{ status?: string }>;
+  getExpoPushTokenAsync: (opts?: { projectId?: string }) => Promise<{ data: string }>;
+  setNotificationChannelAsync?: (id: string, channel: Record<string, unknown>) => Promise<unknown>;
+  setNotificationHandler?: (handler: Record<string, unknown>) => void;
+  addNotificationResponseReceivedListener?: (
+    cb: (resp: {
+      notification?: { request?: { content?: { data?: Record<string, unknown> } } };
+    }) => void,
+  ) => { remove: () => void };
+  AndroidImportance?: Record<string, number>;
 };
 
 let cached: NotificationsModule | null | undefined;
@@ -44,5 +53,67 @@ export async function requestNotificationPermissionsSafe(): Promise<void> {
     await mod.requestPermissionsAsync();
   } catch {
     // never block the app on a notification permission error
+  }
+}
+
+/**
+ * Prompt 17 Part E: register for Expo push. Returns the ExponentPushToken or
+ * null. Only yields a token on real dev/production builds — Expo Go (iOS AND
+ * Android on SDK 53+) has no remote-push module, so this safely no-ops there.
+ */
+export async function registerPushTokenSafe(): Promise<string | null> {
+  const mod = getNotificationsModule();
+  if (!mod) return null;
+  try {
+    const perm = await mod.requestPermissionsAsync();
+    if (perm?.status && perm.status !== "granted") return null;
+    if (Platform.OS === "android" && mod.setNotificationChannelAsync) {
+      await mod.setNotificationChannelAsync("default", {
+        name: "HogoPlus",
+        importance: mod.AndroidImportance?.HIGH ?? 4,
+        sound: "default",
+      });
+    }
+    const projectId =
+      (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas
+        ?.projectId ?? (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig?.projectId;
+    const token = await mod.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    return token?.data ?? null;
+  } catch {
+    return null; // push unavailable — in-app notifications remain the source of truth
+  }
+}
+
+/** Show foreground pushes as banners (built apps only; no-op elsewhere). */
+export function configureForegroundNotificationsSafe(): void {
+  const mod = getNotificationsModule();
+  if (!mod?.setNotificationHandler) return;
+  try {
+    mod.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+/** Tap-on-push → callback with the notification's data payload. Returns cleanup. */
+export function addNotificationTapListener(
+  cb: (data: Record<string, unknown>) => void,
+): () => void {
+  const mod = getNotificationsModule();
+  if (!mod?.addNotificationResponseReceivedListener) return () => undefined;
+  try {
+    const sub = mod.addNotificationResponseReceivedListener((resp) => {
+      cb(resp?.notification?.request?.content?.data ?? {});
+    });
+    return () => sub.remove();
+  } catch {
+    return () => undefined;
   }
 }

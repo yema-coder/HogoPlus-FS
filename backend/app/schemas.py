@@ -3,6 +3,7 @@ import datetime as _datetime
 import re
 import uuid
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -279,3 +280,30 @@ class AppVersionIn(BaseModel):
     latest_version: str = Field(min_length=1, max_length=20)
     apk_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
+
+
+class DirectAddEmployeeIn(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(pattern=PHONE_REGEX)
+    department_code: str
+    role_code: str
+    shift_code: str | None = None
+    emp_id: str = Field(min_length=1, max_length=20)
+
+
+class EscalateIn(BaseModel):
+    mode: Literal["department", "employee"]
+    department_code: str | None = None
+    employee_id: uuid.UUID | None = None
+    reason: str = Field(min_length=3, max_length=300)
+
+
+class AnnouncementIn(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    message: str = Field(min_length=2, max_length=1000)
+    audience: Literal["all", "department"] = "department"
+    department_code: str | None = None
+
+
+class FaceEnrollIn(BaseModel):
+    selfie_key: str = Field(min_length=1, max_length=500)

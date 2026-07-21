@@ -19,6 +19,7 @@ from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
 from app.schemas import (
     ChangePasswordIn,
+    FaceEnrollIn,
     PasswordLoginIn,
     RefreshIn,
     RegisterIn,
@@ -337,6 +338,46 @@ async def update_me(
         employee.language_pref = body.language_pref
     if body.expo_push_token is not None:
         employee.expo_push_token = body.expo_push_token
+    await session.commit()
+    await session.refresh(employee)
+    return employee_profile(employee)
+
+
+@router.post("/employees/me/face-enroll")
+async def face_enroll(
+    body: FaceEnrollIn,
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Prompt 17 Part C: post-login face enrollment. Reuses the EXISTING
+    reference-selfie bootstrap fields + supervised-review semantics — the newly
+    set reference is announced to the Time Office manager, who can clear it via
+    the existing reset-reference-selfie endpoint. Punch-time verification is
+    untouched: it simply compares against this reference like any bootstrap."""
+    if employee.reference_selfie_key:
+        raise HTTPException(status_code=409, detail="Face reference already exists")
+    employee.reference_selfie_key = body.selfie_key
+    employee.reference_selfie_set_at = datetime.now(timezone.utc)
+    await write_audit(
+        session, employee.id, "employee.reference_selfie_from_enrollment",
+        "employee", str(employee.id), {"selfie_key": body.selfie_key},
+    )
+    # supervised review: Time Office manager is informed (reset endpoint = reject path)
+    from app.demo import resolve_dept_manager_id
+
+    to_dept = (
+        await session.execute(select(Department).where(Department.code == "TIME_OFFICE"))
+    ).scalar_one_or_none()
+    if to_dept:
+        reviewer = await resolve_dept_manager_id(session, to_dept, employee.is_demo)
+        if reviewer and reviewer != employee.id:
+            title, notif_body = template(
+                "face_enrolled", f"{employee.full_name} ({employee.emp_id})"
+            )
+            await dispatcher.notify(
+                session, reviewer, "face_enrolled", title, notif_body,
+                "employee", str(employee.id),
+            )
     await session.commit()
     await session.refresh(employee)
     return employee_profile(employee)

@@ -10,6 +10,8 @@ import {
   ClipboardList,
   LogIn,
   LogOut,
+  Megaphone,
+  Users,
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -418,6 +420,29 @@ export default function HomeScreen() {
               />
             ) : null}
             {(eligible ? 1 : 0) + (rank <= 3 ? 1 : 0) === 1 ? <View style={{ flex: 1 }} /> : null}
+          </View>
+        ) : null}
+        {rank <= 3 ? (
+          <View style={styles.grid}>
+            <GridTile
+              testID="home-tile-announce"
+              label={t("home.announceTile")}
+              icon={Megaphone}
+              tint={colors.primary}
+              onPress={() => router.push("/announce")}
+            />
+            {rank <= 2 ||
+            (profile?.role_code === "Manager" && profile?.department_code === "TIME_OFFICE") ? (
+              <GridTile
+                testID="home-tile-employees"
+                label={t("home.employeesTile")}
+                icon={Users}
+                tint={colors.accent}
+                onPress={() => router.push("/employees")}
+              />
+            ) : (
+              <View style={{ flex: 1 }} />
+            )}
           </View>
         ) : null}
       </ScrollView>

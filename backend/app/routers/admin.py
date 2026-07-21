@@ -21,8 +21,10 @@ from app.models import (
 )
 from app.notify import dispatcher, template
 from app.schemas import (
+    AnnouncementIn,
     AppVersionIn,
     AssignManagerIn,
+    DirectAddEmployeeIn,
     ApproveRegistrationIn,
     BeaconIn,
     BeaconPatchIn,
@@ -100,6 +102,20 @@ async def patch_employee(
     emp = await session.get(Employee, employee_id)
     if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
+
+    # Prompt 17 guardrails: only CGM/MD may touch Manager+ accounts or grant Manager+ roles
+    if actor.role.rank > 2:
+        target_role = (
+            await session.execute(select(Role).where(Role.code == emp.role_code))
+        ).scalar_one()
+        if target_role.rank <= 3:
+            raise HTTPException(status_code=403, detail="Only CGM/MD can modify Manager+ accounts")
+        if body.role_code is not None:
+            new_role = (
+                await session.execute(select(Role).where(Role.code == body.role_code))
+            ).scalar_one_or_none()
+            if new_role and new_role.rank <= 3:
+                raise HTTPException(status_code=403, detail="Only CGM/MD can grant Manager+ roles")
 
     changes = {}
     if body.phone is not None:
@@ -296,10 +312,11 @@ async def pending_employees(
 async def search_employees(
     search: str | None = None,
     missing_phone: bool = False,
-    actor: Employee = Depends(require_role(2)),
+    actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    """Employee lookup for the MD Command Center admin screen (CGM/MD only)."""
+    """Employee lookup for the admin screens (Time Office Manager / CGM / MD)."""
+    await _require_time_office_or_top(session, actor)
     query = select(Employee).where(
         Employee.is_active.is_(True), Employee.is_demo == actor.is_demo
     )
@@ -747,3 +764,127 @@ async def set_app_version(
                       {"latest_version": body.latest_version}, is_demo=False)
     await session.commit()
     return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}
+
+
+# ---------------- Prompt 17: direct-add employee + emp-id suggest ----------------
+
+@router.get("/emp-id-suggest")
+async def emp_id_suggest(
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    await _require_time_office_or_top(session, actor)
+    from sqlalchemy import text as sa_text
+
+    row = (
+        await session.execute(
+            sa_text(r"SELECT COALESCE(MAX(emp_id::int), 0) FROM employees WHERE emp_id ~ '^\d+$'")
+        )
+    ).scalar() or 0
+    return {"suggested_emp_id": f"{row + 1:04d}"}
+
+
+@router.post("/employees")
+async def direct_add_employee(
+    body: DirectAddEmployeeIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Time Office Manager: Worker/Staff/Clerk only. CGM/MD: any role.
+    Created ACTIVE immediately — first login lands on the role's home."""
+    await _require_time_office_or_top(session, actor)
+    role = (await session.execute(select(Role).where(Role.code == body.role_code))).scalar_one_or_none()
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if actor.role.rank > 2 and role.rank <= 3:
+        raise HTTPException(status_code=403, detail="Only CGM/MD can create Manager+ accounts")
+    dept = (
+        await session.execute(select(Department).where(Department.code == body.department_code))
+    ).scalar_one_or_none()
+    if dept is None:
+        raise HTTPException(status_code=404, detail="Department not found")
+    for field, val in (("phone", body.phone), ("emp_id", body.emp_id)):
+        dup = (
+            await session.execute(select(Employee).where(getattr(Employee, field) == val))
+        ).scalar_one_or_none()
+        if dup:
+            raise HTTPException(status_code=409, detail=f"{field} already in use")
+
+    emp = Employee(
+        emp_id=body.emp_id, full_name=body.full_name, phone=body.phone,
+        department_code=body.department_code, role_code=body.role_code,
+        designation=role.label_en, language_pref="mr",
+        shift_swap_eligible=role.rank >= 4, onboarding_status="approved",
+        is_active=True, is_demo=actor.is_demo,
+    )
+    session.add(emp)
+    await session.flush()
+    session.add(ShiftAssignment(
+        employee_id=emp.id, shift_code=body.shift_code or "GEN",
+        effective_date=now_ist().date(), source="baseline",
+    ))
+    await write_audit(
+        session, actor.id, "employee.direct_added", "employee", str(emp.id),
+        {"emp_id": body.emp_id, "role": body.role_code, "dept": body.department_code},
+    )
+    title, note = template("welcome", "")
+    note = {
+        "en": f"Your HogoPlus account is ready, {body.full_name.split()[0]}. Punch in and explore!",
+        "hi": f"आपका HogoPlus खाता तैयार है, {body.full_name.split()[0]}। हाज़िरी लगाएँ और शुरू करें!",
+        "mr": f"तुमचे HogoPlus खाते तयार आहे, {body.full_name.split()[0]}. हजेरी लावा आणि सुरुवात करा!",
+    }
+    await dispatcher.notify(session, emp.id, "welcome", title, note, "employee", str(emp.id))
+    await session.commit()
+    await session.refresh(emp)
+    return employee_profile(emp)
+
+
+# ---------------- Prompt 17 Part F: announcements ----------------
+
+@router.post("/announcements")
+async def send_announcement(
+    body: AnnouncementIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Managers announce to their OWN department; CGM/MD to any department or all.
+    Fanout = in-app notification (+ push mirror) per recipient in scope."""
+    rank = actor.role.rank
+    if rank > 3:
+        raise HTTPException(status_code=403, detail="Manager / CGM / MD only")
+    if body.audience == "all":
+        if rank > 2:
+            raise HTTPException(status_code=403, detail="Only CGM/MD can announce to everyone")
+    else:
+        if not body.department_code:
+            raise HTTPException(status_code=422, detail="department_code required")
+        if rank > 2 and not await is_dept_manager(session, actor, body.department_code):
+            raise HTTPException(status_code=403, detail="Managers can announce to their own department only")
+        dept = (
+            await session.execute(select(Department).where(Department.code == body.department_code))
+        ).scalar_one_or_none()
+        if dept is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+
+    query = select(Employee.id).where(
+        Employee.is_active.is_(True),
+        Employee.onboarding_status == "approved",
+        Employee.is_demo.is_(actor.is_demo),
+        Employee.id != actor.id,
+        Employee.phone.isnot(None),
+    )
+    if body.audience == "department":
+        query = query.where(Employee.department_code == body.department_code)
+    recipient_ids = (await session.execute(query)).scalars().all()
+
+    title = {"en": f"📢 {body.title}", "hi": f"📢 {body.title}", "mr": f"📢 {body.title}"}
+    message = {"en": body.message, "hi": body.message, "mr": body.message}
+    for rid in recipient_ids:
+        await dispatcher.notify(session, rid, "announcement", title, message, "announcement", None)
+    await write_audit(
+        session, actor.id, "announcement.sent", "announcement", None,
+        {"audience": body.audience, "department_code": body.department_code,
+         "title": body.title, "recipients": len(recipient_ids)},
+    )
+    await session.commit()
+    return {"sent": True, "recipients": len(recipient_ids), "audience": body.audience}

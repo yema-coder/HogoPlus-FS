@@ -38,6 +38,7 @@ import { ApiError, uploadFile } from "@/src/api/client";
 import { createIncident, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
+import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
@@ -80,6 +81,16 @@ function VideoPreviewCard({ uri, controls = true }: { uri: string; controls?: bo
  * parallel, then one detail screen (photo, description, voice note) → submit.
  * Category defaults to 'other' — the AI suggestion is confirmed post-submit. */
 export default function IncidentCapture() {
+  // Prompt 17 Part D: location permission + GPS-toggle guard before capture
+  // (camera permission keeps its existing in-screen handling below).
+  return (
+    <CaptureGuards location gps>
+      <IncidentCaptureInner />
+    </CaptureGuards>
+  );
+}
+
+function IncidentCaptureInner() {
   const router = useRouter();
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);

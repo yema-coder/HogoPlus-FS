@@ -28,6 +28,16 @@ export interface EmployeeProfile {
   onboarding_status: string;
   selfie_url: string | null;
   is_active: boolean;
+  has_face_reference?: boolean;
+}
+
+export interface EscalationTarget {
+  id: string;
+  emp_id: string;
+  full_name: string;
+  department_code: string;
+  role_code: string;
+  role_rank: number | null;
 }
 
 export interface TokenPair {

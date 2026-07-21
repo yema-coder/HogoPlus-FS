@@ -75,7 +75,9 @@
     "punchedOut": "Day complete",
     "hello": "Hello",
     "stripOpen": "{{count}} in progress",
-    "stripResolved": "{{count}} resolved this week"
+    "stripResolved": "{{count}} resolved this week",
+    "announceTile": "Announcement",
+    "employeesTile": "Employees"
   },
   "cat": {
     "safety": "Safety",
@@ -424,5 +426,75 @@
   },
   "voice": {
     "checkHint": "Did we hear you right? Please check the filled fields before submitting."
+  },
+  "face": {
+    "title": "Set up face verification",
+    "body": "Take one clear selfie now — your attendance punches will verify automatically.",
+    "hint": "Look straight at the camera in good light",
+    "start": "Take selfie now",
+    "later": "Do it later",
+    "saving": "Saving your photo…",
+    "success": "Face enrolled! Punches will verify automatically.",
+    "failed": "Could not save. Try again or do it later."
+  },
+  "guard": {
+    "title": "Quick check before the photo",
+    "body": "These help verify your photo and location.",
+    "camera": "Camera permission",
+    "location": "Location permission",
+    "gps": "Location (GPS) turned on",
+    "bluetooth": "Bluetooth turned on",
+    "allow": "Allow",
+    "enableGps": "Turn on GPS",
+    "gpsHint": "Without GPS your punch may be flagged for review.",
+    "bleHint": "Bluetooth helps confirm your factory zone.",
+    "continue": "Continue anyway",
+    "recheck": "Check again"
+  },
+  "escalate": {
+    "button": "Escalate",
+    "title": "Escalate incident",
+    "toDept": "To department",
+    "toPerson": "To person",
+    "reasonPlaceholder": "Why are you escalating?",
+    "submit": "Escalate now",
+    "done": "Escalated",
+    "searchPerson": "Search name or ID"
+  },
+  "announce": {
+    "title": "Announcement",
+    "heading": "Send an announcement",
+    "titleLabel": "Title",
+    "messageLabel": "Message",
+    "audience": "Send to",
+    "myDept": "My department",
+    "allEmployees": "All employees",
+    "send": "Send announcement",
+    "sent": "Announcement sent to {{count}} people",
+    "notAllowed": "You can only announce to your own department"
+  },
+  "emp": {
+    "title": "Employees",
+    "search": "Search name / ID / phone",
+    "add": "Add employee",
+    "edit": "Edit employee",
+    "name": "Full name",
+    "phone": "Phone number",
+    "dept": "Department",
+    "role": "Role",
+    "shift": "Shift",
+    "empId": "Employee ID",
+    "active": "Active",
+    "save": "Save changes",
+    "create": "Add employee",
+    "created": "Employee added — they can log in right away",
+    "saved": "Changes saved",
+    "phoneInvalid": "Enter a valid +91 mobile number",
+    "empty": "Type at least 2 letters to search",
+    "noResults": "No employees found",
+    "phoneTaken": "This phone number is already in use",
+    "idTaken": "This employee ID is already taken",
+    "notAllowed": "You are not allowed to make this change",
+    "keepShift": "Keep current"
   }
 }

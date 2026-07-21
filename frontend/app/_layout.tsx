@@ -10,6 +10,7 @@ import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import "@/src/i18n";
 import { ToastHost } from "@/src/components/Toast";
 import { OfflineStrip } from "@/src/components/OfflineStrip";
+import { usePushSetup } from "@/src/notifications/usePushSetup";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors } from "@/src/theme/tokens";
@@ -37,6 +38,9 @@ export default function RootLayout() {
   const initOutbox = useOutboxStore((s) => s.init);
   const segments = useSegments();
   const router = useRouter();
+
+  // Prompt 17: push token registration + tap deep-links + foreground profile refresh
+  usePushSetup();
 
   useEffect(() => {
     void hydrate();

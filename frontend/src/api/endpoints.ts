@@ -197,3 +197,52 @@ export const getAppVersion = () =>
     "/app-version",
     { auth: false },
   );
+
+// ---------------- Prompt 17 ----------------
+
+export const faceEnroll = (selfieKey: string) =>
+  api<EmployeeProfile>("/employees/me/face-enroll", {
+    method: "POST",
+    body: { selfie_key: selfieKey },
+  });
+
+export const escalationTargets = () =>
+  api<import("./types").EscalationTarget[]>("/incidents/escalation-targets");
+
+export const escalateIncident = (
+  id: string,
+  body: { mode: "department" | "employee"; department_code?: string; employee_id?: string; reason: string },
+) => api<Incident>(`/incidents/${id}/escalate`, { method: "POST", body });
+
+export const sendAnnouncement = (body: {
+  title: string;
+  message: string;
+  audience: "all" | "department";
+  department_code?: string;
+}) => api<{ sent: boolean; recipients: number }>("/admin/announcements", { method: "POST", body });
+
+export const searchEmployees = (search: string) =>
+  api<EmployeeProfile[]>(`/admin/employees?search=${encodeURIComponent(search)}`);
+
+export const empIdSuggest = () => api<{ suggested_emp_id: string }>("/admin/emp-id-suggest");
+
+export const directAddEmployee = (body: {
+  full_name: string;
+  phone: string;
+  department_code: string;
+  role_code: string;
+  shift_code?: string;
+  emp_id: string;
+}) => api<EmployeeProfile>("/admin/employees", { method: "POST", body });
+
+export const patchEmployee = (
+  id: string,
+  body: Partial<{
+    phone: string;
+    full_name: string;
+    role_code: string;
+    department_code: string;
+    shift_code: string;
+    is_active: boolean;
+  }>,
+) => api<EmployeeProfile>(`/admin/employees/${id}`, { method: "PATCH", body });

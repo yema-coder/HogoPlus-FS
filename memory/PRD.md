@@ -615,3 +615,44 @@ Manager/MD: manager morning card on home (rank≤3, taps → Approvals), 24h+ ag
 App-wide: trilingual timeAgo() relative timestamps (alerts/reports/approvals), update banner (GET /api/app-version + PUT /api/admin/app-version + app_versions table, migration 0009; checks once/day, dismissible), OfflineStrip via NetInfo in root layout, Sahayak starter chips (4 tappable questions), warm empty states + micro-copy pass ×3 languages (i18n parity 359 keys each).
 SKIPPED: Android app shortcuts (needs expo-quick-actions native module — untestable in Expo Go, build risk); attendance deep-link chip in Sahayak (chat-only chips kept).
 Tests: 170 → 173 (tests/test_prompt16.py). useCachedFetch now supports {enabled}. App-version row set to 1.0.7 in prod DB.
+
+## Prompt 17 — Onboarding + Access Mgmt + Face Enroll + Guards + Push/Escalation/Announcements (2026-06) ✅ code complete (ships in v1.0.8 — DO NOT auto-deploy; owner decides post-launch)
+- Part A (live earlier): emp 0428 Pathan Irfan Husen → Manager/TIME_OFFICE (verified in prod Neon).
+  Propagation: role is read from DB per request; mobile refreshes profile on hydrate AND on every
+  app-foreground (usePushSetup AppState hook) — Time Office queues appear on next app open, no re-login.
+- Part B backend: POST /api/admin/employees (direct-add, active immediately + welcome notif + GEN/chosen
+  shift baseline), GET /api/admin/emp-id-suggest, PATCH /api/admin/employees/{id} guardrails (Time Office
+  cannot touch Manager+ accounts nor grant Manager+ roles; CGM/MD can), GET /api/admin/employees search
+  opened to Time Office mgr (_require_time_office_or_top). Mobile: home tile "Employees" (TO/CGM/MD) →
+  app/employees/index (debounced search) + new.tsx (direct-add w/ suggested emp_id) + edit.tsx (PATCH only
+  changed fields; shift default KEEP). Shared src/components/EmployeeForm.tsx.
+- Part C face enroll: POST /api/employees/me/face-enroll {selfie_key} — reuses EXISTING reference bootstrap
+  fields; 409 if reference exists; notifies TIME_OFFICE manager (type face_enrolled); reset-reference-selfie
+  = reject path. employee_profile now has has_face_reference. Mobile: app/face-enroll.tsx (intro → SelfieCamera
+  → upload → enroll), gated in index.tsx (native only, has_face_reference===false strict, once per install
+  hogo.faceEnrollAsked, skippable "नंतर करा"). Punch verification path UNTOUCHED.
+- Part D guards: src/components/CaptureGuards.tsx — camera/location perms + GPS-services + Bluetooth radio
+  pre-capture checklist (AppState recheck, latch once passed, camera hard / rest soft w/ Continue anyway,
+  Location.enableNetworkProviderAsync on Android, openSettings for blocked). Wrapped: punch.tsx (all 4),
+  capture.tsx (location+gps — camera UI already in-screen). BleScanner.getBleState() added.
+- Part E push: notify.py ExpoPushSender live (NoopPushSender under TESTING); dispatcher mirrors every in-app
+  notification as push in recipient's language via employees.expo_push_token (column pre-existed).
+  Frontend: safeNotifications.ts extended (registerPushTokenSafe/tap listener/foreground handler — all lazy,
+  Expo Go/web = no-op), usePushSetup() in root _layout: registers token → PATCH /employees/me, deep-links
+  push taps to incident/[id] or alerts, foreground profile refresh. PUSH DELIVERY ONLY TESTABLE ON BUILT APK.
+- Part E escalation: POST /api/incidents/{id}/escalate {mode: department|employee, reason req} — handling
+  manager/CGM/MD only; department → dept manager (CGM fallback), employee → rank≤3 target only; sets
+  status=escalated + escalated_to/at + timeline(manual:true) + notify target & reporter + audit. GET
+  /api/incidents/escalation-targets (rank≤3). Mobile: Escalate button (incident detail manager actions) →
+  EscalateModal (dept chips / person search + reason).
+- Part F announcements: POST /api/admin/announcements {title, message, audience all|department} — manager →
+  own dept only; CGM/MD → any dept or all; fanout = dispatcher.notify per active approved same-bubble
+  employee (excl. sender, phone NOT NULL) → in-app + push; audit announcement.sent. Mobile: home tile
+  "Announcement" (rank≤3) → app/announce.tsx composer (dept chips + All for rank≤2).
+- i18n: 359 → 420 keys ×3 (face/guard/escalate/announce/emp namespaces), parity GREEN.
+- Tests: 173 → 183 (tests/test_prompt17.py: direct-add, role guardrails, patch guardrails, propagation
+  without re-login, TO search access, escalate dept+employee+403/422/409, targets, announcement scoping,
+  push-mirror-token recorder test, face enroll flow incl. reset). Local test infra reinstalled this fork
+  (apt PG15+redis, pgvector v0.8.0 from source).
+- LESSON: a search_replace batch dropped the @router.get("/incidents/{incident_id}") decorator (route
+  vanished, 11 tests failed) — always run the FULL suite after router edits.

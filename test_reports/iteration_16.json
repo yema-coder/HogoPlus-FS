@@ -1,0 +1,48 @@
+{
+  "summary": "Prompt 17 E2E validation on live preview backend (https://hogo-backend-phase1.preview.emergentagent.com) + Expo web frontend (390x800). BACKEND live E2E via /app/backend/tests/live_prompt17_api.py = 17/17 PASSED (~175s). FRONTEND Expo web: language→phone→OTP→home flow works for CGM (9000000500) and lands on /home with home-tile-announce + home-tile-employees visible. Announce screen for CGM renders 'All employees' chip (audience=all, [data-testid=announce-audience-all]) AND all 11 department chips (announce-dept-{CODE}) — verified for PRODUCTION, ADMIN, ENGINEERING, TIME_OFFICE etc. Fill+send flow completes: title/message inputs accept input, 'Production' selected, [data-testid=announce-send-button] clicked, spinner shown (eye loader inside button), no error toast. Employees screen loads, add-employee-button opens /employees/new with emp-id-input prefilled from /api/admin/emp-id-suggest (observed values 1216 → 1217, monotonically increasing). Edit navigation confirmed: tapping employee-row navigates to /employees/edit and mounts [data-testid=edit-employee-screen] with prefilled emp-name-input.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Employees search debounce race", "issue": "When rapidly changing the search query (e.g. 'Demo' → clear → 'E2E'), stale results from the previous query can render because searchEmployees() promises race and later-arriving stale response overwrites current results. Repro: type 'Demo' (0 rows appear because debounce hasn't fired yet), clear, type 'E2E' → UI shows 10 'Demo *' rows even though the input reads 'E2E'. Fix: cancel in-flight request when query changes or attach a request-id and only apply the latest. Reference: /app/frontend/app/employees/index.tsx L32–L50.", "affected_testIDs": ["employee-search-input", "employee-row-*"]},
+      {"flow": "Announce send → navigation", "issue": "After a successful CGM announcement send the code calls router.back() but on Expo web the browser URL remained /announce and the form was reset to defaults instead of returning to /home. Not blocking (send succeeded, no error toast), but the UX contract of returning to Home after send is broken on web. Reference: /app/frontend/app/announce.tsx L66–L67.", "affected_testIDs": ["announce-send-button"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "RN Web style warnings (pre-existing, non-blocking)", "issue": "Console emits 'shadow* style props are deprecated. Use boxShadow' and 'useNativeDriver is not supported' on Expo web on multiple screens. Cosmetic, no functional impact."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/live_prompt17_api.py",
+    "/app/test_reports/pytest/live_prompt17.xml",
+    "/tmp/fe_home_cgm.png (CGM home with home-tile-announce + home-tile-employees)",
+    "/tmp/fe_announce.png (Announce with All employees + 11 dept chips)",
+    "/tmp/fe_announce_sent.png",
+    "/tmp/fe_employees.png",
+    "/tmp/fe_new_employee.png (Add employee, emp-id-input prefilled=1216)",
+    "/tmp/fe_emp_e2e_kb.png (search shows demo rows)"
+  ],
+  "action_items": [
+    "Fix employees/index.tsx: guard against stale searchEmployees() responses (attach request-id / AbortController) so switching queries doesn't render prior results.",
+    "Fix announce.tsx web navigation: on web, router.back() from the announce screen leaves the browser on /announce with a reset form instead of returning to /home. Consider router.replace('/home') on send success or explicit router.push back to previous route.",
+    "OPTIONAL: EmployeeForm phone-input is hard to drive via Playwright's keyboard.type because RN Web TextInput doesn't reliably capture the '+' character via synthetic key events, so end-to-end automation of new-employee creation via UI is currently flaky. Consider allowing the input to auto-prepend '+91' when the user types 10 digits (like the login screen already does with [data-testid=phone-input]). Reference: /app/frontend/src/components/EmployeeForm.tsx L100–L109 (regex L23).",
+    "OPTIONAL (untestable): Push token registration and CaptureGuards checklist are native-only by design; face-enroll page redirect is also native-only — per the handoff note these are NOT bugs on web.",
+    "Manager-side EscalateModal UI, worker-side Alerts tab announcement rendering, and worker regression tiles were NOT exercised in this iteration (time-boxed); backend flows for escalation + announcement dispatch are already 17/17 green so they're low-risk. Recommend a follow-up UI-only pass focused on: login 9000000101 → open assigned incident → EscalateModal (mode chips, dept list, person search, reason input) → submit → status=escalated; and login 9000000001 → Alerts tab shows 📢 announcement."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/app/employees/index.tsx — debounced search but does NOT cancel in-flight requests when query changes; visible race demonstrated live.",
+    "/app/frontend/src/components/EmployeeForm.tsx L23 PHONE_REGEX=/^\\+91[6-9]\\d{9}$/ and L100 TextInput onChangeText strips non-[\\d+], but does not auto-prepend +91, making the field awkward to fill. Login screen already handles this well — worth harmonizing.",
+    "/app/frontend/app/announce.tsx — post-send router.back() works on native but on Expo web (browser history) it can loop back to /announce; test observed URL /announce after send.",
+    "Backend contracts verified against live preview: /api/admin/announcements (dept scoping + all-audience CGM), /api/admin/employees direct-add + role guardrails, /api/admin/employees/{id} PATCH (rename OK for TO, grant Manager 403 for TO, manager-account edit 403 for TO), /api/auth/me role_code refresh on SAME token, /api/incidents/{id}/escalate mode=department/employee + reason<3→422, /api/incidents/escalation-targets role_rank<=3, /api/employees/me/face-enroll idempotency (2nd call 409), GET /api/admin/emp-id-suggest returns {suggested_emp_id: '<next>'} (note: NOT 'emp_id' or 'next_emp_id' — future test writers should align on this exact key)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/live_prompt17_api.py (new, 17 pytest tests hitting live preview URL)",
+    "/app/test_reports/pytest/live_prompt17.xml (junit)"
+  ],
+  "success_rate": {"backend": "100% (17/17 live E2E)", "frontend": "core screens verified; 2 UX bugs found; new-employee submit via UI flaky under automation (unrelated to functionality)"},
+  "seed_data_creation": "Backend live tests created is_demo rows under +91900XXXXXXX bucket (E2E Test Worker, E2E Wannabe Mgr, E2E CGM-created Mgr, E2E Face Enroll etc.). Per handoff note these are auto-cleaned. One live incident on the CGM's open queue was mutated via /api/incidents/{id}/escalate (dept + employee mode) — status is now 'escalated'; note: the test picks the first open demo incident and does not roll back status. That's expected per is_demo isolation policy.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "For live E2E hitting the preview URL, demo phones ALWAYS accept OTP 123456 via POST /api/auth/verify-otp — skip send-otp entirely (10-min rate limit). Demo phones live in +919000000xxx bucket (worker 001, mgr 101, TO mgr 113, CGM 500) plus fresh direct-added rows go into +919XXXXXXXXX (still is_demo=true because seeded by a demo actor). Emp-id suggest response key = suggested_emp_id (not emp_id or next_emp_id). EmployeeForm PHONE_REGEX is /^\\+91[6-9]\\d{9}$/ — pass full 13-char value; on RN Web, using page.keyboard.type() to enter '+' into a RN TextInput is unreliable — prefer page.fill() with the FULL string BUT be aware page.fill() does not fire RN Web onChangeText on all builds. Best practice: for RN Web forms, click the input then evaluate to dispatch a synthetic React change event, or (recommended) request main agent to auto-prepend +91 in EmployeeForm so the field takes 10 digits like login. On CGM (9000000500), Announce screen renders All-employees + all 11 dept chips. On TIME_OFFICE mgr (9000000113), only the fixed 'Time Office' chip renders (no dept list) — this is by-design per announce.tsx isTop logic. Race condition in employees/index.tsx debounce → cancel in-flight promise. To reset OTP rate limit (only needed for non-demo phones): `cd /app/backend && python3 -c \"import asyncio; from app.redis_client import redis_client; asyncio.run(redis_client.delete('otp:send:+91XXXXXXXXXX'))\"`.",
+  "rca_of_issue": "Two minor frontend bugs identified: (1) employees search race — searchEmployees() promise from a previous query can resolve after a newer one, overwriting results; add AbortController or a request-id guard. (2) Announce navigation on web — router.back() on Expo web from /announce after send left the browser on /announce with the form reset instead of returning to /home; likely because the previous screen in history was also /announce (fresh nav) or because the form re-mounted from an internal navigation. Consider router.replace('/home') on send success. Both are non-blocking and do not affect backend behavior."
+}

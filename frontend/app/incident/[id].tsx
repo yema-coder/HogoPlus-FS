@@ -20,6 +20,7 @@ import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
 import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
+import { EscalateModal } from "@/src/components/EscalateModal";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { MediaCard } from "@/src/components/MediaCard";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
@@ -47,6 +48,7 @@ export default function IncidentDetailScreen() {
   const [note, setNote] = useState("");
   const [resolutionUri, setResolutionUri] = useState<string | null>(null);
   const [photoModal, setPhotoModal] = useState(false);
+  const [escalateOpen, setEscalateOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -392,6 +394,14 @@ export default function IncidentDetailScreen() {
                   />
                 </View>
               ) : null}
+              {!resolving ? (
+                <BigButton
+                  testID="escalate-button"
+                  label={t("escalate.button")}
+                  variant="outline"
+                  onPress={() => setEscalateOpen(true)}
+                />
+              ) : null}
             </View>
           ) : null}
         </ScrollView>
@@ -406,6 +416,17 @@ export default function IncidentDetailScreen() {
         }}
         testIDPrefix="resolution"
       />
+      {id ? (
+        <EscalateModal
+          incidentId={id}
+          visible={escalateOpen}
+          onClose={() => setEscalateOpen(false)}
+          onDone={() => {
+            setEscalateOpen(false);
+            void load();
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
