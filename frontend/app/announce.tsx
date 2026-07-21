@@ -64,7 +64,8 @@ export default function AnnounceScreen() {
         department_code: audience === "department" ? deptCode : undefined,
       });
       showToast(t("announce.sent", { count: res.recipients }), "success");
-      router.back();
+      if (router.canGoBack()) router.back();
+      else router.replace("/(tabs)/home");
     } catch (e) {
       if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
       else if (e instanceof ApiError && e.status === 403) showToast(t("announce.notAllowed"), "error");

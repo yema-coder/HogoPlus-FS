@@ -278,3 +278,18 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
 - MediaCard + MediaViewerModal everywhere media renders (mobile + webdash modal). BrandFooter
   maroon #7A1F2B on tab-bar-less screens + webdash. 158/158 pytest, i18n 329 parity,
   E2 iteration_15 ALL PASS. Video viewer + pull-gesture = device-only verification.
+
+## Prompt 17 (2026-06) — Parts B–F code complete, v1.0.8 candidate (DO NOT auto-deploy)
+- Backend pytest: 183/183 green (tests/test_prompt17.py adds 10: direct-add, role guardrails, patch guardrails,
+  role propagation w/o re-login, TO search access, escalate dept/employee incl. 403/422/409, escalation-targets,
+  announcement scoping, push-mirror token recorder, face-enroll flow incl. reset path).
+- Testing agent iteration_16: backend live E2E 17/17 passed; frontend flows verified (CGM tiles, announce composer,
+  employees search/direct-add/edit). 2 minor frontend issues reported and FIXED after: employees search race
+  (request-seq guard), announce back-nav on web (canGoBack fallback), phone +91 auto-prefix.
+- Escalation verified E2E on web: manager 9000000101 escalated incident → status escalated, escalated_to set,
+  timeline 'escalated' (manual), notifications delivered. Worker Alerts shows 📢 announcements + forwarded notices.
+- KNOWN WEB-PREVIEW QUIRK (pre-existing, NOT a regression — verified identical on pre-P17 code): on the dev web
+  bundle, tab screens' cached fetches can stall 15–30s behind Metro's connection pool, so Alerts may show the
+  empty state for up to ~30s before rows appear. Data + badge are correct; native builds unaffected.
+- Face enrollment + CaptureGuards are NATIVE-ONLY by design (web bypass). Push delivery requires a built APK;
+  token registration is a safe no-op in Expo Go/web.

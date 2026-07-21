@@ -101,7 +101,11 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
           testID="emp-phone-input"
           style={styles.input}
           value={values.phone}
-          onChangeText={(v) => set("phone", v.replace(/[^\d+]/g, ""))}
+          onChangeText={(v) => {
+            let clean = v.replace(/[^\d+]/g, "");
+            if (!clean.startsWith("+91")) clean = `+91${clean.replace(/^\+?9?1?/, "")}`;
+            set("phone", clean);
+          }}
           placeholder="+91XXXXXXXXXX"
           placeholderTextColor={colors.muted}
           keyboardType="phone-pad"

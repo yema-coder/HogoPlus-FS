@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { ChevronRight, Search, UserPlus } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Pressable,
@@ -28,6 +28,7 @@ export default function EmployeesScreen() {
   const [results, setResults] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const requestSeq = useRef(0);
 
   useEffect(() => {
     const q = query.trim();
@@ -37,14 +38,20 @@ export default function EmployeesScreen() {
       return;
     }
     const timer = setTimeout(() => {
+      const seq = ++requestSeq.current;
       setLoading(true);
       searchEmployees(q)
         .then((rows) => {
+          if (seq !== requestSeq.current) return; // stale response — a newer query is in flight
           setResults(rows);
           setSearched(true);
         })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
+        .catch(() => {
+          if (seq === requestSeq.current) setResults([]);
+        })
+        .finally(() => {
+          if (seq === requestSeq.current) setLoading(false);
+        });
     }, 400);
     return () => clearTimeout(timer);
   }, [query]);
