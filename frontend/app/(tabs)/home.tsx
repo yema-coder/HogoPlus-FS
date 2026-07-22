@@ -516,7 +516,9 @@ const styles = StyleSheet.create({
   shiftChipTime: { fontFamily: fonts.medium, fontSize: 12, color: colors.primary },
   incidentTile: {
     minHeight: sizes.incidentTile,
-    backgroundColor: colors.danger,
+    // Home primary CTA uses the brand primary teal (#0B4F6C). Red (colors.danger)
+    // stays reserved for semantic alert/incident states (severity chips, alert badges).
+    backgroundColor: colors.primary,
     borderRadius: radius.lg,
     flexDirection: "row",
     alignItems: "center",
