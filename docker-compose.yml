@@ -1,0 +1,57 @@
+# ============================================================================
+# HOGOPLUS-FS backend — AWS Mumbai (ap-south-1) EC2.
+# Same code + same Neon DB + same Upstash Redis as the Emergent deployment.
+#   docker compose up -d --build
+# The container is published ONLY on localhost:8001; nginx (host) terminates TLS
+# on 443 and reverse-proxies to it. See setup_server.sh + MUMBAI_MIGRATION.md.
+# ============================================================================
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hogoplus-backend:latest
+    container_name: hogoplus-backend
+    restart: always
+    env_file: .env
+    # bind to loopback only — the public edge is nginx:443, not the container
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"     # rotate at 10MB
+        max-file: "5"       # keep 5 files (~50MB total)
+    volumes:
+      # persist the fastembed ONNX model (~100-400MB) so it isn't re-downloaded on
+      # every restart (it downloads lazily on the first RAG/embedding call).
+      - fastembed_cache:/app/backend/.fastembed_cache
+      # only used when FILE_STORAGE_MODE=local; harmless in s3 mode.
+      - uploads:/app/backend/uploads
+
+  # --------------------------------------------------------------------------
+  # OPTIONAL local Redis fallback. We use Upstash (REDIS_URL in .env) — leave this
+  # COMMENTED. Only enable if you deliberately move off Upstash, then set in .env:
+  #   REDIS_URL=redis://redis:6379/0
+  # NOTE: a local Redis is per-host, so the cross-host scheduler NX lock and shared
+  # OTP/rate-limit state would NO LONGER be shared with the Emergent backend — do
+  # this ONLY after the Emergent backend is fully retired.
+  # --------------------------------------------------------------------------
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: hogoplus-redis
+  #   restart: always
+  #   command: ["redis-server", "--save", "", "--appendonly", "no"]
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  fastembed_cache:
+  uploads:
+  # redis_data:

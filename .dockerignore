@@ -1,0 +1,33 @@
+# keep the build context small + never bake secrets/artifacts into the image
+.git
+.gitignore
+*.md
+frontend/                      # the Expo mobile app is not part of the backend image
+
+# secrets — provided at runtime via docker compose env_file, never baked in
+backend/.env
+.env
+**/.env.local
+
+# python caches / venvs
+**/__pycache__/
+**/*.pyc
+**/.venv/
+backend/.venv/
+backend/.pytest_cache/
+backend/.fastembed_cache/      # ONNX model is cached to a runtime volume instead
+backend/uploads/               # only used in FILE_STORAGE_MODE=local; runtime volume
+backend/webdash_dist/          # rebuilt fresh inside the image (stage 1)
+backend/test_reports/
+backend/tests/
+
+# node
+**/node_modules/
+webdash/dist/
+
+# misc
+*.log
+.expo/
+.emergent/
+memory/
+test_reports/
