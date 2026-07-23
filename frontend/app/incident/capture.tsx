@@ -35,8 +35,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, listDepartments } from "@/src/api/endpoints";
+import { createIncident, listDepartments, beaconRegistry } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
+import { getBleScanner, ensureBlePermissions, beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -130,6 +131,9 @@ function IncidentCaptureInner() {
   const cameraRef = useRef<CameraView>(null);
   const watermarkRef = useRef<View>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
+  // never waits on it — whatever is found by Submit time travels with the payload.
+  const bleHitRef = useRef<BleBeaconHit | null>(null);
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
   const selectedDept = departments.data?.find((d) => d.code === dept) ?? null;
@@ -160,6 +164,33 @@ function IncidentCaptureInner() {
       if (!ok) setMode("picture");
     });
     return () => sub();
+  }, []);
+
+  // Background BLE zone scan (non-blocking, dual-mode). Optional context only —
+  // any failure/timeout is silently ignored and the incident submits beacon=null.
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const scanner = getBleScanner();
+        if (!scanner.isReal) return;
+        let registry = { macs: [] as string[], ibeacons: [] as { uuid: string; major: number; minor: number }[] };
+        try {
+          registry = await beaconRegistry();
+        } catch {
+          return;
+        }
+        const allowed = await ensureBlePermissions();
+        if (!allowed) return;
+        const hit = await scanner.scan(3000, registry);
+        if (active) bleHitRef.current = hit;
+      } catch {
+        // beacon is optional — never block or surface capture errors
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(
@@ -247,6 +278,7 @@ function IncidentCaptureInner() {
       address_text: address,
       description: desc.trim() || null,
       severity: "normal",
+      ...beaconPayload(bleHitRef.current),
     };
 
     // ---- video path (network required; no outbox for videos) ----

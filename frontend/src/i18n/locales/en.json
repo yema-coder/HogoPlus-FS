@@ -124,6 +124,7 @@
     "copy": "Copy",
     "copied": "Copied",
     "objectLocation": "Object Location",
+    "beaconZone": "Beacon Zone",
     "deviceLocation": "Device Location",
     "capturedAt": "Captured at",
     "reasonNoText": "No text found in the photo",

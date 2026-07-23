@@ -75,6 +75,28 @@ async def beacon_macs(
     return {"macs": macs}
 
 
+@router.get("/attendance/beacon-registry")
+async def beacon_registry(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Dual-mode registry for the mobile scanner: active registered MACs AND
+    active registered iBeacon (UUID/Major/Minor) triples. The scanner matches a
+    detected device if EITHER its MAC or its iBeacon triple is in this list."""
+    rows = (
+        await session.execute(
+            select(BleBeacon).where(BleBeacon.is_active.is_(True))
+        )
+    ).scalars().all()
+    macs = [b.mac_address for b in rows if b.mac_address]
+    ibeacons = [
+        {"uuid": b.beacon_uuid, "major": b.major, "minor": b.minor}
+        for b in rows
+        if b.beacon_uuid and b.major is not None and b.minor is not None
+    ]
+    return {"macs": macs, "ibeacons": ibeacons}
+
+
 @router.post("/attendance/punch-in")
 async def punch_in(
     body: PunchInIn,
@@ -86,18 +108,25 @@ async def punch_in(
     now_utc = datetime.now(timezone.utc)
     ist_now = now_ist()
 
-    # opportunistic BLE: the app sends the strongest detected MAC; the backend resolves
-    # the zone from registered beacons. Unregistered MACs are ignored (GPS-only level).
-    matched_beacon = None
-    mac = body.ble_beacon_id.strip().upper() if body.ble_beacon_id else None
-    if mac:
-        matched_beacon = (
-            await session.execute(
-                select(BleBeacon).where(
-                    BleBeacon.mac_address == mac, BleBeacon.is_active.is_(True)
-                )
-            )
-        ).scalar_one_or_none()
+    # Dual-mode BLE (Prompt: MAC + iBeacon): the app sends whichever identifier it
+    # matched against the registered list; the backend resolves the zone from the
+    # registered active beacon. Unregistered/inactive → None (GPS-only level).
+    from app.ble import beacon_ref, resolve_beacon
+
+    matched_beacon = await resolve_beacon(
+        session,
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    # record the identifier the app reported (audit), regardless of registration
+    scanned_ref = beacon_ref(
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
 
     # verification level
     inside = False
@@ -144,7 +173,7 @@ async def punch_in(
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
         gps_verified=inside,
-        ble_beacon_id=mac,
+        ble_beacon_id=scanned_ref,
         ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
         selfie_key=body.selfie_key,
         verification_level=level,

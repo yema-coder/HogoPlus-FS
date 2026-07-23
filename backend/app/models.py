@@ -259,6 +259,10 @@ class Incident(TimestampMixin, Base):
     plate_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-100
     plate_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # rekognition|llm_vision
     plate_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # code when not_detected
+    # BLE dual-mode zone CONTEXT (not verification): identifier the app matched at
+    # capture time (MAC or "ibeacon:<uuid>:<major>:<minor>") + resolved zone label.
+    ble_beacon_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ble_zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
@@ -320,12 +324,17 @@ class FactorySettings(TimestampMixin, Base):
 
 class BleBeacon(TimestampMixin, Base):
     __tablename__ = "ble_beacons"
+    __table_args__ = (
+        # dual-mode: same iBeacon (UUID, Major, Minor) can't map to two zones.
+        # MAC-only rows leave all three NULL (NULLs are distinct in Postgres).
+        UniqueConstraint("beacon_uuid", "major", "minor", name="uq_ble_beacons_ibeacon"),
+    )
     id: Mapped[uuid.UUID] = uuid_pk()
-    beacon_uuid: Mapped[str] = mapped_column(String(100), nullable=False)
+    beacon_uuid: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # vendor beacons are MAC-based (non-configurable) — matching happens on this field
     mac_address: Mapped[str | None] = mapped_column(String(17), nullable=True, unique=True)
-    major: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    major: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
     zone_label_en: Mapped[str] = mapped_column(String(100), nullable=False)
     zone_label_hi: Mapped[str] = mapped_column(String(100), nullable=False)
     zone_label_mr: Mapped[str] = mapped_column(String(100), nullable=False)

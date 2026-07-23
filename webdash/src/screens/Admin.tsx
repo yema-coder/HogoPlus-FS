@@ -6,6 +6,7 @@ import { localName, useI18n } from "../i18n";
 
 const ROLES = ["MD", "CGM", "Manager", "Staff", "Clerk", "Worker"];
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 function EmployeeSearch({ render }: { render: (e: any, reload: () => void) => React.ReactNode }) {
   const { t } = useI18n();
@@ -48,8 +49,11 @@ export default function Admin() {
   const [sops, setSops] = useState<any[] | null>(null);
   const [opsMsg, setOpsMsg] = useState("");
   const [beacons, setBeacons] = useState<any[]>([]);
-  const [bForm, setBForm] = useState({ mac: "", en: "", hi: "", mr: "" });
+  const [bMode, setBMode] = useState<"mac" | "ibeacon">("mac");
+  const [bForm, setBForm] = useState({ mac: "", uuid: "", major: "", minor: "", en: "", hi: "", mr: "" });
   const [bMsg, setBMsg] = useState("");
+  const [bulk, setBulk] = useState({ uuid: "", major: "1", dept: "", csv: "" });
+  const [bulkMsg, setBulkMsg] = useState("");
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
@@ -136,31 +140,86 @@ export default function Admin() {
 
   const addBeacon = async () => {
     setBMsg("");
-    const mac = bForm.mac.trim().toUpperCase();
-    if (!MAC_RE.test(mac)) {
-      setBMsg(t("invalidMac"));
-      return;
-    }
     const en = bForm.en.trim();
     if (!en) {
       setBMsg(t("zoneEn"));
       return;
     }
+    const payload: any = {
+      zone_label_en: en,
+      zone_label_hi: bForm.hi.trim() || en,
+      zone_label_mr: bForm.mr.trim() || en,
+    };
+    if (bMode === "mac") {
+      const mac = bForm.mac.trim().toUpperCase();
+      if (!MAC_RE.test(mac)) {
+        setBMsg(t("invalidMac"));
+        return;
+      }
+      payload.mac_address = mac;
+    } else {
+      const uuid = bForm.uuid.trim().toLowerCase();
+      if (!UUID_RE.test(uuid)) {
+        setBMsg(t("invalidUuid"));
+        return;
+      }
+      const major = Number(bForm.major);
+      const minor = Number(bForm.minor);
+      if (!Number.isInteger(major) || major < 0 || major > 65535 || !Number.isInteger(minor) || minor < 0 || minor > 65535) {
+        setBMsg(t("invalidMajorMinor"));
+        return;
+      }
+      payload.beacon_uuid = uuid;
+      payload.major = major;
+      payload.minor = minor;
+    }
     try {
-      await api("/admin/beacons", {
-        method: "POST",
-        body: JSON.stringify({
-          mac_address: mac,
-          zone_label_en: en,
-          zone_label_hi: bForm.hi.trim() || en,
-          zone_label_mr: bForm.mr.trim() || en,
-        }),
-      });
-      setBForm({ mac: "", en: "", hi: "", mr: "" });
+      await api("/admin/beacons", { method: "POST", body: JSON.stringify(payload) });
+      setBForm({ mac: "", uuid: "", major: "", minor: "", en: "", hi: "", mr: "" });
       setBMsg(`✓ ${t("saved")}`);
       loadBeacons();
     } catch (e: any) {
       setBMsg(e.message);
+    }
+  };
+
+  const bulkImport = async () => {
+    setBulkMsg("");
+    const uuid = bulk.uuid.trim().toLowerCase();
+    if (!UUID_RE.test(uuid)) {
+      setBulkMsg(t("invalidUuid"));
+      return;
+    }
+    const major = Number(bulk.major);
+    if (!Number.isInteger(major) || major < 0 || major > 65535) {
+      setBulkMsg(t("invalidMajorMinor"));
+      return;
+    }
+    // parse CSV lines: "minor,zone_name" (header optional)
+    const rows: { minor: number; zone_name: string }[] = [];
+    for (const raw of bulk.csv.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const [m, ...rest] = line.split(",");
+      const minor = Number(m.trim());
+      const zone = rest.join(",").trim();
+      if (!Number.isInteger(minor) || !zone || m.trim().toLowerCase() === "minor") continue;
+      rows.push({ minor, zone_name: zone });
+    }
+    if (rows.length === 0) {
+      setBulkMsg(t("bulkNoRows"));
+      return;
+    }
+    try {
+      const res = await api("/admin/beacons/bulk", {
+        method: "POST",
+        body: JSON.stringify({ beacon_uuid: uuid, major, department_code: bulk.dept.trim() || null, rows }),
+      });
+      setBulkMsg(`✓ ${t("bulkResult").replace("{a}", res.added).replace("{s}", res.skipped)}`);
+      setBulk({ ...bulk, csv: "" });
+      loadBeacons();
+    } catch (e: any) {
+      setBulkMsg(e.message);
     }
   };
 
@@ -212,9 +271,29 @@ export default function Admin() {
 
           <div className="card">
             <h2>📡 {t("beacons")} ({beacons.length})</h2>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+              <button className={`btn ${bMode === "mac" ? "primary" : "ghost"}`} data-testid="beacon-mode-mac"
+                style={{ padding: "6px 12px" }} onClick={() => { setBMode("mac"); setBMsg(""); }}>{t("modeMac")}</button>
+              <button className={`btn ${bMode === "ibeacon" ? "primary" : "ghost"}`} data-testid="beacon-mode-ibeacon"
+                style={{ padding: "6px 12px" }} onClick={() => { setBMode("ibeacon"); setBMsg(""); }}>{t("modeIbeacon")}</button>
+            </div>
+            {bMode === "mac" ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                <input data-testid="beacon-mac-input" style={{ width: 200, fontFamily: "monospace" }} placeholder="AA:BB:CC:DD:EE:FF"
+                  value={bForm.mac} onChange={(e) => setBForm({ ...bForm, mac: e.target.value })} />
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                <input data-testid="beacon-uuid-input" style={{ flex: 1, minWidth: 280, fontFamily: "monospace" }}
+                  placeholder="f7826da6-4fa2-4e98-8024-bc5b71e0893e"
+                  value={bForm.uuid} onChange={(e) => setBForm({ ...bForm, uuid: e.target.value })} />
+                <input data-testid="beacon-major-input" style={{ width: 90 }} type="number" placeholder={t("major")}
+                  value={bForm.major} onChange={(e) => setBForm({ ...bForm, major: e.target.value })} />
+                <input data-testid="beacon-minor-input" style={{ width: 90 }} type="number" placeholder={t("minor")}
+                  value={bForm.minor} onChange={(e) => setBForm({ ...bForm, minor: e.target.value })} />
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-              <input data-testid="beacon-mac-input" style={{ width: 170, fontFamily: "monospace" }} placeholder="AA:BB:CC:DD:EE:FF"
-                value={bForm.mac} onChange={(e) => setBForm({ ...bForm, mac: e.target.value })} />
               <input data-testid="beacon-zone-en" style={{ flex: 1, minWidth: 120 }} placeholder={t("zoneEn")}
                 value={bForm.en} onChange={(e) => setBForm({ ...bForm, en: e.target.value })} />
             </div>
@@ -226,11 +305,35 @@ export default function Admin() {
               <button className="btn primary" data-testid="beacon-add" onClick={addBeacon}>+ {t("addBeacon")}</button>
             </div>
             {bMsg && <div style={{ fontSize: 13, marginBottom: 8, color: bMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{bMsg}</div>}
+
+            <div style={{ borderTop: "1px solid var(--border)", margin: "10px 0", paddingTop: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>⬆️ {t("bulkImport")}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{t("bulkHint")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                <input data-testid="bulk-uuid" style={{ flex: 1, minWidth: 260, fontFamily: "monospace" }} placeholder={`UUID · ${t("major")}`}
+                  value={bulk.uuid} onChange={(e) => setBulk({ ...bulk, uuid: e.target.value })} />
+                <input data-testid="bulk-major" style={{ width: 90 }} type="number" placeholder={t("major")}
+                  value={bulk.major} onChange={(e) => setBulk({ ...bulk, major: e.target.value })} />
+                <input data-testid="bulk-dept" style={{ width: 130 }} placeholder={t("deptOptional")}
+                  value={bulk.dept} onChange={(e) => setBulk({ ...bulk, dept: e.target.value })} />
+              </div>
+              <textarea data-testid="bulk-csv" style={{ width: "100%", minHeight: 90, fontFamily: "monospace", fontSize: 13 }}
+                placeholder={"minor,zone_name\n1,Mill Gate\n2,Boiler House\n3,Pump Room"}
+                value={bulk.csv} onChange={(e) => setBulk({ ...bulk, csv: e.target.value })} />
+              <div style={{ marginTop: 6 }}>
+                <button className="btn primary" data-testid="bulk-import" onClick={bulkImport}>{t("bulkImportBtn")}</button>
+                {bulkMsg && <span style={{ marginLeft: 10, fontSize: 13, color: bulkMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{bulkMsg}</span>}
+              </div>
+            </div>
+
             {beacons.length === 0 ? <Empty /> : beacons.map((b) => (
               <div key={b.id} className="feed-item" style={{ cursor: "default" }} data-testid={`beacon-row-${b.mac_address || b.id}`}>
                 <div style={{ flex: 1 }}>
-                  <div className="t">{b.zone_label_en}</div>
-                  <div className="m" style={{ fontFamily: "monospace" }}>{b.mac_address || "—"}{b.department_code ? ` · ${b.department_code}` : ""}</div>
+                  <div className="t">{b.zone_label_en} <Chip tone={b.mode === "ibeacon" ? "blue" : "amber"}>{b.mode === "ibeacon" ? t("modeIbeacon") : t("modeMac")}</Chip></div>
+                  <div className="m" style={{ fontFamily: "monospace" }}>
+                    {b.mode === "ibeacon" ? `${b.beacon_uuid} · M${b.major}/m${b.minor}` : (b.mac_address || "—")}
+                    {b.department_code ? ` · ${b.department_code}` : ""}
+                  </div>
                 </div>
                 <button className="btn ghost" style={{ padding: "6px 10px" }} onClick={() => toggleBeacon(b)}>
                   <Chip tone={b.is_active ? "green" : "red"}>{b.is_active ? t("active") : t("inactive")}</Chip>

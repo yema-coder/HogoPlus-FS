@@ -90,6 +90,8 @@ export interface Incident {
   gps_lat: number | null;
   gps_lng: number | null;
   address_text: string | null;
+  ble_zone: string | null;
+  ble_beacon_id: string | null;
   description: string | null;
   voice_note_key: string | null;
   status: IncidentStatus;

@@ -47,7 +47,10 @@ function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
         <div className="detail-rows">
           <div><b>{t("reporter")}:</b> {item.reporter_name}</div>
           {item.description ? <div><b>{t("description")}:</b> {item.description}</div> : null}
-          {item.address_text ? <div><b>📍</b> {item.address_text}</div> : null}
+          {item.ble_zone ? <div><b>📍 {t("beaconZone")}:</b> {item.ble_zone}</div>
+            : item.address_text ? <div><b>📍</b> {item.address_text}</div>
+            : (item.gps_lat != null && item.gps_lng != null) ? <div><b>📍</b> {item.gps_lat.toFixed(5)}, {item.gps_lng.toFixed(5)}</div>
+            : null}
           {item.voice_note_url ? <audio src={item.voice_note_url} controls style={{ width: "100%", marginTop: 6 }} /> : null}
           <div style={{ color: "var(--muted)" }}>{new Date(item.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</div>
         </div>
@@ -152,7 +155,8 @@ export default function Incidents() {
               <div style={{ flex: 1 }}>
                 <div className="t">{i.category} · {i.department_code}{i.video_url ? " · 🎬" : ""}</div>
                 <div className="m">{i.reporter_name} · {i.status}{i.detected_plate ? <> · <b style={{ color: "var(--accent)" }}>🚗 {i.detected_plate}</b></> : null}</div>
-                {i.address_text ? <div className="m">📍 {i.address_text}</div> : null}
+                {i.ble_zone ? <div className="m">📍 {i.ble_zone}</div>
+                  : i.address_text ? <div className="m">📍 {i.address_text}</div> : null}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                 <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>

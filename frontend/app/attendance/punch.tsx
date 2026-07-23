@@ -7,14 +7,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { beaconMacs, punchIn } from "@/src/api/endpoints";
+import { beaconRegistry, punchIn } from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
-import { getBleScanner, ensureBlePermissions } from "@/src/ble/BleScanner";
+import { getBleScanner, ensureBlePermissions, beaconPayload, type BeaconRegistry } from "@/src/ble/BleScanner";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
@@ -60,11 +60,11 @@ function PunchInInner() {
     try {
       const scanner = getBleScanner();
       if (scanner.isReal) {
-        let macs: string[] = [];
+        let registry: BeaconRegistry = { macs: [], ibeacons: [] };
         try {
-          macs = (await beaconMacs()).macs;
+          registry = await beaconRegistry();
         } catch {
-          macs = []; // offline / endpoint failure → skip zone step gracefully
+          registry = { macs: [], ibeacons: [] }; // offline / endpoint failure → skip zone step gracefully
         }
         const asked = await storage.getItem<boolean>("hogo.bleAsked", false);
         if (!asked) {
@@ -72,9 +72,9 @@ function PunchInInner() {
           await storage.setItem("hogo.bleAsked", true);
         }
         const allowed = await ensureBlePermissions();
-        ble = allowed ? await scanner.scan(3000, macs) : null;
+        ble = allowed ? await scanner.scan(3000, registry) : null;
       } else {
-        ble = await scanner.scan(3000, []);
+        ble = await scanner.scan(3000, { macs: [], ibeacons: [] });
       }
     } catch {
       ble = null;
@@ -85,7 +85,7 @@ function PunchInInner() {
     const payload: Record<string, unknown> = {
       gps_lat: fix?.lat ?? null,
       gps_lng: fix?.lng ?? null,
-      ble_beacon_id: ble?.mac ?? null,
+      ...beaconPayload(ble),
     };
 
     let selfieUri = uri;

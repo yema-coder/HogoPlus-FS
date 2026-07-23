@@ -115,16 +115,23 @@ async def _seed_base():
         emp("0120", "NoPhone Worker", None, "GODOWN", "Worker", eligible=True, status="seeded")
         await s.flush()
 
-        # registered vendor beacons (MAC-based, non-configurable)
+        # registered vendor beacons — MAC mode (iBeacon triple left NULL)
         s.add(BleBeacon(
-            beacon_uuid="", mac_address="AA:BB:CC:DD:EE:01", major=0, minor=0,
+            beacon_uuid=None, mac_address="AA:BB:CC:DD:EE:01", major=None, minor=None,
             zone_label_en="Mill Gate", zone_label_hi="मिल गेट", zone_label_mr="मिल गेट",
             department_code="SECURITY", is_active=True,
         ))
         s.add(BleBeacon(
-            beacon_uuid="", mac_address="AA:BB:CC:DD:EE:02", major=0, minor=0,
+            beacon_uuid=None, mac_address="AA:BB:CC:DD:EE:02", major=None, minor=None,
             zone_label_en="Old Gate", zone_label_hi="पुराना गेट", zone_label_mr="जुना गेट",
             department_code="SECURITY", is_active=False,
+        ))
+        # registered iBeacon (UUID/Major/Minor mode) — active
+        s.add(BleBeacon(
+            beacon_uuid="f7826da6-4fa2-4e98-8024-bc5b71e0893e", mac_address=None,
+            major=1, minor=1,
+            zone_label_en="Boiler House", zone_label_hi="बॉयलर हाउस", zone_label_mr="बॉयलर हाउस",
+            department_code="PRODUCTION", is_active=True,
         ))
         await s.flush()
 

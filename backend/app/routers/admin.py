@@ -27,6 +27,7 @@ from app.schemas import (
     DirectAddEmployeeIn,
     ApproveRegistrationIn,
     BeaconIn,
+    BeaconBulkIn,
     BeaconPatchIn,
     EmployeePatchIn,
     FormDefCreateIn,
@@ -361,8 +362,10 @@ async def assign_manager(
 # ---------------- beacons ----------------
 
 def _beacon_out(b: BleBeacon) -> dict:
+    mode = "mac" if b.mac_address else ("ibeacon" if b.beacon_uuid else "unknown")
     return {
         "id": str(b.id),
+        "mode": mode,
         "beacon_uuid": b.beacon_uuid,
         "mac_address": b.mac_address,
         "major": b.major,
@@ -396,14 +399,69 @@ async def create_beacon(
         await session.flush()
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="MAC address already registered")
+        raise HTTPException(status_code=409, detail="Beacon already registered (MAC or UUID/Major/Minor)")
     await write_audit(
         session, actor.id, "beacon.created", "ble_beacon", str(beacon.id),
-        {"uuid": body.beacon_uuid, "mac": body.mac_address},
+        {"uuid": body.beacon_uuid, "mac": body.mac_address, "major": body.major, "minor": body.minor},
     )
     await session.commit()
     await session.refresh(beacon)
     return _beacon_out(beacon)
+
+
+@router.post("/beacons/bulk")
+async def bulk_import_beacons(
+    body: BeaconBulkIn,
+    actor: Employee = Depends(require_real_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Register many iBeacon units at once from one shared UUID + Major and a list of
+    (minor, zone_name) rows. Skips minors already registered to this UUID/Major.
+    Reports how many were added vs skipped."""
+    if body.department_code:
+        dept = (
+            await session.execute(select(Department).where(Department.code == body.department_code))
+        ).scalar_one_or_none()
+        if dept is None:
+            raise HTTPException(status_code=404, detail="Department not found")
+
+    existing = (
+        await session.execute(
+            select(BleBeacon.minor).where(
+                BleBeacon.beacon_uuid == body.beacon_uuid,
+                BleBeacon.major == body.major,
+            )
+        )
+    ).scalars().all()
+    existing_minors = set(existing)
+
+    added, skipped = 0, 0
+    seen: set[int] = set()
+    for row in body.rows:
+        if row.minor in existing_minors or row.minor in seen:
+            skipped += 1
+            continue
+        seen.add(row.minor)
+        session.add(
+            BleBeacon(
+                beacon_uuid=body.beacon_uuid, major=body.major, minor=row.minor,
+                mac_address=None,
+                zone_label_en=row.zone_name, zone_label_hi=row.zone_name, zone_label_mr=row.zone_name,
+                department_code=body.department_code, is_active=True,
+            )
+        )
+        added += 1
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail="Duplicate (UUID, Major, Minor) in import")
+    await write_audit(
+        session, actor.id, "beacon.bulk_import", "ble_beacon", None,
+        {"uuid": body.beacon_uuid, "major": body.major, "added": added, "skipped": skipped},
+    )
+    await session.commit()
+    return {"added": added, "skipped": skipped, "total": len(body.rows)}
 
 
 @router.patch("/beacons/{beacon_id}")
@@ -424,7 +482,7 @@ async def patch_beacon(
         await session.commit()
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status_code=409, detail="MAC address already registered")
+        raise HTTPException(status_code=409, detail="Beacon already registered (MAC or UUID/Major/Minor)")
     await session.refresh(beacon)
     return _beacon_out(beacon)
 

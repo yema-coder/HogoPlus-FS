@@ -85,6 +85,11 @@ export const punchIn = (body: Record<string, unknown>) =>
 
 export const beaconMacs = () => api<{ macs: string[] }>("/attendance/beacon-macs");
 
+export const beaconRegistry = () =>
+  api<{ macs: string[]; ibeacons: { uuid: string; major: number; minor: number }[] }>(
+    "/attendance/beacon-registry",
+  );
+
 export const punchOut = () => api<AttendanceRecord>("/attendance/punch-out", { method: "POST" });
 
 export const myAttendance = (month: string) =>

@@ -229,13 +229,18 @@ export default function IncidentDetailScreen() {
             </View>
           ) : null}
 
-          {detail.address_text || detail.gps_lat != null ? (
+          {detail.ble_zone || detail.address_text || detail.gps_lat != null ? (
             <>
               <View style={styles.locationBlock} testID="incident-object-location">
                 <View style={styles.locationRow}>
                   <MapPin size={18} color={colors.primary} strokeWidth={2.4} />
                   <Text style={styles.locationLabel}>{t("incident.objectLocation")}</Text>
                 </View>
+                {detail.ble_zone ? (
+                  <Text style={styles.locationAddress} testID="incident-beacon-zone">
+                    📍 {t("incident.beaconZone")}: {detail.ble_zone}
+                  </Text>
+                ) : null}
                 {detail.address_text ? (
                   <Text style={styles.locationAddress}>{detail.address_text}</Text>
                 ) : null}

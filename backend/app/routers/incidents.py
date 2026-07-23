@@ -30,6 +30,8 @@ def _out(i: Incident) -> dict:
         "gps_lat": i.gps_lat,
         "gps_lng": i.gps_lng,
         "address_text": i.address_text,
+        "ble_zone": i.ble_zone,
+        "ble_beacon_id": i.ble_beacon_id,
         "description": i.description,
         "voice_note_key": i.voice_note_key,
         "voice_note_url": f"/api/files/{i.voice_note_key}" if i.voice_note_key else None,
@@ -85,6 +87,24 @@ async def create_incident(
         cgm = await get_role_holder(session, "CGM", employee.is_demo)
         assigned = cgm.id if cgm else None
 
+    # BLE zone CONTEXT (dual-mode, non-verification): the app runs a background scan
+    # while the camera is open and sends whatever it matched (or nothing). Never blocks.
+    from app.ble import beacon_ref, resolve_beacon
+
+    matched_beacon = await resolve_beacon(
+        session,
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    ble_ref = beacon_ref(
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    ) if matched_beacon else None
+
     incident = Incident(
         reported_by=employee.id,
         is_demo=employee.is_demo,
@@ -101,6 +121,8 @@ async def create_incident(
         assigned_manager_id=assigned,
         status="submitted",
         plate_status="pending" if body.photo_key else None,
+        ble_beacon_id=ble_ref,
+        ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
     )
     session.add(incident)
     await session.flush()
