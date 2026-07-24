@@ -28,15 +28,16 @@ ENV PYTHONUNBUFFERED=1 \
 #   - postgresql-client-18  → pg_dump for POST /api/admin/backup-now (Neon runs PG 18;
 #                             pg_dump must be >= server major or it aborts). A pure-Python
 #                             dump fallback exists, but v18 gives a proper pg_dump backup.
+#                             (libpq is pulled in by postgresql-client-18 from PGDG — do
+#                             NOT pre-install Debian's libpq5, it conflicts with 18.4.)
 #   - libgomp1              → onnxruntime (fastembed) runtime dependency
-#   - libpq5                → asyncpg / libpq client
 #   - curl                  → container HEALTHCHECK
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates gnupg libpq5 libgomp1 \
+      curl ca-certificates gnupg libgomp1 \
  && install -d /usr/share/postgresql-common/pgdg \
  && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
       -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
- && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt trixie-pgdg main" \
       > /etc/apt/sources.list.d/pgdg.list \
  && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 \
  && apt-get clean && rm -rf /var/lib/apt/lists/*

@@ -92,6 +92,21 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 @app.on_event("startup")
 async def _startup():
+    # Build/config guard: fail fast if any env value still contains an unfilled
+    # "<placeholder>" (e.g. env.sample's S3_ENDPOINT_URL "<account-id>"), which would
+    # otherwise crash boto3/DB clients with an opaque error deep inside a request.
+    if not os.environ.get("TESTING"):
+        import re as _re
+
+        _unfilled = sorted(
+            k for k, v in settings.model_dump().items()
+            if isinstance(v, str) and _re.search(r"<[^>]+>", v)
+        )
+        if _unfilled:
+            raise RuntimeError(
+                "Refusing to start — these env vars still contain placeholder "
+                f"values (edit your .env): {', '.join(_unfilled)}"
+            )
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     app.state.db_seeded = None
     # Redis write probe: a read-only Upstash token must fail loudly at boot.
