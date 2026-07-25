@@ -33,7 +33,7 @@ interface Steps {
 export default function PunchInScreen() {
   // Prompt 17 Part D: camera/location/GPS/Bluetooth guards before the selfie
   return (
-    <CaptureGuards camera location gps bluetooth>
+    <CaptureGuards camera location gps bluetooth strict>
       <PunchInInner />
     </CaptureGuards>
   );

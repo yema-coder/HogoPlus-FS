@@ -441,6 +441,7 @@
   "guard": {
     "title": "Quick check before the photo",
     "body": "These help verify your photo and location.",
+    "strictBody": "Attendance needs GPS and Bluetooth switched ON. Turn them on to continue — the check updates automatically.",
     "camera": "Camera permission",
     "location": "Location permission",
     "gps": "Location (GPS) turned on",

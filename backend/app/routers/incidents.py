@@ -315,11 +315,25 @@ async def escalate_incident(
         if dept is None:
             raise HTTPException(status_code=404, detail="Department not found")
         target_id = await resolve_dept_manager_id(session, dept, incident.is_demo)
-        if target_id is None:
-            cgm = await get_role_holder(session, "CGM", incident.is_demo)
-            target_id = cgm.id if cgm else None
         if target_id is None or target_id == employee.id:
-            raise HTTPException(status_code=409, detail="No escalation target available for this department")
+            # Prompt 21 Bug 4: department has no manager (or the caller IS that
+            # manager) — walk up CGM → MD, never target the caller themselves.
+            target_id = None
+            for role_code in ("CGM", "MD"):
+                holder = await get_role_holder(session, role_code, incident.is_demo)
+                if holder and holder.id != employee.id:
+                    target_id = holder.id
+                    break
+        if target_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "no_escalation_target",
+                    "en": "This department has no manager assigned and nobody above you can receive it. Ask the Time Office to assign a department manager.",
+                    "hi": "इस विभाग में कोई मैनेजर नियुक्त नहीं है और आपके ऊपर कोई प्राप्तकर्ता नहीं है। टाइम ऑफिस से विभाग मैनेजर नियुक्त करने को कहें।",
+                    "mr": "या विभागाला मॅनेजर नेमलेला नाही आणि तुमच्या वर कोणी प्राप्तकर्ता नाही. टाइम ऑफिसला विभाग मॅनेजर नेमण्यास सांगा.",
+                },
+            )
         target = await session.get(Employee, target_id)
     else:
         if not body.employee_id:

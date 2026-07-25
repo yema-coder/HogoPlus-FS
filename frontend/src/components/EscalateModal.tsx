@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { ApiError } from "@/src/api/client";
+import { ApiError, localizedDetail } from "@/src/api/client";
 import { escalateIncident, escalationTargets, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, EscalationTarget } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
@@ -29,7 +29,7 @@ interface Props {
 /** Prompt 17 Part E: manual escalation — pick a department (its manager) or a
  * specific Manager/CGM/MD, with a mandatory reason. */
 export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [mode, setMode] = useState<"department" | "employee">("department");
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [targets, setTargets] = useState<EscalationTarget[]>([]);
@@ -38,12 +38,20 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
   const [search, setSearch] = useState("");
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
+  // Prompt 21 Bug 4: toasts fired inside a native Modal render BEHIND it on
+  // Android — errors must be shown INSIDE the sheet.
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) return;
-    void listDepartments().then(setDepartments).catch(() => undefined);
-    void escalationTargets().then(setTargets).catch(() => undefined);
-  }, [visible]);
+    setError(null);
+    void listDepartments()
+      .then(setDepartments)
+      .catch(() => setError(t("errors.network")));
+    void escalationTargets()
+      .then(setTargets)
+      .catch(() => setError(t("errors.network")));
+  }, [visible, t]);
 
   const filteredTargets = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -60,6 +68,7 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
   const submit = async () => {
     if (!canSubmit || sending) return;
     setSending(true);
+    setError(null);
     try {
       await escalateIncident(incidentId, {
         mode,
@@ -73,9 +82,12 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
       setEmployeeId(null);
       onDone();
     } catch (e) {
-      if (e instanceof ApiError && e.status === 0) showToast(t("errors.network"), "error");
-      else if (e instanceof ApiError && e.status === 409) showToast(t("errors.generic"), "error");
-      else showToast(t("errors.server"), "error");
+      // shown INSIDE the sheet — a toast would be hidden behind the native modal
+      const localized = localizedDetail(e, i18n.language || "mr");
+      if (localized) setError(localized);
+      else if (e instanceof ApiError && e.status === 0) setError(t("errors.network"));
+      else if (e instanceof ApiError && e.status === 409) setError(t("errors.generic"));
+      else setError(t("errors.server"));
     } finally {
       setSending(false);
     }
@@ -159,6 +171,12 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
             placeholderTextColor={colors.muted}
             multiline
           />
+
+          {error ? (
+            <Text style={styles.errorText} testID="escalate-error">
+              {error}
+            </Text>
+          ) : null}
 
           <View style={styles.actions}>
             <BigButton
@@ -250,4 +268,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   actions: { gap: spacing.sm },
+  errorText: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.sm,
+    color: colors.danger,
+    backgroundColor: `${colors.danger}12`,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
 });

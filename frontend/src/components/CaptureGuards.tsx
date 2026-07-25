@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { getBleState } from "@/src/ble/BleScanner";
+import { getBleScanner, getBleState } from "@/src/ble/BleScanner";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
@@ -46,7 +46,7 @@ interface Props {
  * because punch/incident flows degrade gracefully (flagged / no zone).
  * Once passed, the guard latches: children are never unmounted afterwards.
  */
-export function CaptureGuards({ camera, location, gps, bluetooth, children }: Props) {
+export function CaptureGuards({ camera, location, gps, bluetooth, strict, children }: Props) {
   const { t } = useTranslation();
   const [result, setResult] = useState<GuardResult | null>(null);
   const [ready, setReady] = useState(Platform.OS === "web");
@@ -72,8 +72,11 @@ export function CaptureGuards({ camera, location, gps, bluetooth, children }: Pr
         }
         if (bluetooth) {
           const state = await getBleState();
-          next.bluetooth = state === "off" ? "off" : "na";
           if (state === "on") next.bluetooth = "ok";
+          else if (state === "off") next.bluetooth = "off";
+          // 'unknown': Expo Go / web have no radio access → pass. On a REAL build in
+          // strict mode an unreadable radio state must BLOCK (fail closed).
+          else next.bluetooth = strict && getBleScanner().isReal ? "off" : "na";
         }
       } catch {
         // any check failure → fail open (never block capture on guard errors)
@@ -87,7 +90,7 @@ export function CaptureGuards({ camera, location, gps, bluetooth, children }: Pr
       if (pass) setReady(true);
       return next;
     },
-    [camera, location, gps, bluetooth],
+    [camera, location, gps, bluetooth, strict],
   );
 
   useEffect(() => {
@@ -105,6 +108,14 @@ export function CaptureGuards({ camera, location, gps, bluetooth, children }: Pr
     return () => sub.remove();
   }, [ready, run]);
 
+  // strict mode: quick-settings toggles don't background the app — poll lightly
+  // so switching GPS/Bluetooth ON unblocks without any tap.
+  useEffect(() => {
+    if (ready || !strict) return;
+    const timer = setInterval(() => void run(false), 3000);
+    return () => clearInterval(timer);
+  }, [ready, strict, run]);
+
   if (ready) return <>{children}</>;
 
   if (!result) {
@@ -115,7 +126,14 @@ export function CaptureGuards({ camera, location, gps, bluetooth, children }: Pr
     );
   }
 
-  const hardFail = result.camera === "ask" || result.camera === "blocked";
+  const hardFail =
+    result.camera === "ask" ||
+    result.camera === "blocked" ||
+    (strict === true &&
+      (result.location === "ask" ||
+        result.location === "blocked" ||
+        result.gps === "off" ||
+        result.bluetooth === "off"));
 
   const stateIcon = (ok: boolean) =>
     ok ? (
@@ -198,7 +216,7 @@ export function CaptureGuards({ camera, location, gps, bluetooth, children }: Pr
   return (
     <View style={styles.wrap} testID="capture-guards-checklist">
       <Text style={styles.title}>{t("guard.title")}</Text>
-      <Text style={styles.body}>{t("guard.body")}</Text>
+      <Text style={styles.body}>{strict ? t("guard.strictBody") : t("guard.body")}</Text>
       <View style={styles.rows}>
         {rows.map((row) => (
           <View key={row.key} style={styles.row} testID={`guard-row-${row.key}`}>
