@@ -685,3 +685,34 @@ v1.0.8 list: POST /incidents idempotency client_ref (dup risk on network retry),
 device, device-only QA (hardware back, airplane-mode outbox, app-kill, voice-fill live audio, BLE), swap candidates
 seeding for more demo depts.
 DO NOT DEPLOY without owner's go — launch day runs current build; re-publish ships Part A when owner decides.
+
+## Prompt 21 (2026-07-25) — PRE-LAUNCH BUG TRIAGE (diagnosis-first; fixes for Bugs 2/3/4 HELD)
+User rule: NO fixes until diagnosis approved, EXCEPT pre-approved list (all DONE + verified):
+- config.py: otp_mode default "" (was "demo"), demo_otp_enabled default False (was True) → demo OTP
+  acceptance now impossible unless DEMO_OTP_ENABLED explicitly true. Env-hygiene sanitizer
+  (field_validator "*", before): strips whitespace/outer quotes; inline " #comment" stripped for simple
+  fields only (never OTP_TEMPLATE_TEXT/secrets/URLs); empty value on bool/int fields → default.
+  New settings: otp_max_per_window=5, otp_window_minutes=10, otp_resend_cooldown_seconds=45.
+- main.py startup: FAIL-FAST guard (RuntimeError OTP_MODE_NOT_SET / OTP_MODE_INVALID /
+  SMSGATEWAYHUB_CONFIG_MISSING / OTP_TEMPLATE_TEXT_INVALID; WARN when ENTITY_ID blank) + one boot
+  INFO line "OTP CONFIG: mode=... demo_otp_enabled=... api_key=masked ... rate_limit=5/10min cooldown=45s".
+- auth.py send-otp: cooldown key otp:cooldown:{phone} (45s) + window otp:send:{phone} (5/10min);
+  429 detail = {code:"otp_rate_limited", retry_after_seconds, en/hi/mr}; success returns resend_after.
+- otp.py: mask_phone/mask_key; SMSGatewayHub send_raw logs RAW http status+body+message id (API key
+  masked, OTP never logged in prod path); demo fallback on gateway failure REMOVED (raises 502).
+- scripts/test_sms.py (host, stdlib-only): .env LINT (BOM/CRLF/unbalanced quotes/inline comments/
+  concat-keys/dup keys) + effective OTP config + --send +91X real gateway call printing raw response.
+- App: phone.tsx/otp.tsx show localized wait message from 429 detail (localizedDetail helper in
+  client.ts); otp.tsx RESEND_SECONDS 30→45. Tests: rate-limit test now 5→429; conftest cooldown=0.
+- Verified E2E on sandbox: boot line OK, 5 sends then 429 (retry_after=582), cooldown 429 (43s, trilingual),
+  demo login intact, fail-fast fires when OTP_MODE missing. SMSGatewayHub docs confirm EntityId (DLT PE ID)
+  IS required for India DLT traffic — currently blank in .env.
+DIAGNOSIS EVIDENCE (for report): Bug1 = host .env values not reaching container (user: printenv OTP_MODE
+empty) + old silent demo defaults; SECURITY HOLE PROVEN: logged in as real CGM (+918483029039) with 123456
+(whitelist + demo_otp_enabled). Bug2 = backend registration chain PROVEN healthy (403 guard, upload with
+registration token 200, Rekognition gate 400 no_face); app-side/misleading-error suspected; needs user's
+on-device symptom. Bug3 = CaptureGuards soft-gates by design ("Continue anyway", getBleState 'unknown'→pass);
+backend accepts GPS-less punch as flagged/gps_missing. Bug4 = escalate API works (200 employee-mode);
+dept-mode 409 for 7 manager-less depts when CGM escalates (fallback target = self); error toasts inside RN
+Modal are INVISIBLE on Android (ToastHost under native modal window) → "does nothing".
+Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
