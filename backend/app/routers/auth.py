@@ -43,14 +43,24 @@ logger = logging.getLogger("hogo.auth")
 router = APIRouter(tags=["auth"])
 
 OTP_TTL_SECONDS = 300
-SEND_WINDOW_SECONDS = 600
-MAX_SENDS_PER_WINDOW = 3
 LOCKOUT_THRESHOLD = 5
 LOCKOUT_SECONDS = 1800
 
 
 def _hash(otp: str) -> str:
     return hashlib.sha256(otp.encode()).hexdigest()
+
+
+def _rate_limit_detail(wait_seconds: int) -> dict:
+    """429 body always carries the remaining wait so the app can show it."""
+    wait_seconds = max(int(wait_seconds), 1)
+    return {
+        "code": "otp_rate_limited",
+        "retry_after_seconds": wait_seconds,
+        "en": f"Please wait {wait_seconds} seconds before requesting another OTP.",
+        "hi": f"कृपया अगला OTP मांगने से पहले {wait_seconds} सेकंड प्रतीक्षा करें।",
+        "mr": f"कृपया पुढील OTP मागण्यापूर्वी {wait_seconds} सेकंद थांबा.",
+    }
 
 
 @router.post("/auth/send-otp")
@@ -77,12 +87,24 @@ async def send_otp(body: SendOtpIn, session: AsyncSession = Depends(get_session)
             },
         )
 
+    # Prompt 21 Bug-1 rate limit: OTP_MAX_PER_WINDOW sends per OTP_WINDOW_MINUTES,
+    # with an OTP_RESEND_COOLDOWN_SECONDS gap between sends — all .env-configurable.
+    cooldown = settings.otp_resend_cooldown_seconds
+    if cooldown > 0:
+        cd_ttl = await redis_client.ttl(f"otp:cooldown:{phone}")
+        if cd_ttl and cd_ttl > 0:
+            raise HTTPException(status_code=429, detail=_rate_limit_detail(cd_ttl))
+    window_seconds = settings.otp_window_minutes * 60
     rate_key = f"otp:send:{phone}"
     count = await redis_client.incr(rate_key)
     if count == 1:
-        await redis_client.expire(rate_key, SEND_WINDOW_SECONDS)
-    if count > MAX_SENDS_PER_WINDOW:
-        raise HTTPException(status_code=429, detail="Too many OTP requests. Try again in 10 minutes.")
+        await redis_client.expire(rate_key, window_seconds)
+    if count > settings.otp_max_per_window:
+        window_ttl = await redis_client.ttl(rate_key)
+        raise HTTPException(
+            status_code=429,
+            detail=_rate_limit_detail(window_ttl if window_ttl and window_ttl > 0 else window_seconds),
+        )
 
     otp = f"{secrets.randbelow(10**6):06d}"
     await redis_client.setex(f"otp:code:{phone}", OTP_TTL_SECONDS, _hash(otp))
@@ -94,7 +116,14 @@ async def send_otp(body: SendOtpIn, session: AsyncSession = Depends(get_session)
         raise HTTPException(status_code=503, detail=str(exc))
     except SMSDeliveryError as exc:
         raise HTTPException(status_code=502, detail=f"SMS delivery failed: {exc}")
-    return {"message": "OTP sent", "otp_mode": settings.otp_mode, "expires_in": OTP_TTL_SECONDS}
+    if cooldown > 0:
+        await redis_client.setex(f"otp:cooldown:{phone}", cooldown, "1")
+    return {
+        "message": "OTP sent",
+        "otp_mode": settings.otp_mode,
+        "expires_in": OTP_TTL_SECONDS,
+        "resend_after": cooldown,
+    }
 
 
 @router.post("/auth/verify-otp")

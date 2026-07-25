@@ -214,3 +214,13 @@ export async function uploadFile(
 export function fileUrl(key: string): string {
   return `${API_BASE}/files/${key}`;
 }
+
+/** Localized message from a trilingual {en,hi,mr} error detail (or null). */
+export function localizedDetail(e: unknown, lang: string): string | null {
+  if (e instanceof ApiError && typeof e.detail === "object" && e.detail !== null) {
+    const d = e.detail as Record<string, unknown>;
+    const msg = d[lang.slice(0, 2)] ?? d.en;
+    return typeof msg === "string" ? msg : null;
+  }
+  return null;
+}

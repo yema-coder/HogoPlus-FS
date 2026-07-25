@@ -14,6 +14,7 @@ os.environ["JWT_SECRET"] = "test-secret-not-for-production"
 os.environ["OTP_MODE"] = "demo"
 os.environ["DEMO_OTP_ENABLED"] = "true"
 os.environ["DEMO_OTP"] = "123456"
+os.environ["OTP_RESEND_COOLDOWN_SECONDS"] = "0"  # no inter-send cooldown inside tests
 os.environ["FILE_STORAGE_MODE"] = "local"
 os.environ["UPLOAD_DIR"] = "/tmp/hogo_test_uploads"
 os.environ["ESCALATION_HOURS"] = "48"

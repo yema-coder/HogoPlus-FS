@@ -16,11 +16,15 @@ async def test_send_otp_invalid_phone(client):
 
 async def test_send_otp_rate_limit(client):
     phone = PHONES["w_prod1"]
-    for _ in range(3):
+    for _ in range(5):
         r = await client.post("/api/auth/send-otp", json={"phone": phone})
         assert r.status_code == 200
     r = await client.post("/api/auth/send-otp", json={"phone": phone})
     assert r.status_code == 429
+    detail = r.json()["detail"]
+    assert detail["code"] == "otp_rate_limited"
+    assert detail["retry_after_seconds"] > 0
+    assert "en" in detail and "hi" in detail and "mr" in detail
 
 
 async def test_verify_wrong_otp(client):

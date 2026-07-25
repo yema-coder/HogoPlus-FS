@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { ApiError } from "@/src/api/client";
+import { ApiError, localizedDetail } from "@/src/api/client";
 import { sendOtp, verifyOtp } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -21,11 +21,12 @@ import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
-const RESEND_SECONDS = 30;
+// matches the backend's OTP_RESEND_COOLDOWN_SECONDS default (45s)
+const RESEND_SECONDS = 45;
 
 export default function OtpEntry() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -84,8 +85,10 @@ export default function OtpEntry() {
       setSeconds(RESEND_SECONDS);
       showToast(t("auth.otpSent", { phone }), "success");
     } catch (e) {
-      if (e instanceof ApiError && e.status === 429) showToast(t("auth.locked"), "error");
-      else showToast(t("errors.server"), "error");
+      if (e instanceof ApiError && e.status === 429) {
+        // rate limit: backend sends {retry_after_seconds, en, hi, mr}
+        showToast(localizedDetail(e, i18n.language || "mr") ?? t("auth.locked"), "error");
+      } else showToast(t("errors.server"), "error");
     }
   };
 

@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { ApiError } from "@/src/api/client";
+import { ApiError, localizedDetail } from "@/src/api/client";
 import { sendOtp } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
@@ -38,8 +38,10 @@ export default function PhoneEntry() {
       await sendOtp(phone);
       router.push({ pathname: "/(auth)/otp", params: { phone } });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 429) showToast(t("auth.locked"), "error");
-      else if (
+      if (e instanceof ApiError && e.status === 429) {
+        // rate limit: backend sends {retry_after_seconds, en, hi, mr}
+        showToast(localizedDetail(e, i18n.language || "mr") ?? t("auth.locked"), "error");
+      } else if (
         e instanceof ApiError &&
         e.status === 403 &&
         typeof e.detail === "object" &&

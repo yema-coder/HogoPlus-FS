@@ -11,6 +11,18 @@ SMSGATEWAYHUB_URL = "https://www.smsgatewayhub.com/api/mt/SendSMS"
 OTP_TTL_MINUTES = "5"  # must match OTP_TTL_SECONDS in auth.py (300s)
 
 
+def mask_phone(phone: str) -> str:
+    """+918483029039 → +91848****39 — production logs never carry a full number."""
+    if len(phone) <= 7:
+        return "***"
+    return f"{phone[:6]}{'*' * (len(phone) - 8)}{phone[-2:]}"
+
+
+def mask_key(key: str) -> str:
+    return f"{key[:4]}****" if key else "(unset)"
+
+
+
 class NotConfigured(Exception):
     pass
 
@@ -28,7 +40,10 @@ class DemoSender(OTPSender):
     """Logs the OTP. DEMO_OTP is also accepted at verify time when DEMO_OTP_ENABLED."""
 
     async def send(self, phone: str, otp: str) -> None:
-        logger.info("[DEMO OTP] phone=%s otp=%s (demo code %s also accepted)", phone, otp, settings.demo_otp)
+        if settings.demo_otp_enabled:
+            logger.info("[DEMO OTP] phone=%s otp=%s (demo code %s also accepted)", phone, otp, settings.demo_otp)
+        else:
+            logger.info("[DEMO OTP] phone=%s otp=%s (DEMO_OTP_ENABLED=false — fixed demo code NOT accepted)", phone, otp)
 
 
 class MSG91Sender(OTPSender):
@@ -101,11 +116,31 @@ class SMSGatewayHubSender(OTPSender):
         return params
 
     async def send_raw(self, phone: str, otp: str) -> dict:
-        """Call the provider and return its raw response JSON. Raises on any failure."""
+        """Call the provider and return its raw response JSON.
+
+        Prompt 21 Bug-1 logging contract: per attempt, log the RAW HTTP status +
+        response body + message id with the API key masked. NEVER log the OTP value
+        here. NO exception is swallowed — every failure raises SMSDeliveryError.
+        """
+        params = self.build_params(phone, otp)
+        logger.info(
+            "SMSGatewayHub SEND phone=%s sender=%s dlt_template=%s entity_id=%s api_key=%s",
+            mask_phone(phone), params.get("senderid"), params.get("dlttemplateid"),
+            params.get("EntityId", "(not sent)"), mask_key(settings.smsgatewayhub_api_key),
+        )
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(SMSGATEWAYHUB_URL, params=self.build_params(phone, otp))
-            resp.raise_for_status()
+            resp = await client.get(SMSGATEWAYHUB_URL, params=params)
+        body_text = resp.text
+        logger.info(
+            "SMSGatewayHub RESPONSE phone=%s http_status=%s body=%s",
+            mask_phone(phone), resp.status_code, body_text[:500],
+        )
+        if resp.status_code != 200:
+            raise SMSDeliveryError(f"SMSGatewayHub HTTP {resp.status_code}: {body_text[:300]}")
+        try:
             data = resp.json()
+        except ValueError:
+            raise SMSDeliveryError(f"SMSGatewayHub non-JSON response: {body_text[:300]}")
         if str(data.get("ErrorCode")) not in ("0", "000"):
             raise SMSDeliveryError(
                 f"SMSGatewayHub error {data.get('ErrorCode')}: {data.get('ErrorMessage')}"
@@ -113,23 +148,36 @@ class SMSGatewayHubSender(OTPSender):
         return data
 
     async def send(self, phone: str, otp: str) -> None:
+        # NO silent demo fallback (Bug 1 fix): any gateway failure surfaces to the
+        # caller as SMSDeliveryError → HTTP 502. Demo delivery now requires an
+        # explicit OTP_MODE=demo.
         try:
             data = await self.send_raw(phone, otp)
-            logger.info("SMSGatewayHub OTP queued phone=%s job=%s", phone, data.get("JobId"))
+        except SMSDeliveryError:
+            raise
         except Exception as e:
-            logger.error("SMSGatewayHub send failed for %s: %s", phone, e)
-            if settings.demo_otp_enabled:
-                # non-prod: never brick login — fall back to demo behavior
-                logger.info(
-                    "[FALLBACK DEMO OTP] phone=%s otp=%s (demo code %s also accepted)",
-                    phone, otp, settings.demo_otp,
-                )
-            else:
-                raise SMSDeliveryError(str(e)) from e
+            logger.error(
+                "SMSGatewayHub send FAILED phone=%s error=%s: %s",
+                mask_phone(phone), type(e).__name__, e,
+            )
+            raise SMSDeliveryError(f"{type(e).__name__}: {e}") from e
+        message_id = None
+        message_data = data.get("MessageData")
+        if isinstance(message_data, list) and message_data:
+            message_id = message_data[0].get("MessageId")
+        logger.info(
+            "SMSGatewayHub OTP queued phone=%s job_id=%s message_id=%s",
+            mask_phone(phone), data.get("JobId"), message_id,
+        )
 
 
 def get_otp_sender() -> OTPSender:
-    mode = settings.otp_mode.lower()
+    mode = settings.otp_mode.strip().lower()
+    if not mode:
+        raise NotConfigured(
+            "OTP_MODE_NOT_SET: OTP_MODE is empty — the container did not receive "
+            ".env values. Set OTP_MODE=demo|smsgatewayhub|msg91|whatsapp."
+        )
     if mode == "demo":
         return DemoSender()
     if mode == "msg91":
