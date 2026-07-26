@@ -67,11 +67,22 @@ async def test_direct_add_role_guardrails(client):
         "role_code": "Manager",
         "emp_id": "7003",
     }
-    # Time Office may NOT create Manager+ accounts
+    # Prompt 21: Time Office MAY create Manager accounts (installing new HODs)
     r = await client.post("/api/admin/employees", json=payload, headers=to)
+    assert r.status_code == 200, r.text
+    # ...but never CGM/MD accounts
+    r = await client.post(
+        "/api/admin/employees",
+        json={**payload, "phone": "+919555555505", "emp_id": "7005", "role_code": "CGM"},
+        headers=to,
+    )
     assert r.status_code == 403
-    # CGM may
-    r = await client.post("/api/admin/employees", json=payload, headers=cgm)
+    # CGM may create Manager accounts too
+    r = await client.post(
+        "/api/admin/employees",
+        json={**payload, "phone": "+919555555506", "emp_id": "7006"},
+        headers=cgm,
+    )
     assert r.status_code == 200, r.text
     # workers can't direct-add at all
     r = await client.post(
@@ -87,14 +98,22 @@ async def test_patch_employee_guardrails(client, db_session):
     cgm = await login(client, PHONES["cgm"])
     mgr_id = await employee_id_by_phone(db_session, PHONES["prod_mgr"])
     worker_id = await employee_id_by_phone(db_session, PHONES["w_prod2"])
+    cgm_id = await employee_id_by_phone(db_session, PHONES["cgm"])
 
-    # Time Office cannot touch Manager+ accounts
-    r = await client.patch(f"/api/admin/employees/{mgr_id}", json={"full_name": "Hax"}, headers=to)
-    assert r.status_code == 403
-    # ...or grant Manager+ roles
+    # Prompt 21: Time Office CAN edit Manager accounts...
+    r = await client.patch(f"/api/admin/employees/{mgr_id}", json={"full_name": "Prod Manager"}, headers=to)
+    assert r.status_code == 200, r.text
+    # ...and grant the Manager role (revert right after)
     r = await client.patch(f"/api/admin/employees/{worker_id}", json={"role_code": "Manager"}, headers=to)
+    assert r.status_code == 200, r.text
+    r = await client.patch(f"/api/admin/employees/{worker_id}", json={"role_code": "Worker"}, headers=to)
+    assert r.status_code == 200
+    # ...but NEVER CGM/MD accounts or roles
+    r = await client.patch(f"/api/admin/employees/{cgm_id}", json={"full_name": "Hax"}, headers=to)
     assert r.status_code == 403
-    # but CAN edit worker basics
+    r = await client.patch(f"/api/admin/employees/{worker_id}", json={"role_code": "CGM"}, headers=to)
+    assert r.status_code == 403
+    # and CAN edit worker basics
     r = await client.patch(f"/api/admin/employees/{worker_id}", json={"full_name": "Renamed Worker"}, headers=to)
     assert r.status_code == 200
     assert r.json()["full_name"] == "Renamed Worker"

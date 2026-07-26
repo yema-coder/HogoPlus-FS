@@ -33,12 +33,24 @@ async def test_assign_manager(client, db_session):
     )
     assert r.status_code == 200
     assert r.json()["manager_employee_id"] == eng_id
-    # manager (rank 3) cannot assign
+    # generic manager (rank 3, not Time Office) cannot assign
     mgr = await login(client, PHONES["prod_mgr"])
     r = await client.post(
         "/api/admin/departments/GODOWN/assign-manager", json={"employee_id": eng_id}, headers=mgr
     )
     assert r.status_code == 403
+    # Prompt 21: Time Office CAN assign — but only employees holding the Manager role
+    to = await login(client, PHONES["time_mgr"])
+    r = await client.post(
+        "/api/admin/departments/GODOWN/assign-manager", json={"employee_id": eng_id}, headers=to
+    )
+    assert r.status_code == 403  # eng is a Worker
+    mgr_id = await employee_id_by_phone(db_session, PHONES["prod_mgr"])
+    r = await client.post(
+        "/api/admin/departments/GODOWN/assign-manager", json={"employee_id": mgr_id}, headers=to
+    )
+    assert r.status_code == 200
+    assert r.json()["manager_employee_id"] == mgr_id
 
 
 async def test_time_office_fixes_seeded_phone(client, db_session):

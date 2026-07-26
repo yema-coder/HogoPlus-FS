@@ -1,7 +1,16 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Camera as CameraIcon, RefreshCcw, Settings } from "lucide-react-native";
-import React, { useRef, useState } from "react";
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -25,7 +34,36 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
   const [permission, requestPermission] = useCameraPermissions();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
+  // Prompt 21 Bug 2: no silent black screens — track camera start explicitly.
+  const [cameraReady, setCameraReady] = useState(Platform.OS === "web");
+  const [cameraFailed, setCameraFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const autoAsked = useRef(false);
   const cameraRef = useRef<CameraView>(null);
+
+  // Auto-request an undetermined permission on mount — entering this screen IS the
+  // user intent (registration has no CaptureGuards wrapper to ask for us).
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain && !autoAsked.current) {
+      autoAsked.current = true;
+      void requestPermission();
+    }
+  }, [permission, requestPermission]);
+
+  // 6-second onCameraReady watchdog (native only): a preview that never starts
+  // becomes a visible, retryable error instead of a black screen.
+  useEffect(() => {
+    if (Platform.OS === "web" || !permission?.granted || photoUri || cameraReady || cameraFailed)
+      return;
+    const timer = setTimeout(() => setCameraFailed(true), 6000);
+    return () => clearTimeout(timer);
+  }, [permission?.granted, photoUri, cameraReady, cameraFailed, retryKey]);
+
+  const retryCamera = () => {
+    setCameraFailed(false);
+    setCameraReady(Platform.OS === "web");
+    setRetryKey((k) => k + 1); // force a full CameraView remount
+  };
 
   const capture = async () => {
     if (!cameraRef.current || capturing) return;
@@ -40,7 +78,14 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
     }
   };
 
-  if (!permission) return <View style={styles.fill} />;
+  if (!permission) {
+    // permission state still loading — never a bare black view
+    return (
+      <View style={[styles.fill, styles.center]} testID={`${testIDPrefix}-loading`}>
+        <ActivityIndicator size="large" color="#FFFFFF" />
+      </View>
+    );
+  }
 
   if (!permission.granted) {
     return (
@@ -100,9 +145,45 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
     );
   }
 
+  if (cameraFailed) {
+    return (
+      <View style={styles.permissionWrap} testID={`${testIDPrefix}-camera-error`}>
+        <View style={styles.permissionIcon}>
+          <CameraIcon size={40} color={colors.danger} strokeWidth={2} />
+        </View>
+        <Text style={styles.permissionTitle}>{t("errors.cameraStart")}</Text>
+        <BigButton
+          testID={`${testIDPrefix}-camera-retry-button`}
+          label={t("common.retry")}
+          icon={RefreshCcw}
+          onPress={retryCamera}
+        />
+        <BigButton
+          testID={`${testIDPrefix}-camera-settings-button`}
+          label={t("common.openSettings")}
+          icon={Settings}
+          variant="outline"
+          onPress={() => void Linking.openSettings()}
+        />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.fill} testID={`${testIDPrefix}-camera`}>
-      <CameraView ref={cameraRef} style={styles.fill} facing="front" />
+      <CameraView
+        key={retryKey}
+        ref={cameraRef}
+        style={styles.fill}
+        facing="front"
+        onCameraReady={() => setCameraReady(true)}
+        onMountError={() => setCameraFailed(true)}
+      />
+      {!cameraReady ? (
+        <View style={[StyleSheet.absoluteFillObject, styles.center]} pointerEvents="none">
+          <ActivityIndicator size="large" color="#FFFFFF" />
+        </View>
+      ) : null}
       <View style={styles.overlay}>
         <View style={styles.faceGuide} />
         <Text style={styles.guideText}>{hint}</Text>

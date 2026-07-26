@@ -104,19 +104,22 @@ async def patch_employee(
     if emp is None or emp.is_demo != actor.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # Prompt 17 guardrails: only CGM/MD may touch Manager+ accounts or grant Manager+ roles
+    # Prompt 17 guardrails, Prompt 21 update: Time Office manages Worker/Staff/Clerk
+    # AND Manager accounts (to install/replace HODs without the CGM in the loop) and
+    # may grant the Manager role. CGM/MD accounts and roles remain CGM/MD-only —
+    # in both directions. Every change is written to the audit log below.
     if actor.role.rank > 2:
         target_role = (
             await session.execute(select(Role).where(Role.code == emp.role_code))
         ).scalar_one()
-        if target_role.rank <= 3:
-            raise HTTPException(status_code=403, detail="Only CGM/MD can modify Manager+ accounts")
+        if target_role.rank <= 2:
+            raise HTTPException(status_code=403, detail="Only CGM/MD can modify CGM/MD accounts")
         if body.role_code is not None:
             new_role = (
                 await session.execute(select(Role).where(Role.code == body.role_code))
             ).scalar_one_or_none()
-            if new_role and new_role.rank <= 3:
-                raise HTTPException(status_code=403, detail="Only CGM/MD can grant Manager+ roles")
+            if new_role and new_role.rank <= 2:
+                raise HTTPException(status_code=403, detail="Only CGM/MD can grant CGM/MD roles")
 
     changes = {}
     if body.phone is not None:
@@ -340,15 +343,29 @@ async def search_employees(
 async def assign_manager(
     code: str,
     body: AssignManagerIn,
-    actor: Employee = Depends(require_real_role(2)),
+    actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
+    # Prompt 21: Time Office managers may (re)assign department HODs. Rails: demo
+    # actors never touch the shared departments table; Time Office may only install
+    # employees who already hold the Manager role; audited below.
+    await _require_time_office_or_top(session, actor)
+    if actor.is_demo:
+        raise HTTPException(
+            status_code=403, detail="Demo accounts cannot modify shared factory configuration"
+        )
     dept = (await session.execute(select(Department).where(Department.code == code))).scalar_one_or_none()
     if dept is None:
         raise HTTPException(status_code=404, detail="Department not found")
     emp = await session.get(Employee, body.employee_id)
-    if emp is None or not emp.is_active:
+    if emp is None or not emp.is_active or emp.is_demo:
         raise HTTPException(status_code=404, detail="Employee not found")
+    if actor.role.rank > 2:
+        emp_role = (
+            await session.execute(select(Role).where(Role.code == emp.role_code))
+        ).scalar_one()
+        if emp_role.rank != 3:
+            raise HTTPException(status_code=403, detail="HOD must hold the Manager role")
     old = dept.manager_employee_id
     dept.manager_employee_id = emp.id
     await write_audit(
@@ -848,14 +865,16 @@ async def direct_add_employee(
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    """Time Office Manager: Worker/Staff/Clerk only. CGM/MD: any role.
+    """Time Office Manager: Worker/Staff/Clerk/Manager. CGM/MD: any role.
     Created ACTIVE immediately — first login lands on the role's home."""
     await _require_time_office_or_top(session, actor)
     role = (await session.execute(select(Role).where(Role.code == body.role_code))).scalar_one_or_none()
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
-    if actor.role.rank > 2 and role.rank <= 3:
-        raise HTTPException(status_code=403, detail="Only CGM/MD can create Manager+ accounts")
+    # Prompt 21: Time Office may also create Manager accounts (onboarding new HODs);
+    # CGM/MD accounts remain CGM/MD-only.
+    if actor.role.rank > 2 and role.rank <= 2:
+        raise HTTPException(status_code=403, detail="Only CGM/MD can create CGM/MD accounts")
     dept = (
         await session.execute(select(Department).where(Department.code == body.department_code))
     ).scalar_one_or_none()

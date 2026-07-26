@@ -6,10 +6,11 @@ Scope (per review-request):
 - POST /api/incidents/{id}/escalate by CGM: mode=department & mode=employee 200,
   reason <3 chars 422; GET /api/incidents/escalation-targets returns rank<=3 demo rows
 - POST /api/admin/employees direct-add: TO manager creates Worker 200 (approved+active),
-  Manager role by TO -> 403, Manager role by CGM -> 200
+  Manager role by TO -> 200 (Prompt 21), CGM/MD role by TO -> 403, Manager by CGM -> 200
 - GET /api/admin/emp-id-suggest returns next id
-- PATCH /api/admin/employees/{id}: TO rename Worker 200, 403 on Manager account,
-  403 granting Manager, role change reflects in /api/auth/me on SAME token
+- PATCH /api/admin/employees/{id}: TO rename Worker 200, TO may edit Manager accounts
+  and grant Manager (Prompt 21); CGM/MD accounts+roles stay 403; role change reflects
+  in /api/auth/me on SAME token
 - POST /api/employees/me/face-enroll: first call 200 has_face_reference=True,
   second call 409; GET /api/auth/me has has_face_reference field
 
@@ -263,7 +264,8 @@ def test_direct_add_worker_by_time_office(to_tok):
     pytest._e2e_worker_phone = phone
 
 
-def test_direct_add_manager_by_time_office_forbidden(to_tok):
+def test_direct_add_cgm_by_time_office_forbidden(to_tok):
+    # Prompt 21: TO may create Manager accounts now — but never CGM/MD accounts
     r = requests.get(f"{BASE}/api/admin/emp-id-suggest", headers=_h(to_tok), timeout=15).json()
     eid = r.get("suggested_emp_id") or r.get("emp_id") or r.get("next_emp_id")
     phone = _fresh_phone(2)
@@ -271,10 +273,10 @@ def test_direct_add_manager_by_time_office_forbidden(to_tok):
         f"{BASE}/api/admin/employees",
         headers=_h(to_tok),
         json={
-            "full_name": "E2E Wannabe Mgr",
+            "full_name": "E2E Wannabe CGM",
             "phone": phone,
             "department_code": "PRODUCTION",
-            "role_code": "Manager",
+            "role_code": "CGM",
             "shift_code": "A",
             "emp_id": eid,
         },
@@ -318,7 +320,8 @@ def test_patch_worker_rename_by_time_office(to_tok):
     assert r.json().get("full_name") == "E2E Renamed Worker"
 
 
-def test_patch_grant_manager_by_time_office_forbidden(to_tok):
+def test_patch_grant_manager_by_time_office_allowed(to_tok):
+    # Prompt 21: Time Office MAY grant the Manager role (installing HODs)
     wid = getattr(pytest, "_e2e_worker_id", None)
     if not wid:
         pytest.skip("worker not created")
@@ -328,17 +331,33 @@ def test_patch_grant_manager_by_time_office_forbidden(to_tok):
         json={"role_code": "Manager"},
         timeout=20,
     )
+    assert r.status_code == 200, r.text
+    # revert so the follow-up tests still operate on a Worker
+    r = requests.patch(
+        f"{BASE}/api/admin/employees/{wid}",
+        headers=_h(to_tok),
+        json={"role_code": "Worker"},
+        timeout=20,
+    )
+    assert r.status_code == 200, r.text
+    # ...but CGM/MD roles remain top-only
+    r = requests.patch(
+        f"{BASE}/api/admin/employees/{wid}",
+        headers=_h(to_tok),
+        json={"role_code": "CGM"},
+        timeout=20,
+    )
     assert r.status_code == 403, r.text
 
 
-def test_patch_manager_account_by_time_office_forbidden(to_tok):
-    # Try to patch the demo ACCOUNTS Manager (+919000000101) — must be 403
+def test_patch_cgm_account_by_time_office_forbidden(to_tok):
+    # Patching the demo CGM account must stay 403 (Prompt 21 rails)
     me = requests.get(
-        f"{BASE}/api/auth/me", headers=_h(_login(ACC_MGR_PHONE)), timeout=15
+        f"{BASE}/api/auth/me", headers=_h(_login(CGM_PHONE)), timeout=15
     ).json()
-    mgr_id = me["id"]
+    cgm_id = me["id"]
     r = requests.patch(
-        f"{BASE}/api/admin/employees/{mgr_id}",
+        f"{BASE}/api/admin/employees/{cgm_id}",
         headers=_h(to_tok),
         json={"full_name": "Hax"},
         timeout=20,

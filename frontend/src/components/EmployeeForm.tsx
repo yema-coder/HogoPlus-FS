@@ -45,7 +45,14 @@ interface Props {
 export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit }: Props) {
   const { t } = useTranslation();
   const rank = useAuthStore((s) => s.profile?.role?.rank ?? 6);
-  const roles = rank <= 2 ? ["Worker", "Staff", "Clerk", "Manager"] : ["Worker", "Staff", "Clerk"];
+  const isTimeOffice = useAuthStore(
+    (s) => s.profile?.role_code === "Manager" && s.profile?.department_code === "TIME_OFFICE",
+  );
+  // Prompt 21: Time Office may grant the Manager role (installing HODs); CGM/MD roles stay top-only.
+  const roles =
+    rank <= 2 || isTimeOffice
+      ? ["Worker", "Staff", "Clerk", "Manager"]
+      : ["Worker", "Staff", "Clerk"];
   // edit mode defaults to KEEP: never overwrite today's shift unless explicitly changed
   const shifts = mode === "edit" ? ["KEEP", ...SHIFTS] : SHIFTS;
 

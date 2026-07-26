@@ -259,6 +259,7 @@
     "generic": "Could not complete. Try again.",
     "sessionExpired": "Session expired. Log in again.",
     "cameraDenied": "Camera permission needed. Allow it in Settings.",
+    "cameraStart": "Camera could not start. Close other camera apps and try again.",
     "locationDenied": "Location permission needed. Allow it in Settings.",
     "uploadFailed": "Couldn't upload right now — we'll keep it safe, try again.",
     "uploadRejected": "Photo was rejected by the server. Retake and try again."
@@ -497,6 +498,8 @@
     "phoneTaken": "This phone number is already in use",
     "idTaken": "This employee ID is already taken",
     "notAllowed": "You are not allowed to make this change",
+    "makeHod": "Set as department manager (HOD) of {{dept}}",
+    "hodSet": "HOD updated: {{name}}",
     "keepShift": "Keep current"
   }
 }

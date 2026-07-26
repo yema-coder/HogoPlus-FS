@@ -251,3 +251,10 @@ export const patchEmployee = (
     is_active: boolean;
   }>,
 ) => api<EmployeeProfile>(`/admin/employees/${id}`, { method: "PATCH", body });
+
+/** Prompt 21: install an employee as a department's HOD (Time Office / CGM / MD). */
+export const assignDeptManager = (code: string, employeeId: string) =>
+  api<{ department_code: string; manager_employee_id: string; manager_name: string }>(
+    `/admin/departments/${code}/assign-manager`,
+    { method: "POST", body: { employee_id: employeeId } },
+  );
