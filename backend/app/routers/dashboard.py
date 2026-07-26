@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import case as sa_case, func as safunc, or_, select, text as sa_text
+from sqlalchemy import String, case as sa_case, cast as sa_cast, func as safunc, or_, select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal, get_session
@@ -289,7 +289,7 @@ async def incidents_feed(
         base = base.where(
             or_(
                 Incident.detected_plate.ilike(like),
-                Incident.category.ilike(like),
+                sa_cast(Incident.category, String).ilike(like),
                 Incident.department_code.ilike(like),
                 Employee.full_name.ilike(like),
                 Incident.description.ilike(like),
