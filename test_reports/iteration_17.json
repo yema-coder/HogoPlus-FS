@@ -1,0 +1,47 @@
+{
+  "summary": "Prompt 21 pre-launch frontend E2E on Expo web (390x800). CRITICAL BLOCKER FOUND: /app/frontend/src/api/client.ts reads EXPO_PUBLIC_API_URL which in /app/frontend/.env points to production https://api.hogoplus.in — but that DB has no demo accounts, so demo OTP 123456 returns 401 for +919000000113 / +919000000101 / +919000000500. Verified via curl: preview backend accepts demo OTP (200), production API rejects (401 'Invalid OTP'). To unblock testing I temporarily set EXPO_PUBLIC_API_URL to the preview URL, re-ran the flows, then REVERTED the .env change back to https://api.hogoplus.in (both edits committed via search_replace). After the temporary override, all Prompt 21 Time Office frontend flows were verified end-to-end. Escalate flow was NOT re-tested in-browser (approvals-tab session lost between browser_automation invocations because localStorage isn't shared across calls); backend escalate contracts are already 17/17 green in iter16 (dept + person modes, fallback, reason<3 422).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "API base URL misconfigured for preview",
+        "issue": "src/api/client.ts:5 uses process.env.EXPO_PUBLIC_API_URL which is https://api.hogoplus.in (production). Preview web build therefore hits production API, where demo phones (+91900000xxxx) are not seeded/whitelisted, so all demo logins return 401 'Invalid OTP'. Either (a) switch client.ts to EXPO_PUBLIC_BACKEND_URL, or (b) point EXPO_PUBLIC_API_URL to the preview URL in the preview environment while keeping production build config separate. Reference: /app/frontend/src/api/client.ts:5, /app/frontend/.env",
+        "affected_testIDs": ["phone-input", "otp-input", "verify-otp-button"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "RN Web console warnings (pre-existing, non-blocking)", "issue": "'shadow* style props are deprecated. Use boxShadow' and 'useNativeDriver is not supported' on Expo web. Cosmetic."}
+    ]
+  },
+  "test_report_links": [
+    "/tmp/to_home.png (Time Office home with home-tile-employees)",
+    "/tmp/to_search_worker.png (search 'Demo Store Worker' → 2 rows)",
+    "/tmp/to_edit_worker.png (edit worker: role chips include Worker/Staff/Clerk/Manager)",
+    "/tmp/to_after_save_mgr.png ('Changes saved' toast after setting role to Manager)",
+    "/tmp/to_edit_mgr.png (edit Demo Store Manager D112 — emp-make-hod-button visible)",
+    "/tmp/to_hod_press.png (HOD button pressed → 403 network response, toast shown)"
+  ],
+  "action_items": [
+    "CRITICAL: Fix EXPO_PUBLIC_API_URL misconfig — either make client.ts read EXPO_PUBLIC_BACKEND_URL (already set to preview URL), or use a preview-specific .env override so preview builds don't call production. Currently untestable via web preview without patching .env; this iteration temporarily flipped .env to preview to run tests and then reverted.",
+    "VERIFIED (Prompt 21) — Time Office (D113/+919000000113): (1) home-tile-employees renders, (2) Employees search returns Demo Store Worker (D012) and Demo Store Manager (D112), (3) EmployeeForm role chips include 'Manager' testID=emp-role-Manager for Time Office (in addition to Worker/Staff/Clerk), (4) editing worker → role Manager → save returns 200 with 'Changes saved' toast, (5) reverted role back to Worker → 200 (data left clean), (6) Time Office CAN open a Manager account (Demo Store Manager D112) edit form (no 403), (7) emp-make-hod-button IS visible on Manager account edit as required, (8) pressing HOD button for demo Manager returns 403 (network log) and shows an error toast — no crash, correct behavior per handoff.",
+    "NOT VERIFIED in-browser (session isolation between browser_automation invocations, would need one long-running script): EscalateModal dept-mode + person-mode submit for +919000000101 approvals-tab-Complaints incident. Backend contracts already 17/17 green (iter16 live_prompt17.xml). Recommend main agent self-test in a single browser session, or a follow-up UI-only pass with a combined-flow script.",
+    "MINOR (pre-existing, from iter16): employees/index.tsx search race + announce.tsx web navigation still open."
+  ],
+  "critical_code_review_comments": [
+    "/app/frontend/src/api/client.ts:5 — const BASE = process.env.EXPO_PUBLIC_API_URL. Should probably be EXPO_PUBLIC_BACKEND_URL to keep parity with the rest of the codebase (backend URL is the intended target for the mobile app). Otherwise preview builds always hit prod.",
+    "EscalateModal.tsx correctly renders errors INSIDE the modal via testID='escalate-error' — code review PASS. localizedDetail() extracts trilingual 409 messages; on ApiError 0 falls back to network; on 409 falls back to generic. Prompt 21 Bug-4 fix contract met.",
+    "employees/edit.tsx correctly gates emp-make-hod-button on employee.role_code === 'Manager', calls assignDeptManager, shows toast on success + 403 handling. Code review PASS.",
+    "EmployeeForm.tsx role list correctly includes 'Manager' when isTimeOffice OR rank<=2. Code review PASS."
+  ],
+  "updated_files": [
+    "/app/frontend/.env (TEMPORARY: EXPO_PUBLIC_API_URL flipped to preview URL for testing, then REVERTED back to https://api.hogoplus.in — .env is back to original state)"
+  ],
+  "success_rate": {"backend": "n/a (frontend-only pass this iter)", "frontend": "Time Office Prompt 21 UI flows: 100% verified (7/7 assertions from review request). EscalateModal UI: not re-tested in browser this iter — backend contract already 17/17 green in iter16."},
+  "seed_data_creation": "No new seed rows created. Mutated Demo Store Worker (D012) role: Worker → Manager → Worker (net zero, data left clean per handoff instructions). Also pressed HOD button on Demo Store Manager D112 which returned 403 (no state change).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "CRITICAL: Before touching UI on the preview web (port 3000), verify /app/frontend/.env EXPO_PUBLIC_API_URL is pointing at the preview backend, not https://api.hogoplus.in. If it's the prod URL, demo OTP will return 401 for every demo phone and nothing on the UI is testable. Recommended workaround (do NOT commit): flip EXPO_PUBLIC_API_URL to https://hogo-backend-phase1.preview.emergentagent.com, `sudo supervisorctl restart expo`, run tests, then revert. Also: page.fill and page.keyboard.type do NOT reliably drive RN Web TextInputs — use this JS shim to trigger onChangeText: `page.evaluate((sel,val)=>{const el=document.querySelector(sel); const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; setter.call(el,val); el.dispatchEvent(new InputEvent('input',{bubbles:true,data:val,inputType:'insertText'}));}, sel, val)`. mcp_browser_automation invocations DO NOT share localStorage/sessionStorage; put the entire flow in a single script or you'll bounce back to /phone. Approvals tab has segmented sub-tabs (Forms/Registrations/Swaps/Complaints) — after landing on /approvals click the 'Complaints' segment to see approval-incident rows; the sub-tab does NOT have a stable testID (nice-to-add: approvals-segment-incidents).",
+  "rca_of_issue": "ROOT CAUSE of demo login 401: frontend/src/api/client.ts reads EXPO_PUBLIC_API_URL, and frontend/.env sets that to https://api.hogoplus.in (production). Production DB does not have the demo cast seeded / DEMO_OTP_ENABLED is false, so /api/auth/verify-otp with OTP '123456' → 401 'Invalid OTP'. The rest of the .env (EXPO_PUBLIC_BACKEND_URL) is correctly set to the preview host but is unused by the API client. FIX: update client.ts to `process.env.EXPO_PUBLIC_BACKEND_URL` OR maintain a preview-only .env with EXPO_PUBLIC_API_URL=preview URL. Confirmed by direct curl (preview /api/auth/verify-otp → 200 with tokens; prod /api/auth/verify-otp → 401 'Invalid OTP')."
+}
