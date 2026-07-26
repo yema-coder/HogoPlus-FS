@@ -716,3 +716,27 @@ backend accepts GPS-less punch as flagged/gps_missing. Bug4 = escalate API works
 dept-mode 409 for 7 manager-less depts when CGM escalates (fallback target = self); error toasts inside RN
 Modal are INVISIBLE on Android (ToastHost under native modal window) → "does nothing".
 Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
+
+## Prompt 21 (contd) — Approved fixes + Time Office role management (2026-07)
+- Bug 4 SHIPPED (backend): escalate dept-mode fallback dept-mgr→CGM→MD, never caller; trilingual 409
+  no_escalation_target. Verified live: previously-409 dept escalate now 200. EscalateModal (v1.0.10):
+  errors render INSIDE the sheet (testID escalate-error) via localizedDetail; list-load failures surfaced.
+- Bug 3 SHIPPED (app, v1.0.10): CaptureGuards strict prop (punch flow only): no Continue-anyway for
+  location/gps/bluetooth; BLE off/unknown blocks on real builds (getBleScanner().isReal); 3s poll + AppState
+  recheck; guard.strictBody i18n en/hi/mr. Backend 422 for GPS-less punches HELD (still flagged) per user.
+- Bug 2 SHIPPED (app, v1.0.10): SelfieCamera hardening — auto-request undetermined permission on mount,
+  ActivityIndicator instead of black !permission view, CameraView onMountError + 6s onCameraReady watchdog
+  (native only) → trilingual errors.cameraStart + Retry (remount via key) + Open Settings. User's device
+  discriminator answer still pending (pure-black vs permission card).
+- TIME OFFICE ROLE MANAGEMENT (new req, SHIPPED): patch_employee + direct_add rails relaxed rank<=3→rank<=2
+  (TO may grant/edit Manager, never CGM/MD, both directions); assign-manager endpoint opened to
+  _require_time_office_or_top with rails: demo actors 403 (shared table), TO-installed HOD must hold Manager
+  role, target must be real+active; all audited (employee.updated / department.assign_manager). App:
+  EmployeeForm Manager chip for TO; employees/edit 'Set as HOD' button (emp-make-hod-button) for Manager
+  accounts. Tests updated: test_prompt17 (direct-add + patch guardrails), test_admin_misc (assign-manager TO
+  cases), live_prompt17_api (grant-manager-allowed, cgm-forbidden). Verified live 6/6 rails + testing agent
+  iteration_17 ALL UI FLOWS PASS.
+- NOTE (intentional): frontend/.env EXPO_PUBLIC_API_URL points to the Mumbai custom domain for device builds —
+  web-preview demo logins 401 against it; testing agent temporarily flips to preview URL and reverts.
+- Manager-less departments (user assigning interim HODs via webdash): ACCOUNTS, AGRICULTURE, CANE_YARD,
+  CIVIL, DISTILLERY, GODOWN, STORE.

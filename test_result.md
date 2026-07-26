@@ -293,3 +293,13 @@ NOTE: video recording NOT testable on web preview (expo-camera recordAsync is na
   empty state for up to ~30s before rows appear. Data + badge are correct; native builds unaffected.
 - Face enrollment + CaptureGuards are NATIVE-ONLY by design (web bypass). Push delivery requires a built APK;
   token registration is a safe no-op in Expo Go/web.
+
+## Prompt 21 (2026-07) — Pre-launch triage + Time Office role mgmt
+- Bug1 hardening verified live: boot line OTP CONFIG, fail-fast OTP_MODE_NOT_SET, demo default OFF,
+  rate limit 5/10min + 45s cooldown (429 carries retry_after_seconds en/hi/mr), raw SMSGatewayHub logging.
+- Bug4 backend fallback verified live (409→200). Time Office rails verified live 6/6 (grant Manager 200,
+  edit Manager 200, grant CGM 403, edit CGM 403, demo assign-manager 403, worker patch 403).
+- iteration_17 (frontend, web): ALL PASS — TO login, Manager chip, role grant+revert, HOD button visible,
+  demo HOD press → 403 toast, no crash. EscalateModal submit modes code-reviewed (session limits), backend green.
+- Pytest NOT runnable in this fork (no local PG/Redis); suites updated for new policy: test_prompt17,
+  test_admin_misc, test_auth (rate limit), live_prompt17_api. Run on server/CI.
