@@ -35,8 +35,11 @@ export default function PhoneEntry() {
     const phone = `+91${digits}`;
     setLoading(true);
     try {
-      await sendOtp(phone);
-      router.push({ pathname: "/(auth)/otp", params: { phone } });
+      const r = await sendOtp(phone);
+      router.push({
+        pathname: "/(auth)/otp",
+        params: { phone, resendAfter: String(r.resend_after ?? 0) },
+      });
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
         // rate limit: backend sends {retry_after_seconds, en, hi, mr}

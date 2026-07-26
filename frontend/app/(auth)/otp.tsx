@@ -21,16 +21,16 @@ import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
-// matches the backend's OTP_RESEND_COOLDOWN_SECONDS default (45s)
-const RESEND_SECONDS = 45;
-
 export default function OtpEntry() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
-  const { phone } = useLocalSearchParams<{ phone: string }>();
+  const { phone, resendAfter } = useLocalSearchParams<{ phone: string; resendAfter?: string }>();
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [seconds, setSeconds] = useState(RESEND_SECONDS);
+  const [resending, setResending] = useState(false);
+  // Prompt 21: resend countdown is SERVER-driven (send-otp returns resend_after;
+  // 429 returns retry_after_seconds) — no client-side hardcoded lockout.
+  const [seconds, setSeconds] = useState(() => Math.max(0, Number(resendAfter ?? 0) || 0));
   const inputRef = useRef<TextInput>(null);
   const submittedFor = useRef<string | null>(null);
   const setSession = useAuthStore((s) => s.setSession);
@@ -79,16 +79,24 @@ export default function OtpEntry() {
   };
 
   const resend = async () => {
-    if (!phone) return;
+    if (!phone || resending) return;
+    setResending(true);
     try {
-      await sendOtp(phone);
-      setSeconds(RESEND_SECONDS);
+      const r = await sendOtp(phone);
+      setSeconds(Math.max(0, r.resend_after ?? 0));
       showToast(t("auth.otpSent", { phone }), "success");
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        // rate limit: backend sends {retry_after_seconds, en, hi, mr}
+        // rate limit: backend sends {retry_after_seconds, en, hi, mr} — mirror the
+        // server's wait into the countdown so the button re-arms exactly on time
+        const d = e.detail as { retry_after_seconds?: number } | string | null;
+        if (typeof d === "object" && d !== null && typeof d.retry_after_seconds === "number") {
+          setSeconds(Math.max(0, d.retry_after_seconds));
+        }
         showToast(localizedDetail(e, i18n.language || "mr") ?? t("auth.locked"), "error");
       } else showToast(t("errors.server"), "error");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -143,7 +151,12 @@ export default function OtpEntry() {
             {seconds > 0 ? (
               <Text style={styles.resendIn}>{t("auth.resendIn", { s: seconds })}</Text>
             ) : (
-              <Pressable onPress={() => void resend()} testID="resend-otp-button" style={styles.linkBtn}>
+              <Pressable
+                onPress={() => void resend()}
+                disabled={resending}
+                testID="resend-otp-button"
+                style={[styles.linkBtn, resending && { opacity: 0.5 }]}
+              >
                 <Text style={styles.link}>{t("auth.resend")}</Text>
               </Pressable>
             )}

@@ -23,11 +23,14 @@ import type {
 } from "@/src/api/types";
 
 export const sendOtp = (phone: string) =>
-  api<{ message: string; otp_mode: string }>("/auth/send-otp", {
-    method: "POST",
-    body: { phone },
-    auth: false,
-  });
+  api<{ message: string; otp_mode: string; expires_in?: number; resend_after?: number }>(
+    "/auth/send-otp",
+    {
+      method: "POST",
+      body: { phone },
+      auth: false,
+    },
+  );
 
 export const verifyOtp = (phone: string, otp: string) =>
   api<VerifyOtpResponse>("/auth/verify-otp", { method: "POST", body: { phone, otp }, auth: false });
