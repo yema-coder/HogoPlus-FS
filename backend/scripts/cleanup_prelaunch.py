@@ -47,6 +47,8 @@ DELETE_STEPS = [
      "DELETE FROM shift_swap_requests WHERE is_demo = false"),
     ("notifications (alerts + test announcements)",
      "DELETE FROM notifications WHERE is_demo = false"),
+    ("chat_messages (Sahayak test chats — worker-visible)",
+     "DELETE FROM chat_messages WHERE is_demo = false"),
 ]
 
 # Count queries mirroring each DELETE (same WHERE) for the dry-run table.
@@ -62,8 +64,7 @@ PRESERVE_TABLES = [
 ]
 # reported-but-NOT-deleted (not in the delete list) so you can decide separately:
 REPORT_ONLY = [
-    ("chat_messages (real Sahayak/AI chats — NOT in delete list)", "SELECT count(*) FROM chat_messages WHERE is_demo = false"),
-    ("otp_attempts (OTP send log — NOT in delete list)", "SELECT count(*) FROM otp_attempts"),
+    ("otp_attempts (OTP send log — KEPT for launch-day debugging)", "SELECT count(*) FROM otp_attempts"),
 ]
 
 
