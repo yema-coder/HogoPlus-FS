@@ -740,3 +740,13 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   web-preview demo logins 401 against it; testing agent temporarily flips to preview URL and reverts.
 - Manager-less departments (user assigning interim HODs via webdash): ACCOUNTS, AGRICULTURE, CANE_YARD,
   CIVIL, DISTILLERY, GODOWN, STORE.
+
+## QA Campaign close-out (2026-07-26 night, pre-launch freeze)
+- LAST backend change before freeze: incidents-feed search 500 fixed (enum→String cast for ILIKE),
+  commit 7e7c612; verified 200 on plate/text/dept/no-q searches against Neon.
+- Webdash FULL UI pass done (all 8 views + Marathi toggle + detail modal) — screenshots delivered.
+- Nightly PDF Devanagari verified (mr/hi generated locally from prod data; shaping correct).
+- cleanup_prelaunch.py HELD for explicit "RUN CLEANUP" (runs on EC2:
+  `docker compose exec backend python scripts/cleanup_prelaunch.py --execute`, or from sandbox vs Neon).
+- Deferred to post-launch per user: shift-swap SELECT..FOR UPDATE, outbox idempotency,
+  .dockerignore destructive scripts, full-decode upload validation, GET /admin/employees/{id}.

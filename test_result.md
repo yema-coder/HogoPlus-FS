@@ -312,3 +312,21 @@ PHASE 1 PASS: OTP send/resend/5-per-10min window(6th=429 retry_after trilingual)
 PHASE 2 PASS: DB isolation ALL cross-tenant is_demo mismatch=0 (incidents/attendance/form_sub); orphans=0 (1 real emp "Eyam" NULL dept = expected pending_approval self-reg, by design). Scheduler: 6 jobs registered+firing; "skipped — already executed by another container" = Redis NX lock (jobs:lock:*) prevents double-run (PROVEN). Demo sweep cadence 15min / age threshold 60min (DEMO_MAX_AGE_MINUTES) — working. SMS otp_mode=demo(sandbox)/smsgatewayhub(prod), entity_id BLANK, template_has_{#var#}=True.
 ISSUES: (2 week-1) shift-swap respond/decide TOCTOU race — concurrent double-accept=[200,200] → dup manager notif+audit; decide protected by uq_shift_assignment (no shift corruption, would 500 on concurrent approve). (week-1) NO idempotency key on incidents/forms → outbox retry after mid-upload drop = duplicate (punch guarded by per-day 409). (backlog) restore_latest.py DROP SCHEMA + seed scripts shipped in prod image (restore guarded by --yes). (backlog) upload magic-check validates header only (corrupt-body-valid-header stored). (minor) GET /admin/employees/{id} → 405 (no route).
 COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup object key; Rekognition-from-Mumbai-account confirm; scheduler firing on host; webdash UI + nightly PDF Devanagari; Bug-2 on-device camera; push delivery (needs build); Phase-3 500VU load (isolated env, scheduled).
+
+## WEBDASH FULL UI PASS + SEARCH FIX (v1.0.10) — 2026-07-26
+- FIX (last backend change before freeze): dashboard.py incidents-feed `q` search 500 —
+  `Incident.category` is pg enum INCIDENT_CATEGORY; ILIKE needs `sa_cast(..., String)`.
+  Verified sandbox+Neon: q=KL26J3344/vehicle/safe/SECURITY/no-q all 200. Commit 7e7c612.
+- UI PASS (CGM via OTP + injected JWT, 1920x800): login, complaints feed (critical-first),
+  plate search KL26J3344 → 1 row + detail modal (photo/plate/badges), overview KPIs+pulse+13 dept
+  tiles, dept detail (SECURITY: trends chart, register, 13 open complaints), approvals (45 rows,
+  per-manager cards), attendance register (empty-state OK; ~4s Neon latency on dept endpoint),
+  reports (7 nightly EN PDFs + Ask Sahayak), admin (geofence 19/74.7/500m, 0 beacons, 6 no-phone,
+  SOP empty), Marathi UI toggle fully Devanagari.
+- NIGHTLY PDF DEVANAGARI: generated mr+hi+en locally from prod data (read-only, no R2/notify);
+  fpdf2+uharfbuzz shaping renders conjuncts/matras correctly (अभियांत्रिकी, चिह्नित, घटनाएँ). PASS.
+- BY DESIGN (not bugs): pulse + nightly-PDF language follows CGM language_pref (currently en),
+  not the webdash toggle → EN-only reports list. Approvals shows "— (null)" card for Eyam
+  (NULL-dept pending self-reg; disappears after cleanup). Feed rows without photo show gray box.
+- HELD: scripts/cleanup_prelaunch.py awaiting explicit "RUN CLEANUP". Shift-swap TOCTOU +
+  outbox idempotency deferred to post-launch (user choice b/b).
