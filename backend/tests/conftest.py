@@ -5,17 +5,49 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+# =============================================================================
+# CAMPAIGN ISSUE #1 — PRODUCTION-DATA-LOSS GUARD (must run before app.database
+# is imported, i.e. before the SQLAlchemy engine binds to DATABASE_URL).
+#
+# This suite calls Base.metadata.drop_all() in _seed_base(). If DATABASE_URL is
+# ever inherited from a production container, that would DROP EVERY PRODUCTION
+# TABLE. The previous code used os.environ.setdefault(...), which KEEPS an
+# already-set (production) URL. We now:
+#   1. FORCE the test URLs (setdefault → hard assignment) so an inherited
+#      production URL can never be adopted.
+#   2. HARD-ABORT unless the resolved DATABASE_URL is a recognised test target
+#      (contains "_test", "localhost", or "127.0.0.1"). Never fall through to
+#      drop_all against an unrecognised host.
+# An operator may point at a custom test DB via TEST_DATABASE_URL / TEST_REDIS_URL.
+# =============================================================================
+_DEFAULT_TEST_DB = "postgresql+asyncpg://hogo:hogo_secret@127.0.0.1:5432/hogoplus_test"
+_DEFAULT_TEST_REDIS = "redis://127.0.0.1:6379/5"
+
 os.environ["TESTING"] = "1"
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://hogo:hogo_secret@127.0.0.1:5432/hogoplus_test")
-os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:6379/5")
-os.environ.setdefault("CELERY_BROKER_URL", "redis://127.0.0.1:6379/6")
-os.environ.setdefault("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/7")
+# FORCE (not setdefault) — discard any inherited production DATABASE_URL/REDIS_URL.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", _DEFAULT_TEST_DB)
+os.environ["REDIS_URL"] = os.environ.get("TEST_REDIS_URL", _DEFAULT_TEST_REDIS)
+os.environ["CELERY_BROKER_URL"] = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/6")
+os.environ["CELERY_RESULT_BACKEND"] = os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/7")
+
+_db_url = os.environ["DATABASE_URL"]
+_SAFE_MARKERS = ("_test", "localhost", "127.0.0.1")
+if not any(marker in _db_url for marker in _SAFE_MARKERS):
+    raise SystemExit(
+        "\n*** REFUSING TO RUN TESTS ***\n"
+        f"DATABASE_URL={_db_url!r} is NOT a recognised test database.\n"
+        "This suite calls drop_all() and would DESTROY this database.\n"
+        "Point DATABASE_URL (or TEST_DATABASE_URL) at a DB whose URL contains "
+        "one of: _test / localhost / 127.0.0.1.\n"
+        "NEVER run pytest inside a production container.\n"
+    )
+
 os.environ["JWT_SECRET"] = "test-secret-not-for-production"
 os.environ["OTP_MODE"] = "demo"
 os.environ["DEMO_OTP_ENABLED"] = "true"
 os.environ["DEMO_OTP"] = "123456"
 os.environ["OTP_RESEND_COOLDOWN_SECONDS"] = "0"  # no inter-send cooldown inside tests
-os.environ["FILE_STORAGE_MODE"] = "local"
+os.environ["FILE_STORAGE_MODE"] = "local"  # never touch a real R2 bucket in tests
 os.environ["UPLOAD_DIR"] = "/tmp/hogo_test_uploads"
 os.environ["ESCALATION_HOURS"] = "48"
 

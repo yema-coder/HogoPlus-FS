@@ -1,7 +1,7 @@
 """SMSGatewayHub OTP sender — mocked provider tests.
 
 Covers: exact DLT template substitution, SendSMS payload shape, ErrorCode handling,
-demo fallback on provider failure (non-prod) vs raise (prod), get_otp_sender mode,
+no-silent-fallback on provider failure (Prompt 21 Bug-1), get_otp_sender mode,
 and the CGM-only POST /api/admin/test-sms endpoint.
 """
 import pytest
@@ -23,11 +23,15 @@ TEMPLATE = (
 
 
 class FakeResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, status_code=200):
         self._payload = payload
+        self.status_code = status_code
 
-    def raise_for_status(self):
-        pass
+    @property
+    def text(self):
+        import json as _json
+
+        return _json.dumps(self._payload)
 
     def json(self):
         return self._payload
@@ -100,10 +104,13 @@ async def test_provider_error_code_raises():
         await SMSGatewayHubSender().send_raw("+919876543210", "123456")
 
 
-async def test_send_falls_back_to_demo_in_nonprod(monkeypatch):
+async def test_send_raises_even_with_demo_enabled(monkeypatch):
+    """Prompt 21 Bug-1: the silent demo fallback was REMOVED — gateway failures always
+    surface as SMSDeliveryError regardless of DEMO_OTP_ENABLED."""
     FakeAsyncClient.exc = RuntimeError("network down")
     monkeypatch.setattr(settings, "demo_otp_enabled", True)
-    await SMSGatewayHubSender().send("+919876543210", "123456")  # must NOT raise
+    with pytest.raises(SMSDeliveryError):
+        await SMSGatewayHubSender().send("+919876543210", "123456")
 
 
 async def test_send_raises_in_prod(monkeypatch):
