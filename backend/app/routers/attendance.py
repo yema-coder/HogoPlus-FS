@@ -128,22 +128,26 @@ async def punch_in(
         minor=body.ble_ibeacon_minor,
     )
 
-    # verification level
+    # verification level — BEACON WINS (launch order 2026-07-27): a matched registered
+    # beacon is physical proof of presence (beacons are mounted inside the factory),
+    # so it yields verified_plus even when GPS drifts outside the geofence or is
+    # missing. Geofence/GPS flagging applies ONLY when no beacon was matched.
     inside = False
+    distance = None
     flagged_reason = None
-    if body.gps_lat is None or body.gps_lng is None:
-        level = "flagged"
-        flagged_reason = "gps_missing"
-    else:
+    if body.gps_lat is not None and body.gps_lng is not None:
         distance = _haversine_m(body.gps_lat, body.gps_lng, fs.factory_lat, fs.factory_lng)
         inside = distance <= fs.radius_meters
-        if not inside:
-            level = "flagged"
-            flagged_reason = f"outside_geofence({int(distance)}m)"
-        elif matched_beacon:
-            level = "verified_plus"
-        else:
-            level = "verified"
+    if matched_beacon:
+        level = "verified_plus"
+    elif body.gps_lat is None or body.gps_lng is None:
+        level = "flagged"
+        flagged_reason = "gps_missing"
+    elif not inside:
+        level = "flagged"
+        flagged_reason = f"outside_geofence({int(distance)}m)"
+    else:
+        level = "verified"
 
     # attribute date: with the corrected windows (C = 00:00–08:00) every shift's
     # punch-in window sits inside a single calendar day, so a 01:30 punch belongs
