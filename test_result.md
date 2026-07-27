@@ -330,3 +330,25 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   (NULL-dept pending self-reg; disappears after cleanup). Feed rows without photo show gray box.
 - HELD: scripts/cleanup_prelaunch.py awaiting explicit "RUN CLEANUP". Shift-swap TOCTOU +
   outbox idempotency deferred to post-launch (user choice b/b).
+
+## FIELD FAILURE FIX-PACK (2026-07-27/28, pre-launch) — commits 7e7c612..e3111c4
+- STAGE 1 diagnosis: (i) geofence was placeholder 19.0/74.7/500 → 35 km off; user pasted
+  19.313483/74.709384/1200 (verified live). (ii) ZERO beacon payloads in all 4 field punches —
+  root cause `neverForLocation:true` on ble-plx plugin (Android 12+ OS filters iBeacon frames),
+  + LOW_POWER 3s scan window + fail-open permission skip. (iii) ladder: outside_geofence beat
+  matched beacon. (iv) 0001/1212 face score NULL = ghost references (NoSuchKey on R2).
+- A BEACON WINS (c0c08c9, DEPLOYED to EC2 by user): matched registered beacon → verified_plus
+  regardless of GPS; flagging only when no beacon. 8-test matrix + live demo-punch proof.
+- C2 (2a407ed): ble_zone added to incidents-feed + department serializers (webdash read it but
+  backend never sent it); Department modal zone block. Live-verified 3 render points.
+- Ghost-ref hardening (f80b1f4): NoSuchKey on reference at compare → clear stale key +
+  re-bootstrap this punch (flagged reference_bootstrap) + audit. test_ghost_reference_rebootstraps.
+- v1.0.11 (0a3ef32): neverForLocation removed; scanMode LOW_LATENCY, 10s early-exit scan;
+  Nearby-devices perm in CaptureGuards (Allow/Open Settings, canAskAgain) + fail-closed trilingual
+  abort in punch flow; incident camera behind same strict guards (C1). versionCode 10011.
+- Local PG16+pgvector+Redis rebuilt in this pod; full suite 204 passed. KNOWN FLAKE (pre-existing):
+  test_demo_isolation::test_nightly_report_excludes_demo_rows fails when UTC date != IST date
+  (18:30-00:00 UTC) — IST 'today' vs created_at::date(UTC) mismatch in the TEST query.
+- STAGE3_v1.0.11_TEST_PLAN.md: evidence tables + 20-min field protocol + ship matrix.
+- Beacons registered earlier (6 iBeacon rows, shared registry, no is_demo column).
+- NOTE: B/C1 are native-only — NOT verifiable in Expo Go/web; device APK required.

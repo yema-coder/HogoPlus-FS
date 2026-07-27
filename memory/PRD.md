@@ -750,3 +750,13 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   `docker compose exec backend python scripts/cleanup_prelaunch.py --execute`, or from sandbox vs Neon).
 - Deferred to post-launch per user: shift-swap SELECT..FOR UPDATE, outbox idempotency,
   .dockerignore destructive scripts, full-decode upload validation, GET /admin/employees/{id}.
+
+## Field failure fix-pack (launch eve, 2026-07-28)
+- Beacon registry: 6 real iBeacons (uuid 01122334-...-eff0, major 1, minors 33/18/7/34/4/15).
+- Geofence now 19.313483/74.709384/1200m (user-applied).
+- BEACON WINS ladder live on EC2. v1.0.11 (10011) ready: neverForLocation removed, LowLatency
+  10s early-exit scan, fail-closed Nearby-devices gate, incident strict guard, zone tag E2E.
+- Ghost-reference hardening + reset-reference-selfie endpoint = recovery paths for lost R2 refs.
+- Pending user actions: deploy 2a407ed/f80b1f4 backend pack; build v1.0.11 via Publish (AAB for
+  Play with PEPK existing-key setup BEFORE first upload); field protocol in STAGE3_v1.0.11_TEST_PLAN.md;
+  reject 4 flagged rows; clear refs 0001/1212 (curl reset-reference-selfie); then RUN CLEANUP.
