@@ -91,6 +91,9 @@ const D: Record<string, [string, string, string]> = {
   // Department
   trends14: ["14-day trends", "14-दिन का रुझान", "14 दिवसांचा कल"],
   attendanceRegister: ["Attendance register", "उपस्थिति रजिस्टर", "हजेरी रजिस्टर"],
+  allDepartments: ["All departments (flagged)", "सभी विभाग (फ़्लैग्ड)", "सर्व विभाग (फ्लॅग्ड)"],
+  pendingFlagged: ["pending flagged", "लंबित फ़्लैग्ड", "प्रलंबित फ्लॅग्ड"],
+  department: ["Department", "विभाग", "विभाग"],
   submissions: ["Form submissions", "फ़ॉर्म सबमिशन", "फॉर्म सबमिशन"],
   punchIn: ["Punch in", "पंच इन", "पंच इन"],
   punchOut: ["Punch out", "पंच आउट", "पंच आउट"],

@@ -6,6 +6,8 @@ import { localName, useI18n } from "../i18n";
 
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
+const ALL = "__ALL__";
+
 export default function Attendance() {
   const { t, lang } = useI18n();
   const { user } = useAuth();
@@ -14,21 +16,27 @@ export default function Attendance() {
   const [dept, setDept] = useState(user?.department_code || "");
   const [date, setDate] = useState(today());
   const [data, setData] = useState<any>(null);
+  const [flaggedRows, setFlaggedRows] = useState<any[] | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
 
   useEffect(() => {
     api("/departments").then((d) => {
       setDepts(d);
-      if (all && !dept && d.length) setDept(d[0].code);
+      if (all && !dept) setDept(ALL); // top-mgmt lands on the whole-factory flagged list
     });
   }, []);
 
   const load = () => {
     if (!dept) return;
     setData(null);
+    setFlaggedRows(null);
     setErr("");
-    api(`/dashboard/department/${dept}?date=${date}`).then(setData).catch((e) => setErr(e.message));
+    if (dept === ALL) {
+      api(`/attendance/flagged?date=${date}`).then(setFlaggedRows).catch((e) => setErr(e.message));
+    } else {
+      api(`/dashboard/department/${dept}?date=${date}`).then(setData).catch((e) => setErr(e.message));
+    }
   };
   useEffect(load, [dept, date]);
 
@@ -50,9 +58,11 @@ export default function Attendance() {
     <div>
       <div className="topbar">
         <h1 data-testid="attendance-title">{t("attendanceRegister")}</h1>
-        <div style={{ display: "flex", gap: 10 }}>
+        {/* marginRight clears the fixed EN/हिं/मरा switcher (top-right, ~140px) */}
+        <div style={{ display: "flex", gap: 10, marginRight: 150 }}>
           {all ? (
             <select data-testid="attendance-dept-select" value={dept} onChange={(e) => setDept(e.target.value)}>
+              <option value={ALL}>{t("allDepartments")}</option>
               {depts.map((d) => <option key={d.code} value={d.code}>{localName(d, lang)}</option>)}
             </select>
           ) : (
@@ -63,7 +73,47 @@ export default function Attendance() {
       </div>
 
       {err && <div className="card" style={{ color: "var(--danger)" }}>{err}</div>}
-      {!data ? (!err && <Loading />) : (
+      {dept === ALL ? (
+        !flaggedRows ? (!err && <Loading />) : (
+          <div className="card">
+            <h2>{t("allDepartments")} — {date} · {flaggedRows.length} {t("pendingFlagged")}</h2>
+            {flaggedRows.length === 0 ? <Empty /> : (
+              <table data-testid="attendance-flagged-table">
+                <thead>
+                  <tr>
+                    <th>{t("empId")}</th><th>{t("name")}</th><th>{t("department")}</th><th>{t("punchIn")}</th>
+                    <th>{t("verification")}</th><th>{t("faceScore")}</th>
+                    {canReview && <th>{t("actions")}</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {flaggedRows.map((a: any) => (
+                    <tr key={a.id} className="red">
+                      <td>{a.emp_id}</td>
+                      <td>{a.employee_name}</td>
+                      <td>{a.department_code || "—"}</td>
+                      <td>{fmtTime(a.punch_in_at)}</td>
+                      <td>
+                        <VerifChip level={a.verification_level} />
+                        {a.flagged_reason && <div style={{ fontSize: 12, color: "var(--muted)" }}>{a.flagged_reason}</div>}
+                      </td>
+                      <td>{a.face_match_score != null ? `${Math.round(a.face_match_score)}%` : "—"}</td>
+                      {canReview && (
+                        <td>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn success" data-testid={`approve-${a.emp_id}`} disabled={busy === a.id} onClick={() => review(a.id, "approve")}>{t("approve")}</button>
+                            <button className="btn danger" data-testid={`reject-${a.emp_id}`} disabled={busy === a.id} onClick={() => review(a.id, "reject")}>{t("reject")}</button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      ) : !data ? (!err && <Loading />) : (
         <div className="card">
           <h2>{dept} — {data.date} · {data.attendance.length}/{data.total_employees} {t("present")}</h2>
           {data.attendance.length === 0 ? <Empty /> : (

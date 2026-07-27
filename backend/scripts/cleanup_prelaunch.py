@@ -173,6 +173,11 @@ async def run(execute: bool) -> None:
         # ---- EXECUTE: single transaction ------------------------------------
         print("\n---- EXECUTING (single transaction) ----")
         before = await snapshot(session)
+        # The read-only queries above opened an implicit (autobegin) transaction;
+        # session.begin() would raise "A transaction is already begun on this
+        # Session". Roll it back first — reads only, nothing to undo — so the
+        # deletes below still run inside ONE explicit transaction.
+        await session.rollback()
         try:
             async with session.begin():
                 for label, sql in DELETE_STEPS:
