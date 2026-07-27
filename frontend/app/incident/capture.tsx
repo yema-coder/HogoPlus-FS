@@ -82,10 +82,10 @@ function VideoPreviewCard({ uri, controls = true }: { uri: string; controls?: bo
  * parallel, then one detail screen (photo, description, voice note) → submit.
  * Category defaults to 'other' — the AI suggestion is confirmed post-submit. */
 export default function IncidentCapture() {
-  // Prompt 17 Part D: location permission + GPS-toggle guard before capture
-  // (camera permission keeps its existing in-screen handling below).
+  // Launch order 2026-07-27 (C1): SAME strict guards as punch — camera, location
+  // permission, GPS on, Bluetooth on + Nearby-devices permission. No Continue-anyway.
   return (
-    <CaptureGuards location gps>
+    <CaptureGuards camera location gps bluetooth strict>
       <IncidentCaptureInner />
     </CaptureGuards>
   );
@@ -182,7 +182,9 @@ function IncidentCaptureInner() {
         }
         const allowed = await ensureBlePermissions();
         if (!allowed) return;
-        const hit = await scanner.scan(3000, registry);
+        // 10s LOW_LATENCY window, early-exit on first match (opportunistic zone tag —
+        // still non-blocking: no beacon heard = incident proceeds exactly as before).
+        const hit = await scanner.scan(10000, registry);
         if (active) bleHitRef.current = hit;
       } catch {
         // beacon is optional — never block or surface capture errors

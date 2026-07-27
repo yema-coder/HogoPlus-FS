@@ -111,7 +111,10 @@ class RealBleScanner implements BleScanner {
       try {
         this.manager.startDeviceScan(
           null,
-          { allowDuplicates: false },
+          // scanMode 2 = LOW_LATENCY: continuous radio listening for the whole window.
+          // The Android default duty cycle (~0.5s listening per 5s) can miss a beacon's
+          // advertising interval entirely inside a short window (field failure 2026-07-27).
+          { allowDuplicates: false, scanMode: 2 },
           // ble-plx callback types unavailable at build time
           (error: any, device: any) => {
             if (error) {
@@ -120,7 +123,6 @@ class RealBleScanner implements BleScanner {
               return;
             }
             if (!device) return;
-            const rssi = typeof device.rssi === "number" ? device.rssi : -100;
             let hit: BleBeaconHit | null = null;
             const mac = device.id ? String(device.id).toUpperCase() : "";
             if (mac && macSet.has(mac)) {
@@ -129,8 +131,12 @@ class RealBleScanner implements BleScanner {
               const ib = parseIBeacon(device.manufacturerData);
               if (ib && ibSet.has(ibKey(ib))) hit = { ibeacon: ib };
             }
-            if (hit && (!best || rssi > best.rssi)) {
-              best = { hit, rssi };
+            if (hit) {
+              // EARLY EXIT on the first registered match — any registered beacon
+              // proves presence; no need to burn the rest of the scan window.
+              best = { hit, rssi: typeof device.rssi === "number" ? device.rssi : -100 };
+              clearTimeout(timer);
+              finish();
             }
           },
         );
@@ -178,24 +184,50 @@ export function getBleScanner(): BleScanner {
   return cached;
 }
 
+/** Granular Nearby-devices permission state (Android 12+). */
+export type BlePermissionStatus = "granted" | "denied" | "blocked" | "unavailable";
+
+/** Check (WITHOUT prompting) whether BLE scanning is allowed right now. */
+export async function checkBlePermissions(): Promise<BlePermissionStatus> {
+  if (Platform.OS !== "android") return "granted";
+  if (!getBleScanner().isReal) return "unavailable"; // Expo Go / web — no radio access
+  if (Number(Platform.Version) < 31) return "granted"; // pre-Android-12: FINE_LOCATION covers scanning
+  try {
+    const scan = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN);
+    const conn = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
+    return scan && conn ? "granted" : "denied";
+  } catch {
+    return "denied";
+  }
+}
+
 /**
- * Lazily request Android 12+ Nearby-devices permissions right before the first
- * real BLE scan (not at onboarding). Returns true when scanning is allowed.
- * Denial is graceful: the punch flow simply skips the zone step.
+ * Request Android 12+ Nearby-devices permissions. Returns granular status so
+ * callers can FAIL CLOSED with a clear message ("blocked" = user chose
+ * "Don't ask again" → only Settings can fix it).
  */
-export async function ensureBlePermissions(): Promise<boolean> {
-  if (Platform.OS !== "android") return true;
-  if (!getBleScanner().isReal) return true; // Expo Go noop scanner — nothing to ask
-  if (Number(Platform.Version) < 31) return true; // pre-Android-12: location covers BLE
+export async function requestBlePermissions(): Promise<BlePermissionStatus> {
+  if (Platform.OS !== "android") return "granted";
+  if (!getBleScanner().isReal) return "unavailable";
+  if (Number(Platform.Version) < 31) return "granted";
   try {
     const res = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
     ]);
-    return Object.values(res).every((v) => v === PermissionsAndroid.RESULTS.GRANTED);
+    const values = Object.values(res);
+    if (values.every((v) => v === PermissionsAndroid.RESULTS.GRANTED)) return "granted";
+    if (values.some((v) => v === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN)) return "blocked";
+    return "denied";
   } catch {
-    return false;
+    return "denied";
   }
+}
+
+/** Boolean wrapper for opportunistic (non-blocking) scans, e.g. incident zone tag. */
+export async function ensureBlePermissions(): Promise<boolean> {
+  const s = await requestBlePermissions();
+  return s === "granted" || s === "unavailable";
 }
 
 /**

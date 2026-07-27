@@ -13,7 +13,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 
-import { getBleScanner, getBleState } from "@/src/ble/BleScanner";
+import { getBleScanner, getBleState, checkBlePermissions, requestBlePermissions } from "@/src/ble/BleScanner";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
@@ -26,6 +26,7 @@ interface GuardResult {
   location: PermState | "na";
   gps: RadioState | "na";
   bluetooth: RadioState | "na";
+  blePerm: PermState | "na";
 }
 
 interface Props {
@@ -34,6 +35,8 @@ interface Props {
   location?: boolean;
   gps?: boolean;
   bluetooth?: boolean;
+  /** strict: GPS/Bluetooth/BLE-permission failures BLOCK (no Continue-anyway) */
+  strict?: boolean;
   children: React.ReactNode;
 }
 
@@ -54,7 +57,7 @@ export function CaptureGuards({ camera, location, gps, bluetooth, strict, childr
 
   const run = useCallback(
     async (requestMissing: boolean) => {
-      const next: GuardResult = { camera: "na", location: "na", gps: "na", bluetooth: "na" };
+      const next: GuardResult = { camera: "na", location: "na", gps: "na", bluetooth: "na", blePerm: "na" };
       try {
         if (camera) {
           let p = await Camera.getCameraPermissionsAsync();
@@ -71,6 +74,12 @@ export function CaptureGuards({ camera, location, gps, bluetooth, strict, childr
           }
         }
         if (bluetooth) {
+          // Nearby-devices RUNTIME permission (Android 12+) — field failure 2026-07-27:
+          // checking only the adapter state let scans fail silently after a denial.
+          let perm = await checkBlePermissions();
+          if (perm === "denied" && requestMissing) perm = await requestBlePermissions();
+          next.blePerm =
+            perm === "granted" ? "ok" : perm === "unavailable" ? "na" : perm === "blocked" ? "blocked" : "ask";
           const state = await getBleState();
           if (state === "on") next.bluetooth = "ok";
           else if (state === "off") next.bluetooth = "off";
@@ -86,7 +95,8 @@ export function CaptureGuards({ camera, location, gps, bluetooth, strict, childr
         (next.camera === "ok" || next.camera === "na") &&
         (next.location === "ok" || next.location === "na") &&
         (next.gps === "ok" || next.gps === "na") &&
-        (next.bluetooth === "ok" || next.bluetooth === "na");
+        (next.bluetooth === "ok" || next.bluetooth === "na") &&
+        (next.blePerm === "ok" || next.blePerm === "na");
       if (pass) setReady(true);
       return next;
     },
@@ -133,7 +143,9 @@ export function CaptureGuards({ camera, location, gps, bluetooth, strict, childr
       (result.location === "ask" ||
         result.location === "blocked" ||
         result.gps === "off" ||
-        result.bluetooth === "off"));
+        result.bluetooth === "off" ||
+        result.blePerm === "ask" ||
+        result.blePerm === "blocked"));
 
   const stateIcon = (ok: boolean) =>
     ok ? (
@@ -201,6 +213,21 @@ export function CaptureGuards({ camera, location, gps, bluetooth, strict, childr
               },
             }
           : undefined,
+    });
+  }
+  if (result.blePerm !== "na") {
+    rows.push({
+      key: "blePerm",
+      icon: <Bluetooth size={24} color={colors.primary} strokeWidth={2} />,
+      label: t("guard.blePerm"),
+      ok: result.blePerm === "ok",
+      hint: result.blePerm !== "ok" ? t("guard.blePermHint") : undefined,
+      action:
+        result.blePerm === "ask"
+          ? { label: t("guard.allow"), onPress: () => void run(true) }
+          : result.blePerm === "blocked"
+            ? { label: t("common.openSettings"), onPress: () => void Linking.openSettings() }
+            : undefined,
     });
   }
   if (result.bluetooth !== "na") {

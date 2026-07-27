@@ -14,7 +14,7 @@ import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
-import { getBleScanner, ensureBlePermissions, beaconPayload, type BeaconRegistry } from "@/src/ble/BleScanner";
+import { getBleScanner, requestBlePermissions, beaconPayload, type BeaconRegistry } from "@/src/ble/BleScanner";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
@@ -71,8 +71,18 @@ function PunchInInner() {
           showToast(t("perm.bleExplain"), "info");
           await storage.setItem("hogo.bleAsked", true);
         }
-        const allowed = await ensureBlePermissions();
-        ble = allowed ? await scanner.scan(3000, registry) : null;
+        // FAIL CLOSED (field order 2026-07-27): Nearby-devices permission is REQUIRED
+        // for attendance — a silent skip here is how ghost "no beacon" punches happened.
+        const perm = await requestBlePermissions();
+        if (perm === "denied" || perm === "blocked") {
+          showToast(t("att.blePermRequired"), "error");
+          setSteps(null);
+          router.replace("/(tabs)/home");
+          return;
+        }
+        // 10s LOW_LATENCY window with early-exit on first registered match — the old
+        // 3s low-power window could miss the beacons' advertising interval entirely.
+        ble = await scanner.scan(10000, registry);
       } else {
         ble = await scanner.scan(3000, { macs: [], ibeacons: [] });
       }
