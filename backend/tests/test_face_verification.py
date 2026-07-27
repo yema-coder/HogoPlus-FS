@@ -144,6 +144,37 @@ async def test_missing_reference_bootstraps(db_session, monkeypatch):
     assert row >= 1
 
 
+async def test_ghost_reference_rebootstraps(db_session, monkeypatch):
+    """GHOST-REFERENCE HARDENING (2026-07-27): reference key set but the object is
+    MISSING from storage → clear stale key, re-bootstrap from this punch, flag for
+    Time Office — never a silent NULL score."""
+    emp = await _set_reference(db_session, PHONES["w_att3"], "ghost_ref.jpg")
+    (Path(settings.upload_dir) / "ghost_ref.jpg").unlink()  # object lost from storage
+    att = await _make_attendance(db_session, PHONES["w_att3"], "ghost_punch.jpg", day=6)
+
+    called = []
+    monkeypatch.setattr("app.aws.compare_faces", lambda a, b: called.append(1) or 99.0)
+
+    result = await _verify_face_async(str(att.id))
+    assert result.get("rebootstrap") is True
+    assert result.get("stale_key") == "ghost_ref.jpg"
+    assert called == []  # no comparison against a missing reference
+
+    await db_session.refresh(att)
+    await db_session.refresh(emp)
+    assert emp.reference_selfie_key == "ghost_punch.jpg"  # this punch became the new reference
+    assert att.verification_level == "flagged"
+    assert att.flagged_reason == "reference_bootstrap"  # lands in the normal TO queue
+    row = (
+        await db_session.execute(
+            text("SELECT count(*) FROM audit_events WHERE action='employee.reference_selfie_rebootstrap' AND entity_id=:e"),
+            {"e": str(emp.id)},
+        )
+    ).scalar()
+    assert row >= 1
+
+
+
 async def test_rekognition_error_leaves_null_never_flags(db_session, monkeypatch):
     from app.aws import RekognitionUnavailable
 

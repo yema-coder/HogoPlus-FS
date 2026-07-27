@@ -264,8 +264,47 @@ async def _verify_face_async(attendance_id: str) -> dict:
                 return {"bootstrap": True, "employee": emp.emp_id}
 
             storage = get_storage()
+
+            # GHOST-REFERENCE HARDENING (2026-07-27 field failure): if the reference
+            # OBJECT is gone from storage (NoSuchKey — e.g. lost during the local-
+            # storage fallback era), clear the stale key and treat THIS punch as a
+            # supervised re-bootstrap instead of failing silently with a NULL score.
+            def _read_or_none(key: str) -> bytes | None:
+                """bytes, or None when the object is DEFINITIVELY missing; raises otherwise."""
+                try:
+                    return storage.get(key)
+                except FileNotFoundError:
+                    return None
+                except Exception as e:
+                    code = str(getattr(e, "response", {}).get("Error", {}).get("Code", ""))
+                    if code in ("NoSuchKey", "404"):
+                        return None
+                    raise
+
             try:
-                ref_bytes = storage.get(emp.reference_selfie_key)
+                ref_bytes = _read_or_none(emp.reference_selfie_key)
+            except Exception as e:
+                logger.warning("Face verification could not read reference for %s: %s", att.id, e)
+                return {"error": "selfie_read_failed"}
+            if ref_bytes is None:
+                stale_key = emp.reference_selfie_key
+                emp.reference_selfie_key = att.selfie_key
+                emp.reference_selfie_set_at = datetime.now(timezone.utc)
+                att.verification_level = "flagged"
+                att.flagged_reason = "reference_bootstrap"
+                await write_audit(
+                    session, None, "employee.reference_selfie_rebootstrap", "employee",
+                    str(emp.id),
+                    {"attendance_id": str(att.id), "stale_key": stale_key, "selfie_key": att.selfie_key},
+                )
+                await session.commit()
+                logger.warning(
+                    "Stale face reference for %s (missing object %s) — re-bootstrapped from this punch",
+                    emp.emp_id, stale_key,
+                )
+                return {"rebootstrap": True, "employee": emp.emp_id, "stale_key": stale_key}
+
+            try:
                 new_bytes = storage.get(att.selfie_key)
                 score = compare_faces(ref_bytes, new_bytes)
             except RekognitionUnavailable as e:
