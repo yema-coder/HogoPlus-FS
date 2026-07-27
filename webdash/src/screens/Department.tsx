@@ -97,6 +97,12 @@ function IncidentModal({ inc, onClose }: { inc: any; onClose: () => void }) {
             ) : null}
           </div>
         ) : null}
+        {inc.ble_zone ? (
+          <div className="loc-block" data-testid="modal-beacon-zone">
+            <div className="loc-label">📡 {t("beaconZone")}</div>
+            <div style={{ fontWeight: 700 }}>{inc.ble_zone}</div>
+          </div>
+        ) : null}
         {locBlock(t("objectLocation"), "modal-object-location")}
         {locBlock(t("deviceLocation"), "modal-device-location")}
         {inc.voice_note_url ? (
