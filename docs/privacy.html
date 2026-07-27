@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy Policy — Hogo Plus FS</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1c2733;
+         max-width: 860px; margin: 0 auto; padding: 32px 20px 80px; line-height: 1.65; }
+  h1 { color: #0e3a5f; font-size: 30px; margin-bottom: 4px; }
+  h2 { color: #0e3a5f; font-size: 20px; margin-top: 36px; border-bottom: 2px solid #e3ecf3; padding-bottom: 6px; }
+  .meta { color: #5b6b7a; font-size: 14px; margin-bottom: 28px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 15px; }
+  th, td { border: 1px solid #d7e2ea; padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #f2f7fb; }
+  ul { padding-left: 22px; }
+  .contact { background: #f2f7fb; border: 1px solid #d7e2ea; border-radius: 10px; padding: 16px 20px; margin-top: 18px; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy — Hogo Plus FS</h1>
+<p class="meta">Effective date: 28 July 2026 · Applies to the Hogo Plus FS mobile application and the associated management dashboard operated by <strong>Prasad Sugar &amp; Allied Agro Products Ltd</strong> (“we”, “us”, the “Company”).</p>
+
+<h2>1. What this app is</h2>
+<p>Hogo Plus FS is an internal workforce application used by employees and management of the Company's
+factory in Maharashtra, India, for attendance recording, incident/complaint reporting, shift management
+and factory operations. It is intended solely for the Company's employees and authorised personnel;
+accounts are provisioned and managed by the Company's Time Office.</p>
+
+<h2>2. Data we collect</h2>
+<table>
+  <tr><th>Category</th><th>Data</th><th>Why we collect it</th></tr>
+  <tr><td>Identity &amp; account</td><td>Full name, employee ID, department, role, phone number, preferred language</td><td>Account creation, login by SMS OTP, role-based access</td></tr>
+  <tr><td>Attendance selfies &amp; face data</td><td>Punch-in selfie photographs; a stored reference selfie; automated face-comparison similarity scores</td><td>Verifying that the person punching in is the account holder (attendance integrity)</td></tr>
+  <tr><td>Location</td><td>Precise GPS coordinates at punch-in/punch-out and when reporting an incident; detected proximity to Company-installed Bluetooth beacons (zone name only)</td><td>Confirming presence on factory premises; tagging where an incident occurred</td></tr>
+  <tr><td>Incident media</td><td>Photos, videos and voice notes you capture when reporting an incident; free-text descriptions; vehicle number plates detected in photos</td><td>Documenting and resolving factory incidents and complaints</td></tr>
+  <tr><td>Device</td><td>Push-notification token, app language, app version</td><td>Delivering work notifications; support and troubleshooting</td></tr>
+  <tr><td>Usage records</td><td>Login events, OTP delivery logs, approval/rejection actions (audit trail)</td><td>Security, fraud prevention and operational accountability</td></tr>
+</table>
+<p>We do <strong>not</strong> collect contacts, calendars, messages, browsing history, financial information or
+advertising identifiers, and the app contains no advertising or analytics SDKs.</p>
+
+<h2>3. Face verification (biometric processing)</h2>
+<p>When you punch in, the selfie you take is compared with your stored reference selfie using
+<strong>Amazon Web Services (AWS) Rekognition</strong>, which returns a similarity score. Images are transmitted
+securely for this comparison and are not used by us or AWS to build unrelated face databases or for
+advertising. If verification cannot be completed, your punch is placed in a supervised review queue for the
+Time Office instead — no automatic adverse action is taken against you by the software alone. Your first
+approved selfie becomes your reference; the Time Office can reset it at any time on request.</p>
+
+<h2>4. Processors and where data is stored</h2>
+<ul>
+  <li><strong>AWS Rekognition</strong> (Amazon Web Services) — face comparison and image-text detection, processed on our behalf.</li>
+  <li><strong>Cloud object storage (Cloudflare R2 / S3-compatible)</strong> — encrypted storage of photos, videos, voice notes and nightly reports.</li>
+  <li><strong>Neon (PostgreSQL cloud database, Asia-Pacific region)</strong> — application records.</li>
+  <li><strong>SMSGatewayHub</strong> — delivery of one-time login passwords to your phone number.</li>
+  <li><strong>Expo push notification service</strong> — delivery of work notifications to your device.</li>
+</ul>
+<p>These providers act as processors under our instructions and do not sell your data or use it for their own
+marketing. We do not sell or rent personal data to anyone, and we do not share it with third parties for
+advertising.</p>
+
+<h2>5. Retention</h2>
+<ul>
+  <li><strong>Attendance records, incident reports and media:</strong> retained for the duration of your employment and thereafter as required for the Company's statutory, payroll and audit obligations.</li>
+  <li><strong>Reference selfie and face-comparison scores:</strong> retained while your account is active; deleted or reset when your employment ends or upon approved request to the Time Office.</li>
+  <li><strong>OTP and login logs:</strong> retained for a short operational period for security and troubleshooting, then purged.</li>
+  <li><strong>Backups:</strong> encrypted backups are kept on a rolling schedule and expire automatically.</li>
+</ul>
+
+<h2>6. Your rights</h2>
+<p>Subject to applicable Indian law, including the Digital Personal Data Protection Act, 2023, you may request
+access to, correction of, or deletion of your personal data, and may raise grievances about its processing.
+Requests can be made in person at the Time Office or by email to the contact below. Account deletion:
+because accounts are employer-provisioned, deletion requests are actioned by the Time Office; your data
+will be removed except where retention is legally required.</p>
+
+<h2>7. Security</h2>
+<p>All data is transmitted over encrypted connections (HTTPS/TLS). Access to records is role-restricted
+(e.g., attendance review is limited to the Time Office and top management), and administrative actions are
+recorded in an audit trail.</p>
+
+<h2>8. Children</h2>
+<p>The app is intended for adult employees only and is not directed at children.</p>
+
+<h2>9. Permissions the app uses</h2>
+<ul>
+  <li><strong>Camera</strong> — attendance selfies and incident photos/videos.</li>
+  <li><strong>Microphone</strong> — voice notes attached to incident reports.</li>
+  <li><strong>Location (precise)</strong> — presence verification at punch and incident location tagging.</li>
+  <li><strong>Nearby devices / Bluetooth</strong> — detecting Company-installed attendance beacons inside the factory.</li>
+  <li><strong>Notifications</strong> — work alerts and approvals.</li>
+</ul>
+
+<h2>10. Changes to this policy</h2>
+<p>We may update this policy from time to time. Material changes will be notified in the app and the revised
+policy will be published at this address.</p>
+
+<h2>11. Contact</h2>
+<div class="contact">
+  <p><strong>Prasad Sugar &amp; Allied Agro Products Ltd</strong><br />
+  Data/Grievance contact: <a href="mailto:support@hogoplus.in">support@hogoplus.in</a><br />
+  Or in person: Time Office, factory premises, Maharashtra, India.</p>
+</div>
+</body>
+</html>
