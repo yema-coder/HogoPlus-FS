@@ -352,3 +352,16 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - STAGE3_v1.0.11_TEST_PLAN.md: evidence tables + 20-min field protocol + ship matrix.
 - Beacons registered earlier (6 iBeacon rows, shared registry, no is_demo column).
 - NOTE: B/C1 are native-only — NOT verifiable in Expo Go/web; device APK required.
+
+## Launch-eve follow-ups (2026-07-28 ~02:00 IST) — commit f5790b9
+- cleanup_prelaunch --execute crash FIXED: implicit autobegin txn from report reads made
+  session.begin() raise InvalidRequestError; session.rollback() before begin. Crash reproduced
+  + clean EXECUTE verified on local PG (10/10 preservation checks); Neon dry-run green.
+- webdash Attendance: "All departments (flagged)" option (factory-wide pending list via
+  /attendance/flagged?date=, dept column, approve/reject) + fixed date-picker/lang-switch
+  overlap. Verified with real row 0001 (approve+reject rendered, overlap check False).
+- Mobile Approvals->Attendance has NO Reject button (only att-approve-*, actAttendance only
+  calls approveAttendance; backend reject endpoint exists) — classified NEXT APP BUILD (v1.0.12
+  candidate); webdash register is the workaround.
+- User: rejected 3 of 4 flagged rows (0001 pending), skipping ref-clear curls (ghost-ref
+  hardening self-heals 0001/1212), building v1.0.11 APK+AAB via Publish.
