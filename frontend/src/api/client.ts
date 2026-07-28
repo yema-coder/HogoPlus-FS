@@ -3,7 +3,27 @@ import { Platform } from "react-native";
 import { storage } from "@/src/utils/storage";
 
 const BASE = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
-export const API_BASE = `${BASE}/api`;
+
+// LAUNCH GUARD (v1.0.13 field failure, 2026-07-28): the build pipeline's env
+// injection ("STEP 2: Configuring backend URL") can replace or EMPTY
+// EXPO_PUBLIC_API_URL, which bakes a relative "/api" base into the release
+// bundle — every request then dies instantly with a network error. In any
+// RELEASE build the API base is therefore pinned to the production host; the
+// env value is only honoured in dev (__DEV__: Expo Go / web preview / metro),
+// so sandbox testing keeps working.
+const PROD_API_URL = "https://api.hogoplus.in";
+let resolvedBase: string;
+if (__DEV__) {
+  resolvedBase = BASE || PROD_API_URL;
+} else {
+  if (BASE !== PROD_API_URL) {
+    console.warn(
+      `[api] EXPO_PUBLIC_API_URL ${BASE ? `was "${BASE}"` : "is EMPTY"} in a release build — using ${PROD_API_URL}`,
+    );
+  }
+  resolvedBase = PROD_API_URL;
+}
+export const API_BASE = `${resolvedBase}/api`;
 
 const ACCESS_KEY = "hogo.access";
 const REFRESH_KEY = "hogo.refresh";
