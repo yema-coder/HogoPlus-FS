@@ -2,7 +2,7 @@
   "expo": {
     "name": "HogoPlus-FS",
     "slug": "frontend",
-    "version": "1.0.11",
+    "version": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hogoplus",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hogoplus.fs",
-      "buildNumber": "1.0.11",
+      "buildNumber": "1.0.14",
       "infoPlist": {
         "NSCameraUsageDescription": "Take photos to report factory incidents",
         "NSLocationWhenInUseUsageDescription": "Confirms your attendance location at the factory",
@@ -26,7 +26,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hogoplus.fs",
-      "versionCode": 10011,
+      "versionCode": 10014,
       "permissions": [
         "POST_NOTIFICATIONS"
       ]
