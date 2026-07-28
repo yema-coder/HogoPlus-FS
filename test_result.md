@@ -365,3 +365,21 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   candidate); webdash register is the workaround.
 - User: rejected 3 of 4 flagged rows (0001 pending), skipping ref-clear curls (ghost-ref
   hardening self-heals 0001/1212), building v1.0.11 APK+AAB via Publish.
+
+## LAUNCH-DAY EMERGENCY: v1.0.13 dead API base + DNS outage (2026-07-28) — commit e908ca8
+- P0-A DNS: api.hogoplus.in was NXDOMAIN on Google+Cloudflare (hogoplus.in zone reset to Hostinger
+  parking NS during website/privacy.html setup; SOA bumped same day). User re-added A record ->
+  13.204.160.31 TTL 300; propagation verified from this pod; prod health 200.
+- P0-B v1.0.13: pipeline env injection can bake EMPTY EXPO_PUBLIC_API_URL -> API_BASE="/api"
+  relative -> instant RN network error (login + outbox share client). ALSO proven: metro
+  transform-cache poisoning — export with empty env then correct env still baked "" (cache
+  re-served). FIX v1.0.14 (10014): client.ts release builds PIN https://api.hogoplus.in
+  (__DEV__ keeps env for sandbox). Bundle greps: empty-env, poisoned-cache and clean exports
+  all pin prod URL, zero preview/localhost bases. hermesc cannot run on this aarch64 pod —
+  use --no-bytecode for local artifact exports.
+- Artifact smoke on prod: send-otp +919000000500 -> 200 demo_account @ 2026-07-28T16:51:34Z
+  (IST 22:21:34); unknown +919888777666 -> 403 registration_closed trilingual @ 16:51:58Z.
+- Regression: backend suite 205/205 PASSED (PG16+pgvector+redis reinstalled — pod had reset).
+  Frontend sweep (testing_agent iteration_18): 7/8 PASS, offline-outbox partial (headless
+  can't capture photo; outbox path code-verified). Device-only rows -> field protocol.
+- frontend/.env temporarily pointed at sandbox for the sweep, RESTORED to api.hogoplus.in.
