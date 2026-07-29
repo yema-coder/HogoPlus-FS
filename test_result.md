@@ -394,3 +394,19 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   (native only) + enriched beacon-registry labels (backend deployable now).
 - pytest 211/211; tsc + eslint clean; testing_agent iteration_19 ALL PASS.
 - beacon_first_mode=False confirmed post-test; frontend/.env restored to api.hogoplus.in.
+
+## v1.0.16 — TRUE root cause (ble-plx manufacturerData clobbering) + field instrumentation
+- v1.0.15 artifact was CLEAN (user autopsy) yet detection failed. Real bug: ble-plx Android
+  AdvertisementData.parseManufacturerData OVERWRITES its single manufacturerData field for EVERY
+  0xFF AD structure; vendor beacons put their config frame in the SCAN RESPONSE which Android
+  merges AFTER the Apple iBeacon frame -> vendor frame clobbers 4C 00 02 15 before JS sees it.
+- Fix: src/ble/ibeaconParse.ts extractIBeacons() signature-scans rawScanRecord (full merged
+  record) at ANY offset, all frames; ibKey Number-coerces major/minor. Unit-proven:
+  frontend/scripts/test-ibeacon-parse.js (16/16, incl. old-parser failure repro).
+- User hypotheses (a) case (b) type (c) uuid-format ELIMINATED by the same test.
+- requestBlePermissions now also requires/requests ACCESS_FINE_LOCATION on Android 12+
+  (mandatory for scan results once neverForLocation removed; catches approximate-only grants).
+- Instrumentation: hidden BLE Diagnostics screen (long-press Profile avatar) -> live scan dump
+  with per-candidate verdicts; POST /api/attendance/ble-diag stores report as audit ble.diag;
+  GET /api/admin/ble-diag (CGM/MD) reads back. pytest 214/214, tsc+eslint clean, web smoke OK.
+- frontend/.env restored to api.hogoplus.in after smoke.

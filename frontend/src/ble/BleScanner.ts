@@ -1,11 +1,14 @@
 import Constants from "expo-constants";
 import { PermissionsAndroid, Platform } from "react-native";
 
-export interface IBeaconId {
-  uuid: string;
-  major: number;
-  minor: number;
-}
+import {
+  classifyCandidate,
+  extractIBeacons,
+  ibKey,
+  type IBeaconId,
+} from "./ibeaconParse";
+
+export type { IBeaconId };
 
 export interface BleBeaconHit {
   /** MAC of the matched beacon (Android exposes device.id as MAC). */
@@ -29,42 +32,35 @@ export interface BleScanner {
    * the strongest-RSSI match or null. Never throws — failure yields null.
    */
   scan(timeoutMs: number, registry: BeaconRegistry): Promise<BleBeaconHit | null>;
+  /**
+   * v1.0.16 DIAGNOSTIC scan: collects EVERY device seen (duplicates merged per id,
+   * frames accumulated so interleaved advertisements are all captured) with parsed
+   * iBeacon candidates and a per-candidate rejection verdict. Never throws.
+   */
+  scanDiagnostics(timeoutMs: number, registry: BeaconRegistry): Promise<BleDiagScan>;
 }
 
-/** Minimal, dependency-free base64 → byte array (Hermes-safe). */
-function base64ToBytes(b64: string): number[] {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const clean = b64.replace(/[^A-Za-z0-9+/]/g, "");
-  const out: number[] = [];
-  for (let i = 0; i < clean.length; i += 4) {
-    const e = [0, 1, 2, 3].map((k) => chars.indexOf(clean[i + k] ?? "A"));
-    const n = (e[0] << 18) | (e[1] << 12) | (e[2] << 6) | e[3];
-    out.push((n >> 16) & 0xff);
-    if (clean[i + 2] !== undefined && (i + 2) < clean.length) out.push((n >> 8) & 0xff);
-    if (clean[i + 3] !== undefined && (i + 3) < clean.length) out.push(n & 0xff);
-  }
-  return out;
+export interface BleDiagDevice {
+  id: string;
+  name: string | null;
+  rssi: number | null;
+  frames: number;
+  /** distinct manufacturerData payloads seen (base64, truncated) */
+  mfg: string[];
+  /** distinct rawScanRecord payloads seen (base64, truncated) */
+  raw: string[];
+  ibeacons: { uuid: string; major: number; minor: number; verdict: string }[];
+  verdict: string; // matched | mac_matched | uuid_mismatch | major_mismatch | minor_not_registered | no_ibeacon_frame | no_mfg_data
 }
 
-/**
- * Parse the standard Apple iBeacon manufacturer-data layout from ble-plx's
- * base64 `manufacturerData` (which includes the 2-byte company id):
- *   [0..1] company id 0x4C 0x00 · [2] 0x02 (type) · [3] 0x15 (len) ·
- *   [4..19] UUID · [20..21] major (BE) · [22..23] minor (BE) · [24] tx power.
- */
-function parseIBeacon(b64?: string | null): IBeaconId | null {
-  if (!b64) return null;
-  let b: number[];
-  try {
-    b = base64ToBytes(b64);
-  } catch {
-    return null;
-  }
-  if (b.length < 25) return null;
-  if (b[0] !== 0x4c || b[1] !== 0x00 || b[2] !== 0x02 || b[3] !== 0x15) return null;
-  const hex = b.slice(4, 20).map((x) => x.toString(16).padStart(2, "0")).join("");
-  const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-  return { uuid, major: (b[20] << 8) | b[21], minor: (b[22] << 8) | b[23] };
+export interface BleDiagScan {
+  supported: boolean;
+  scanMs: number;
+  callbacks: number;
+  devicesSeen: number;
+  matchedCount: number;
+  error: string | null;
+  devices: BleDiagDevice[];
 }
 
 class NoopBleScanner implements BleScanner {
@@ -72,6 +68,18 @@ class NoopBleScanner implements BleScanner {
 
   async scan(): Promise<BleBeaconHit | null> {
     return null;
+  }
+
+  async scanDiagnostics(): Promise<BleDiagScan> {
+    return {
+      supported: false,
+      scanMs: 0,
+      callbacks: 0,
+      devicesSeen: 0,
+      matchedCount: 0,
+      error: "BLE not available (Expo Go / web)",
+      devices: [],
+    };
   }
 }
 
@@ -90,11 +98,10 @@ class RealBleScanner implements BleScanner {
   }
 
   scan(timeoutMs: number, registry: BeaconRegistry): Promise<BleBeaconHit | null> {
-    // Dual-mode: match device.id against registered MACs (Android) OR the parsed
+    // Dual-mode: match device.id against registered MACs (Android) OR any parsed
     // iBeacon triple against registered UUID/Major/Minor. iOS note: CoreBluetooth
     // filters raw iBeacon frames, so iBeacon ranging is Android-reliable here.
     const macSet = new Set((registry.macs ?? []).map((m) => m.trim().toUpperCase()));
-    const ibKey = (i: IBeaconId) => `${i.uuid.trim().toLowerCase()}:${i.major}:${i.minor}`;
     const ibSet = new Set((registry.ibeacons ?? []).map(ibKey));
     if (macSet.size === 0 && ibSet.size === 0) return Promise.resolve(null);
     return new Promise((resolve) => {
@@ -128,8 +135,15 @@ class RealBleScanner implements BleScanner {
             if (mac && macSet.has(mac)) {
               hit = { mac };
             } else {
-              const ib = parseIBeacon(device.manufacturerData);
-              if (ib && ibSet.has(ibKey(ib))) hit = { ibeacon: ib };
+              // v1.0.16: parse from rawScanRecord (full merged ADV+SCAN_RSP record) —
+              // ble-plx's single manufacturerData field is CLOBBERED by vendor frames
+              // interleaved in the scan response, hiding the Apple iBeacon frame.
+              const candidates = [
+                ...extractIBeacons(device.rawScanRecord),
+                ...extractIBeacons(device.manufacturerData),
+              ];
+              const ib = candidates.find((c) => ibSet.has(ibKey(c)));
+              if (ib) hit = { ibeacon: ib };
             }
             if (hit) {
               // EARLY EXIT on the first registered match — any registered beacon
@@ -143,6 +157,108 @@ class RealBleScanner implements BleScanner {
       } catch {
         clearTimeout(timer);
         resolve(null);
+      }
+    });
+  }
+
+  scanDiagnostics(timeoutMs: number, registry: BeaconRegistry): Promise<BleDiagScan> {
+    const macSet = new Set((registry.macs ?? []).map((m) => m.trim().toUpperCase()));
+    const regIb = registry.ibeacons ?? [];
+    const started = Date.now();
+    type Acc = {
+      id: string;
+      name: string | null;
+      rssi: number | null;
+      frames: number;
+      mfg: Set<string>;
+      raw: Set<string>;
+      cands: Map<string, IBeaconId>;
+    };
+    const acc = new Map<string, Acc>();
+    let callbacks = 0;
+    let error: string | null = null;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        try {
+          this.manager.stopDeviceScan();
+        } catch {
+          // ignore
+        }
+        const devices: BleDiagDevice[] = [...acc.values()].map((d) => {
+          const ibeacons = [...d.cands.values()].map((c) => ({
+            ...c,
+            verdict: classifyCandidate(c, regIb),
+          }));
+          let verdict: string;
+          if (macSet.has(d.id.toUpperCase())) verdict = "mac_matched";
+          else if (ibeacons.some((i) => i.verdict === "matched")) verdict = "matched";
+          else if (ibeacons.some((i) => i.verdict === "minor_not_registered")) verdict = "minor_not_registered";
+          else if (ibeacons.some((i) => i.verdict === "major_mismatch")) verdict = "major_mismatch";
+          else if (ibeacons.length > 0) verdict = "uuid_mismatch";
+          else if (d.mfg.size > 0 || d.raw.size > 0) verdict = "no_ibeacon_frame";
+          else verdict = "no_mfg_data";
+          return {
+            id: d.id,
+            name: d.name,
+            rssi: d.rssi,
+            frames: d.frames,
+            mfg: [...d.mfg],
+            raw: [...d.raw],
+            ibeacons,
+            verdict,
+          };
+        });
+        const rank = (v: string) => (v === "matched" || v === "mac_matched" ? 0 : v === "no_mfg_data" ? 2 : 1);
+        devices.sort((a, b) => rank(a.verdict) - rank(b.verdict) || (b.rssi ?? -999) - (a.rssi ?? -999));
+        resolve({
+          supported: true,
+          scanMs: Date.now() - started,
+          callbacks,
+          devicesSeen: devices.length,
+          matchedCount: devices.filter((d) => d.verdict === "matched" || d.verdict === "mac_matched").length,
+          error,
+          devices: devices.slice(0, 50),
+        });
+      };
+      const timer = setTimeout(finish, timeoutMs);
+      try {
+        this.manager.startDeviceScan(
+          null,
+          // duplicates ON: we WANT every callback so interleaved frames from the same
+          // beacon (iBeacon frame + vendor config frame) are all captured and merged.
+          { allowDuplicates: true, scanMode: 2 },
+          (err: any, device: any) => {
+            if (err) {
+              error = String(err?.message ?? err);
+              clearTimeout(timer);
+              finish();
+              return;
+            }
+            if (!device) return;
+            callbacks += 1;
+            const id = String(device.id ?? "?");
+            let d = acc.get(id);
+            if (!d) {
+              d = { id, name: null, rssi: null, frames: 0, mfg: new Set(), raw: new Set(), cands: new Map() };
+              acc.set(id, d);
+            }
+            d.frames += 1;
+            if (typeof device.rssi === "number") d.rssi = device.rssi;
+            if (device.name) d.name = String(device.name);
+            if (device.manufacturerData) d.mfg.add(String(device.manufacturerData).slice(0, 64));
+            if (device.rawScanRecord) d.raw.add(String(device.rawScanRecord).slice(0, 96));
+            for (const c of [...extractIBeacons(device.rawScanRecord), ...extractIBeacons(device.manufacturerData)]) {
+              d.cands.set(ibKey(c), c);
+            }
+          },
+        );
+      } catch (e) {
+        error = String(e);
+        clearTimeout(timer);
+        finish();
       }
     });
   }
@@ -195,7 +311,11 @@ export async function checkBlePermissions(): Promise<BlePermissionStatus> {
   try {
     const scan = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN);
     const conn = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT);
-    return scan && conn ? "granted" : "denied";
+    // v1.0.16: BLUETOOTH_SCAN is declared WITHOUT neverForLocation (so iBeacon frames
+    // aren't OS-filtered) — Android 12+ therefore also requires PRECISE location to
+    // deliver scan results. An "approximate only" grant silently yields zero results.
+    const fine = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    return scan && conn && fine ? "granted" : "denied";
   } catch {
     return "denied";
   }
@@ -214,6 +334,9 @@ export async function requestBlePermissions(): Promise<BlePermissionStatus> {
     const res = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      // required alongside a no-neverForLocation BLUETOOTH_SCAN for scan results;
+      // also upgrades an "approximate" location grant to precise.
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     ]);
     const values = Object.values(res);
     if (values.every((v) => v === PermissionsAndroid.RESULTS.GRANTED)) return "granted";

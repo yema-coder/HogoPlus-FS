@@ -820,3 +820,33 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - USER ARTIFACT AUTOPSY before install: aapt2 dump xmltree (BLUETOOTH_SCAN must have NO
   usesPermissionFlags), aapt2 dump badging (versionCode >133, versionName 1.0.15), strings on
   assets/index.android.bundle (api.hogoplus.in pinned, no preview/localhost).
+
+## v1.0.16 — TRUE ROOT CAUSE + FIELD INSTRUMENTATION (2026-06 fork) ✅ code complete, build pending
+- v1.0.15 artifact verified CLEAN by user (no usesPermissionFlags, versionCode 135, correct API
+  base) yet detection still failed with beacon in hand. TRUE BUG FOUND with code evidence:
+  react-native-ble-plx 3.5.1 Android AdvertisementData.parseManufacturerData (L200-204) keeps ONE
+  manufacturerData field and OVERWRITES it for EVERY 0xFF AD structure in the merged ADV+SCAN_RSP
+  record. Vendor beacons (SmartConfig-configurable) interleave a vendor config frame in the scan
+  response → it clobbers the Apple 4C 00 02 15 frame → the app's header-anchored parseIBeacon saw
+  only the vendor frame → null → no match ever, on every beacon, every version.
+- FIX: new pure module src/ble/ibeaconParse.ts — extractIBeacons() signature-scans
+  device.rawScanRecord (full merged record, exposed by ble-plx) for 4C 00 02 15 at ANY offset,
+  returns ALL frames; ibKey() lowercases uuid + Number-coerces major/minor. BleScanner.scan uses
+  rawScanRecord+manufacturerData candidates. User hypotheses (a) case (b) type (c) uuid-format
+  ELIMINATED via unit test frontend/scripts/test-ibeacon-parse.js (16/16 incl. repro of old
+  parser failing on vendor-clobbered payload while new extractor recovers from rawScanRecord).
+- Permission hardening: requestBlePermissions/checkBlePermissions on Android 12+ now also
+  require+request ACCESS_FINE_LOCATION (mandatory for scan results once neverForLocation is
+  removed; an "approximate-only" location grant silently yields zero scan results). Punch flow
+  remains fail-closed (punch.tsx L74-82 aborts w/ toast on denied/blocked).
+- INSTRUMENTATION (temporary): hidden BLE Diagnostics screen app/ble-diag.tsx — entry: LONG-PRESS
+  the avatar on Profile tab (600ms). Shows permissions/radio/location-services, fetched registry
+  (29 entries), 15s diagnostic scan (allowDuplicates ON, frames merged per device) with parsed
+  iBeacon candidates + per-candidate verdict (matched/uuid_mismatch/major_mismatch/
+  minor_not_registered/no_ibeacon_frame/no_mfg_data), and "Send report to server".
+  Backend: POST /api/attendance/ble-diag (audit action ble.diag, 150KB cap, 413 oversize),
+  GET /api/admin/ble-diag?limit= (CGM/MD rank<=2). scanDiagnostics() added to BleScanner.
+- app.json 1.0.16/10016. pytest 214/214 (tests/test_ble_diag.py new), tsc clean, eslint clean,
+  E2E roundtrip on live DB (demo D002 report → CGM read), web smoke: diag screen renders 29-entry
+  registry. frontend/.env restored to api.hogoplus.in.
+- NOTE: test infra (PG15/redis/pgvector) was wiped again by pod reset and reinstalled.

@@ -215,6 +215,12 @@ class SwapDecideIn(BaseModel):
     reason: str | None = None
 
 
+class BleDiagIn(BaseModel):
+    """v1.0.16 field instrumentation: free-form BLE diagnostic report from the app."""
+
+    report: dict
+
+
 class SettingsPatchIn(BaseModel):
     factory_lat: float | None = None
     factory_lng: float | None = None

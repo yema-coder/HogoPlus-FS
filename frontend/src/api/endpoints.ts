@@ -190,6 +190,10 @@ export const approveAttendance = (id: string) =>
 export const rejectAttendance = (id: string) =>
   api<AttendanceRecord>(`/attendance/${id}/reject`, { method: "POST" });
 
+/** v1.0.16 field instrumentation: ship a BLE diagnostic report to the server. */
+export const sendBleDiag = (report: unknown) =>
+  api<{ stored: boolean }>("/attendance/ble-diag", { method: "POST", body: { report } });
+
 // ---------- Phase 4: AI services ----------
 
 export const aiAnpr = (photoKey: string) =>

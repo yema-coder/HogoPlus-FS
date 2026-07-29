@@ -10,6 +10,7 @@ from app.audit import write_audit
 from app.database import get_session
 from app.models import (
     AppVersion,
+    AuditEvent,
     BleBeacon,
     Department,
     Employee,
@@ -971,3 +972,33 @@ async def send_announcement(
     )
     await session.commit()
     return {"sent": True, "recipients": len(recipient_ids), "audience": body.audience}
+
+
+@router.get("/ble-diag")
+async def list_ble_diag(
+    limit: int = 10,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.16 field instrumentation: read the most recent on-device BLE diagnostic
+    reports submitted via POST /api/attendance/ble-diag."""
+    limit = max(1, min(limit, 50))
+    rows = (
+        await session.execute(
+            select(AuditEvent, Employee.emp_id, Employee.full_name)
+            .join(Employee, Employee.id == AuditEvent.actor_id, isouter=True)
+            .where(AuditEvent.action == "ble.diag")
+            .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [
+        {
+            "id": str(ev.id),
+            "emp_id": emp_id,
+            "name": full_name,
+            "created_at": ev.created_at,
+            "report": ev.detail_json,
+        }
+        for ev, emp_id, full_name in rows
+    ]

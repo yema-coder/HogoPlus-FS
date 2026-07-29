@@ -54,9 +54,15 @@ export default function ProfileScreen() {
       <ScreenHeader title={t("profile.title")} back={false} />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.hero}>
-          <View style={styles.avatar} testID="profile-avatar">
+          <Pressable
+            style={styles.avatar}
+            testID="profile-avatar"
+            // v1.0.16 hidden field-diagnostics entry (temporary): long-press avatar
+            onLongPress={() => router.push("/ble-diag")}
+            delayLongPress={600}
+          >
             <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          </Pressable>
           <Text style={styles.name}>{profile?.full_name}</Text>
           <Text style={styles.phone}>{profile?.phone ?? ""}</Text>
         </View>

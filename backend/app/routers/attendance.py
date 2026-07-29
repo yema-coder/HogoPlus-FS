@@ -12,7 +12,7 @@ from app.audit import write_audit
 from app.database import get_session
 from app.models import Attendance, BleBeacon, Department, Employee, FactorySettings
 from app.notify import dispatcher, template
-from app.schemas import PunchInIn
+from app.schemas import BleDiagIn, PunchInIn
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
 from app.storage import get_storage
@@ -108,6 +108,25 @@ async def beacon_registry(
         if b.mac_address
     ]
     return {"macs": macs, "ibeacons": ibeacons, "macs_detail": macs_detail}
+
+
+@router.post("/attendance/ble-diag")
+async def submit_ble_diag(
+    body: BleDiagIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.16 field instrumentation: persist a raw on-device BLE diagnostic report
+    (scan dump + permission states) as an audit event so beacon-detection failures
+    can be analyzed server-side instead of described verbally. Read back via
+    GET /api/admin/ble-diag (CGM/MD)."""
+    import json as _json
+
+    if len(_json.dumps(body.report, default=str)) > 150_000:
+        raise HTTPException(status_code=413, detail="Report too large")
+    await write_audit(session, employee.id, "ble.diag", "employee", str(employee.id), body.report)
+    await session.commit()
+    return {"stored": True}
 
 
 @router.post("/attendance/punch-in")
