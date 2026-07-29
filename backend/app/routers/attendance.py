@@ -82,7 +82,9 @@ async def beacon_registry(
 ):
     """Dual-mode registry for the mobile scanner: active registered MACs AND
     active registered iBeacon (UUID/Major/Minor) triples. The scanner matches a
-    detected device if EITHER its MAC or its iBeacon triple is in this list."""
+    detected device if EITHER its MAC or its iBeacon triple is in this list.
+    v1.0.15: entries carry trilingual zone labels so the app can show a live
+    zone chip at capture time (older builds ignore the extra keys)."""
     rows = (
         await session.execute(
             select(BleBeacon).where(BleBeacon.is_active.is_(True))
@@ -90,11 +92,22 @@ async def beacon_registry(
     ).scalars().all()
     macs = [b.mac_address for b in rows if b.mac_address]
     ibeacons = [
-        {"uuid": b.beacon_uuid, "major": b.major, "minor": b.minor}
+        {
+            "uuid": b.beacon_uuid, "major": b.major, "minor": b.minor,
+            "zone_en": b.zone_label_en, "zone_hi": b.zone_label_hi, "zone_mr": b.zone_label_mr,
+        }
         for b in rows
         if b.beacon_uuid and b.major is not None and b.minor is not None
     ]
-    return {"macs": macs, "ibeacons": ibeacons}
+    macs_detail = [
+        {
+            "mac": b.mac_address,
+            "zone_en": b.zone_label_en, "zone_hi": b.zone_label_hi, "zone_mr": b.zone_label_mr,
+        }
+        for b in rows
+        if b.mac_address
+    ]
+    return {"macs": macs, "ibeacons": ibeacons, "macs_detail": macs_detail}
 
 
 @router.post("/attendance/punch-in")

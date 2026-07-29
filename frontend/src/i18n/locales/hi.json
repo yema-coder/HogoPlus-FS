@@ -206,7 +206,9 @@
     "reasonFace": "चेहरा मेल नहीं खाया",
     "faceScore": "चेहरा मिलान {{s}}%",
     "refPhoto": "संदर्भ फोटो",
-    "punchPhoto": "पंच सेल्फी"
+    "punchPhoto": "पंच सेल्फी",
+    "reasonNoBeacon": "बीकन नहीं मिला — केवल GPS",
+    "reasonNoBeaconNoGps": "न बीकन, न GPS"
   },
   "notif": {
     "title": "सूचनाएँ",

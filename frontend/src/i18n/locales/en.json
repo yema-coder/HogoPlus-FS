@@ -206,7 +206,9 @@
     "reasonFace": "Face mismatch",
     "faceScore": "Face match {{s}}%",
     "refPhoto": "Reference",
-    "punchPhoto": "Punch selfie"
+    "punchPhoto": "Punch selfie",
+    "reasonNoBeacon": "Beacon not detected — GPS only",
+    "reasonNoBeaconNoGps": "No beacon & no GPS"
   },
   "notif": {
     "title": "Alerts",

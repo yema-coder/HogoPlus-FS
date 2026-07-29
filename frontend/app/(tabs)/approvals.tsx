@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError, fileUrl } from "@/src/api/client";
 import {
   approveAttendance,
+  rejectAttendance,
   approveEmployee,
   decideSwap,
   flaggedAttendance,
@@ -230,7 +231,7 @@ export default function ApprovalsScreen() {
       () => decideSwap(swap.id, approve, rejectReason),
     );
 
-  const actAttendance = (rec: FlaggedAttendance) =>
+  const actAttendance = (rec: FlaggedAttendance, approve = true) =>
     optimistic(
       "attendance",
       () => {
@@ -238,7 +239,7 @@ export default function ApprovalsScreen() {
         return flagged;
       },
       (snap) => setFlagged(snap),
-      () => approveAttendance(rec.id),
+      () => (approve ? approveAttendance(rec.id) : rejectAttendance(rec.id)),
     );
 
   const confirmReject = async () => {
@@ -444,11 +445,15 @@ export default function ApprovalsScreen() {
     const isFaceMismatch = rec.flagged_reason === "face_mismatch";
     const reasonText = isFaceMismatch
       ? t("att.reasonFace")
-      : rec.flagged_reason?.includes("gps_missing")
-        ? t("att.reasonGps")
-        : rec.flagged_reason?.includes("outside_geofence")
-          ? t("att.reasonGeofence")
-          : (rec.flagged_reason ?? "");
+      : rec.flagged_reason === "no_beacon_gps_only"
+        ? t("att.reasonNoBeacon")
+        : rec.flagged_reason === "no_beacon_no_gps"
+          ? t("att.reasonNoBeaconNoGps")
+          : rec.flagged_reason?.includes("gps_missing")
+            ? t("att.reasonGps")
+            : rec.flagged_reason?.includes("outside_geofence")
+              ? t("att.reasonGeofence")
+              : (rec.flagged_reason ?? "");
     return (
       <View style={styles.regCard} testID={`approval-att-${rec.id}`}>
         <View style={styles.regTop}>
@@ -520,13 +525,26 @@ export default function ApprovalsScreen() {
             ) : null}
           </View>
         ) : null}
-        <BigButton
-          testID={`att-approve-${rec.id}`}
-          label={t("approvals.approve")}
-          variant="success"
-          disabled={acting}
-          onPress={() => void actAttendance(rec)}
-        />
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <BigButton
+              testID={`att-reject-${rec.id}`}
+              label={t("approvals.reject")}
+              variant="danger"
+              disabled={acting}
+              onPress={() => void actAttendance(rec, false)}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <BigButton
+              testID={`att-approve-${rec.id}`}
+              label={t("approvals.approve")}
+              variant="success"
+              disabled={acting}
+              onPress={() => void actAttendance(rec)}
+            />
+          </View>
+        </View>
       </View>
     );
   };

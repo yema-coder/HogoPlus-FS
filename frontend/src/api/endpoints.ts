@@ -88,8 +88,18 @@ export const punchIn = (body: Record<string, unknown>) =>
 
 export const beaconMacs = () => api<{ macs: string[] }>("/attendance/beacon-macs");
 
+export interface RegistryZoneLabels {
+  zone_en?: string;
+  zone_hi?: string;
+  zone_mr?: string;
+}
+
 export const beaconRegistry = () =>
-  api<{ macs: string[]; ibeacons: { uuid: string; major: number; minor: number }[] }>(
+  api<{
+    macs: string[];
+    ibeacons: ({ uuid: string; major: number; minor: number } & RegistryZoneLabels)[];
+    macs_detail?: ({ mac: string } & RegistryZoneLabels)[];
+  }>(
     "/attendance/beacon-registry",
   );
 
@@ -176,6 +186,9 @@ export const flaggedAttendance = (date?: string) =>
 
 export const approveAttendance = (id: string) =>
   api<AttendanceRecord>(`/attendance/${id}/approve`, { method: "POST" });
+
+export const rejectAttendance = (id: string) =>
+  api<AttendanceRecord>(`/attendance/${id}/reject`, { method: "POST" });
 
 // ---------- Phase 4: AI services ----------
 

@@ -206,7 +206,9 @@
     "reasonFace": "चेहरा जुळला नाही",
     "faceScore": "चेहरा जुळणी {{s}}%",
     "refPhoto": "संदर्भ फोटो",
-    "punchPhoto": "पंच सेल्फी"
+    "punchPhoto": "पंच सेल्फी",
+    "reasonNoBeacon": "बीकन आढळला नाही — फक्त GPS",
+    "reasonNoBeaconNoGps": "बीकन नाही व GPS नाही"
   },
   "notif": {
     "title": "सूचना",

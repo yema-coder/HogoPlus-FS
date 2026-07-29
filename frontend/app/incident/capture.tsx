@@ -134,6 +134,8 @@ function IncidentCaptureInner() {
   // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
   // never waits on it — whatever is found by Submit time travels with the payload.
   const bleHitRef = useRef<BleBeaconHit | null>(null);
+  // v1.0.15: matched zone label (user's language) for the live "📍 zone" chip.
+  const [bleZone, setBleZone] = useState<string | null>(null);
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
   const selectedDept = departments.data?.find((d) => d.code === dept) ?? null;
@@ -174,7 +176,7 @@ function IncidentCaptureInner() {
       try {
         const scanner = getBleScanner();
         if (!scanner.isReal) return;
-        let registry = { macs: [] as string[], ibeacons: [] as { uuid: string; major: number; minor: number }[] };
+        let registry: Awaited<ReturnType<typeof beaconRegistry>>;
         try {
           registry = await beaconRegistry();
         } catch {
@@ -185,7 +187,27 @@ function IncidentCaptureInner() {
         // 10s LOW_LATENCY window, early-exit on first match (opportunistic zone tag —
         // still non-blocking: no beacon heard = incident proceeds exactly as before).
         const hit = await scanner.scan(10000, registry);
-        if (active) bleHitRef.current = hit;
+        if (!active) return;
+        bleHitRef.current = hit;
+        if (hit) {
+          // resolve the matched zone label in the user's language for the live chip
+          const lang = i18n.language;
+          const pick = (e?: { zone_en?: string; zone_hi?: string; zone_mr?: string }) => {
+            if (!e) return null;
+            const v = lang === "hi" ? e.zone_hi : lang === "mr" ? e.zone_mr : e.zone_en;
+            return v ?? e.zone_en ?? null;
+          };
+          if (hit.ibeacon) {
+            const k = hit.ibeacon;
+            setBleZone(pick(registry.ibeacons?.find(
+              (b) => b.uuid.toLowerCase() === k.uuid.toLowerCase() && b.major === k.major && b.minor === k.minor,
+            )));
+          } else if (hit.mac) {
+            setBleZone(pick(registry.macs_detail?.find(
+              (m) => m.mac.toUpperCase() === hit.mac!.toUpperCase(),
+            )));
+          }
+        }
       } catch {
         // beacon is optional — never block or surface capture errors
       }
@@ -459,6 +481,11 @@ function IncidentCaptureInner() {
               <X size={26} color="#FFFFFF" strokeWidth={2.6} />
             </Pressable>
             {gpsChip()}
+            {bleZone ? (
+              <View style={[styles.gpsChip, { backgroundColor: colors.primary }]} testID="zone-chip">
+                <Text style={styles.gpsChipText}>📍 {bleZone}</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.shutterRow}>
             {!recording ? (
@@ -544,6 +571,7 @@ function IncidentCaptureInner() {
         <View style={styles.locLine} testID="capture-location-line">
           <MapPin size={18} color={colors.success} strokeWidth={2.4} />
           <Text style={styles.locText} numberOfLines={1}>
+            {bleZone ? `📍 ${bleZone} · ` : ""}
             {address ?? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`}
           </Text>
         </View>

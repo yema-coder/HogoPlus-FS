@@ -148,3 +148,19 @@ async def test_settings_flag_roundtrip(client, db_session):
         "/api/admin/settings", json={"beacon_first_mode": False}, headers=headers
     )
     assert r.status_code == 200 and r.json()["beacon_first_mode"] is False
+
+
+async def test_beacon_registry_returns_zone_labels(client):
+    """v1.0.15: registry entries carry trilingual zone labels for the live capture
+    chip; legacy keys (macs / ibeacons uuid+major+minor) unchanged for old builds."""
+    headers = await login(client, WORKER)
+    r = await client.get("/api/attendance/beacon-registry", headers=headers)
+    assert r.status_code == 200
+    data = r.json()
+    assert set(data.keys()) == {"macs", "ibeacons", "macs_detail"}
+    entry = next(i for i in data["ibeacons"] if i["minor"] == 1 and i["major"] == 1)
+    assert entry["zone_en"] == "Boiler House"
+    assert entry["zone_hi"] and entry["zone_mr"]
+    mac_entry = next(m for m in data["macs_detail"] if m["mac"] == "AA:BB:CC:DD:EE:01")
+    assert mac_entry["zone_en"]
+    assert "AA:BB:CC:DD:EE:01" in data["macs"]  # legacy list intact
