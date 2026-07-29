@@ -792,3 +792,31 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   main before any Save to GitHub).
 - Test infra reinstalled this fork (apt PG15+redis, pgvector v0.8.0 from source, role hogo,
   hogoplus_test + vector ext).
+
+## v1.0.15 — neverForLocation ARTIFACT root cause + batch (2026-06 fork) ✅ code complete, build pending
+- TRUE ROOT CAUSE of all beacon failures (user's APK autopsy: BLUETOOTH_SCAN usesPermissionFlags=
+  0x00010000 in the v1.0.14 artifact; versionCode 133 ≠ app.json 10014 proving pipeline overrides):
+  react-native-ble-plx's LIBRARY AndroidManifest.xml (in the AAR) declares BLUETOOTH_SCAN with
+  neverForLocation; the GRADLE MANIFEST MERGER re-injects it into every artifact AFTER prebuild —
+  repo/app.json fixes can never win, and prebuild-output checks look clean while artifacts are dirty.
+  With that flag the OS strips ALL iBeacon frames before the app sees them.
+- FIX (merge-time authority): local config plugin frontend/plugins/withBleScanNoNeverForLocation.js
+  (LAST in app.json plugins) stamps tools:remove="android:usesPermissionFlags" onto the app
+  manifest's BLUETOOTH_SCAN + ensures xmlns:tools. Manifest merger MUST strip the attr regardless
+  of library contributions; every pipeline prebuild re-applies the stamp. VERIFIED via prebuild in
+  /tmp copy: `<uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+  tools:remove="android:usesPermissionFlags"/>`. ACCESS_FINE_LOCATION requirement (needed without
+  the flag) already satisfied: manifest has it (expo-location) + strict guards force grant+GPS-ON
+  pre-scan. app.json: version 1.0.15, versionCode 10015 (pipeline will assign its own >133).
+- v1.0.15 batch (all shipped in repo): Approvals→Attendance REJECT button (att-reject-<id>,
+  paired with approve, optimistic, POST /attendance/{id}/reject); flag-reason i18n
+  att.reasonNoBeacon/att.reasonNoBeaconNoGps ×3 (parity 430 keys); incident capture live zone chip
+  (testID zone-chip, native only) fed by enriched GET /attendance/beacon-registry (entries now carry
+  zone_en/hi/mr + macs_detail — additive, old builds ignore; backend half deployable NOW);
+  SelfieCamera styles.center pre-existing tsc error fixed.
+- Tests: pytest 211/211; tsc clean; eslint clean; testing_agent iteration_19 ALL PASS (reject flow
+  E2E with live no_beacon_gps_only rows in en+mr, no key leaks, capture web regression).
+  beacon_first_mode verified False after tests; frontend/.env restored to api.hogoplus.in.
+- USER ARTIFACT AUTOPSY before install: aapt2 dump xmltree (BLUETOOTH_SCAN must have NO
+  usesPermissionFlags), aapt2 dump badging (versionCode >133, versionName 1.0.15), strings on
+  assets/index.android.bundle (api.hogoplus.in pinned, no preview/localhost).

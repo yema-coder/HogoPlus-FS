@@ -383,3 +383,14 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   Frontend sweep (testing_agent iteration_18): 7/8 PASS, offline-outbox partial (headless
   can't capture photo; outbox path code-verified). Device-only rows -> field protocol.
 - frontend/.env temporarily pointed at sandbox for the sweep, RESTORED to api.hogoplus.in.
+
+## v1.0.15 — neverForLocation merge-time fix + app batch (2026-06 fork)
+- ROOT CAUSE (artifact autopsy): ble-plx LIBRARY manifest re-injects BLUETOOTH_SCAN
+  neverForLocation via Gradle manifest merger AFTER prebuild (v1.0.14 artifact had
+  usesPermissionFlags=0x00010000 despite clean app.json). FIX: config plugin
+  plugins/withBleScanNoNeverForLocation.js stamps tools:remove="android:usesPermissionFlags"
+  (merge-time authority, re-applied by every prebuild). Prebuild-verified in /tmp copy.
+- Batch: Approvals attendance Reject button, no-beacon reason i18n ×3, capture zone chip
+  (native only) + enriched beacon-registry labels (backend deployable now).
+- pytest 211/211; tsc + eslint clean; testing_agent iteration_19 ALL PASS.
+- beacon_first_mode=False confirmed post-test; frontend/.env restored to api.hogoplus.in.
