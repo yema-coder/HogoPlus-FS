@@ -66,7 +66,7 @@ emp_id,name,phone,phone_status,department_code,designation,role,role_confidence,
 0051,Thorat Subham Dilip,+919130275310,OK,CANE_YARD,Clerk,Clerk,HIGH,NO
 0052,Shubham Vilas Sonawane,+918888505428,OK,CANE_YARD,Shift Supervisor,Staff,HIGH (Supervisor title -> Staff role),NO
 0059,Mayur Manik Thorat,+919011790931,OK,CANE_YARD,Kata Clerk,Clerk,HIGH,NO
-0061,Sunil Kondiram Vavhal,+917020792694,OK,CANE_YARD,Kata Clerk,Clerk,HIGH,NO
+0061,Sunil Kondiram Vavhal,+917020892694,OK,CANE_YARD,Kata Clerk,Clerk,HIGH,NO
 0038,Najim Yasin Deshamukh,+919822472481,OK,CIVIL,Jr. Engineer,Staff,HIGH,NO
 0039,Shinde Shankar Mohan,+919763400419,OK,CIVIL,Supervisor,Staff,HIGH (Supervisor title -> Staff role),NO
 0040,Amate Yogesh Bhanudas,+919623450528,OK,CIVIL,Driver,Worker,MEDIUM,YES
