@@ -964,3 +964,18 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - Evidence: /app/docs/WAVE1_FIELD_PROTOCOL.md (field protocol + APK autopsy greps + flag flip).
 - app.json now 1.0.19/10019. frontend/.env restored to api.hogoplus.in (BOTH EXPO_PUBLIC_API_URL
   and EXPO_PUBLIC_BACKEND_URL — NOTE: the api client uses EXPO_PUBLIC_API_URL!).
+
+## v1.0.19 Queued-Items AUDIT (fork session, 2026-06)
+- Handoff claimed 4 queued items missing; previous session claimed all done. AUDIT RESULT: 3 of 4
+  fully existed; emp_id fix was INCOMPLETE (only 1 of 2 endpoints patched).
+- EXISTS: /incidents limit+offset (incidents.py:412-439, cap 200; live_v1019_api.py tests);
+  share-timings one-tap (attendance/result.tsx share-timings-button -> POST /attendance/ble-diag,
+  test_ble_diag.py); video cap (incident/capture.tsx videoQuality="720p" videoBitrate=2_000_000).
+- WAS MISSING, NOW FIXED: GET /api/admin/emp-id-suggest (admin.py:~883) still used regex '^\d+$'
+  including garbage IDs (3003200 etc) -> suggested "3003201". Fixed to '^\d{1,4}$' (same as
+  /admin/pending). Used by /employees/new direct-add form. Verified live: now returns "1220".
+  New test: tests/test_emp_id_suggest.py. Backend suite 233 passed.
+- Flags re-verified OFF in prod DB: home_config_enabled / vehicle_log_enabled /
+  notif_batching_enabled all False. §C artifact strings all present in frontend source.
+  app.json 1.0.19 / versionCode 10019. NOTE: backend fix must be deployed to user's EC2
+  (api.hogoplus.in) — repo code is fixed; preview backend verified.

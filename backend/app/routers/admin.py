@@ -880,7 +880,9 @@ async def emp_id_suggest(
 
     row = (
         await session.execute(
-            sa_text(r"SELECT COALESCE(MAX(emp_id::int), 0) FROM employees WHERE emp_id ~ '^\d+$'")
+            # only the normal 4-digit id pool — legacy rows carry garbage 6-7 digit
+            # emp_ids (e.g. 300312, 3003200) and must never drive suggestions
+            sa_text(r"SELECT COALESCE(MAX(emp_id::int), 0) FROM employees WHERE emp_id ~ '^\d{1,4}$'")
         )
     ).scalar() or 0
     return {"suggested_emp_id": f"{row + 1:04d}"}
