@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, punchIn, submitForm } from "@/src/api/endpoints";
+import { createIncident, createVehicleLog, punchIn, submitForm } from "@/src/api/endpoints";
 import { storage } from "@/src/utils/storage";
 
 export interface OutboxFile {
@@ -16,7 +16,7 @@ export interface OutboxFile {
 
 export interface OutboxItem {
   id: string;
-  type: "incident" | "attendance" | "form";
+  type: "incident" | "attendance" | "form" | "vehicle";
   payload: Record<string, unknown>;
   photoUri: string | null;
   photoName: string;
@@ -153,6 +153,18 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
             const created = (await createIncident(payload)) as { id?: string };
             set({ results: { ...get().results, [item.id]: created.id ?? null } });
           } else if (item.type === "attendance") await punchIn(payload);
+          else if (item.type === "vehicle") {
+            // voice note is best-effort; the log itself must never be blocked by it
+            for (const f of item.files ?? []) {
+              try {
+                const up = await uploadFile(f.uri, f.name);
+                payload[f.field] = up.key;
+              } catch (fe) {
+                if (fe instanceof ApiError && fe.status === 0) throw fe;
+              }
+            }
+            await createVehicleLog(payload); // client_uuid makes replays idempotent
+          }
           else {
             // form submission: upload each queued file, patch data_json, submit
             const data = { ...(payload.data_json as Record<string, unknown>) };

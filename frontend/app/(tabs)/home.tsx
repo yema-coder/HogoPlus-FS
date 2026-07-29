@@ -32,6 +32,8 @@ import { useTranslation } from "react-i18next";
 
 import { ApiError } from "@/src/api/client";
 import {
+  getHomeConfig,
+  getHomeCounts,
   listIncidents,
   listSubmissions,
   myAttendance,
@@ -47,6 +49,7 @@ import { GridTile } from "@/src/components/GridTile";
 import { showToast } from "@/src/components/Toast";
 import { UpdateBanner } from "@/src/components/UpdateBanner";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
+import { ConfigHome } from "@/src/home/ConfigHome";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
@@ -138,6 +141,13 @@ export default function HomeScreen() {
   const mgrIncs = useCachedFetch<Incident[]>("mgr-open-incs", () => listIncidents(), {
     enabled: rank <= 3,
   });
+
+  // Wave 1: config-driven home — when the backend serves a layout for this
+  // dept/role, widgets replace the default action sections (header + punch card
+  // stay). No config (or flag OFF) = built-in home, byte-identical.
+  const homeCfg = useCachedFetch("home-config", getHomeConfig);
+  const cfgWidgets = homeCfg.data?.config?.widgets ?? null;
+  const homeCounts = useCachedFetch("home-counts", getHomeCounts);
 
   // time-of-day greeting in the user's language
   const hour = dayjs().hour();
@@ -291,13 +301,16 @@ export default function HomeScreen() {
               void att.refresh();
               void shifts.refresh();
               void notifs.refresh();
+              void homeCfg.refresh();
+              void homeCounts.refresh();
             }}
             tintColor={colors.primary}
           />
         }
       >
         <UpdateBanner />
-        {rank <= 3 ? (
+        {cfgWidgets ? <ConfigHome widgets={cfgWidgets} counts={homeCounts.data} /> : null}
+        {!cfgWidgets && rank <= 3 ? (
           <Pressable
             testID="manager-morning-card"
             accessibilityRole="button"
@@ -321,6 +334,7 @@ export default function HomeScreen() {
             <ChevronRight size={20} color={colors.primary} strokeWidth={2.4} />
           </Pressable>
         ) : null}
+        {!cfgWidgets ? (
         <Pressable
           testID="report-incident-tile"
           accessibilityRole="button"
@@ -335,6 +349,7 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.incidentLabel}>{t("home.reportIncident")}</Text>
         </Pressable>
+        ) : null}
 
         {stripText ? (
           <Pressable
@@ -371,6 +386,8 @@ export default function HomeScreen() {
           {attendanceBody()}
         </View>
 
+        {!cfgWidgets ? (
+        <>
         <View style={styles.grid}>
           <GridTile
             testID="home-tile-reports"
@@ -444,6 +461,8 @@ export default function HomeScreen() {
               <View style={{ flex: 1 }} />
             )}
           </View>
+        ) : null}
+        </>
         ) : null}
       </ScrollView>
 

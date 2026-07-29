@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from abc import ABC, abstractmethod
@@ -7,6 +8,38 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Employee, Notification
 
 logger = logging.getLogger("hogo.notify")
+
+# Wave-1 anti-spam: these types are BATCHED (max 1 push per recipient per type
+# per 30 min) and respect quiet hours 22:00–06:00 IST — the inbox row is ALWAYS
+# written; only the push wake-up is suppressed. Gated by
+# settings.notif_batching_enabled (default OFF = today's behaviour).
+BATCHED_TYPES = {"registration_pending", "submission_pending"}
+BATCH_WINDOW_SECONDS = 30 * 60
+
+
+async def _push_allowed(session: AsyncSession, recipient_id: uuid.UUID, type_: str) -> bool:
+    if type_ not in BATCHED_TYPES:
+        return True
+    try:
+        from sqlalchemy import select
+
+        from app.models import FactorySettings
+
+        s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+        if not s or not getattr(s, "notif_batching_enabled", False):
+            return True
+        from app.shift_logic import now_ist
+
+        hour = now_ist().hour
+        if hour >= 22 or hour < 6:
+            return False  # quiet hours — inbox only
+        from app.redis_client import redis_client
+
+        key = f"push:batch:{recipient_id}:{type_}"
+        # SET NX: first push in the window goes out; the rest roll up silently
+        return bool(await redis_client.set(key, "1", nx=True, ex=BATCH_WINDOW_SECONDS))
+    except Exception:
+        return True  # anti-spam must never block a notification
 
 
 class PushSender(ABC):
@@ -22,29 +55,38 @@ class NoopPushSender(PushSender):
 
 
 class ExpoPushSender(PushSender):
-    """Fire-and-forget delivery via the Expo Push API. In-app notifications stay
-    the source of truth — push is only the wake-up tap. Works in built APKs
-    (Expo Go iOS has no push native module; tokens are simply never registered)."""
+    """Delivery via the Expo Push API, detached from the request path
+    (asyncio.create_task) with 3 retry attempts + backoff. In-app notifications
+    stay the source of truth — push is only the wake-up tap. Works in built
+    APKs (Expo Go iOS has no push native module; tokens never register)."""
 
     async def push(self, expo_push_token: str | None, title: str, body: str, data: dict | None = None) -> None:
         if not expo_push_token or not expo_push_token.startswith("ExponentPushToken"):
             return
-        try:
-            import httpx
+        asyncio.create_task(self._send_with_retry(expo_push_token, title, body, data))
 
-            async with httpx.AsyncClient(timeout=8) as client:
-                await client.post(
-                    "https://exp.host/--/api/v2/push/send",
-                    json={
-                        "to": expo_push_token,
-                        "title": title,
-                        "body": body,
-                        "data": data or {},
-                        "sound": "default",
-                    },
-                )
-        except Exception:
-            logger.warning("expo push failed (non-blocking)")
+    async def _send_with_retry(self, token: str, title: str, body: str, data: dict | None) -> None:
+        import httpx
+
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=8) as client:
+                    res = await client.post(
+                        "https://exp.host/--/api/v2/push/send",
+                        json={
+                            "to": token,
+                            "title": title,
+                            "body": body,
+                            "data": data or {},
+                            "sound": "default",
+                        },
+                    )
+                    if res.status_code < 500:
+                        return
+            except Exception:
+                pass
+            await asyncio.sleep(2 ** attempt)
+        logger.warning("expo push failed after 3 attempts (non-blocking)")
 
 
 class NotificationDispatcher:
@@ -179,6 +221,13 @@ T = {
             "en": "Your shift ended — please punch out now.",
             "hi": "आपकी शिफ्ट खत्म हो गई — कृपया अभी पंच आउट करें।",
             "mr": "तुमची शिफ्ट संपली — कृपया आत्ता पंच आउट करा.",
+        },
+    },
+    "vehicle_overstay": {
+        "title": {
+            "en": "🚚 Vehicle inside for over 12 hours",
+            "hi": "🚚 वाहन 12 घंटे से अंदर है",
+            "mr": "🚚 वाहन १२ तासांहून जास्त आत आहे",
         },
     },
 }

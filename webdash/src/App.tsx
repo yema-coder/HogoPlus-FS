@@ -12,6 +12,7 @@ import Incidents from "./screens/Incidents";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
 import Reports from "./screens/Reports";
+import Vehicles from "./screens/Vehicles";
 import logo from "./logo.png";
 import { api } from "./api";
 
@@ -90,6 +91,7 @@ function Layout() {
         <NavLink to="/departments">🏭 {t("nav_overview")}</NavLink>
         <NavLink to="/approvals">✅ {t("nav_approvals")}</NavLink>
         <NavLink to="/reports">📊 {t("nav_reports")}</NavLink>
+        <NavLink to="/vehicles">🚚 {t("nav_vehicles")}</NavLink>
         {isTopMgmt(user) && <NavLink to="/admin">⚙️ {t("nav_admin")}</NavLink>}
         <details className="nav-more">
           <summary>{t("more")} ▾</summary>
@@ -146,6 +148,7 @@ export default function App() {
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/vehicles" element={<Vehicles />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

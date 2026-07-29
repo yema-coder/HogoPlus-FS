@@ -71,6 +71,9 @@ async def get_settings(
     return {
         "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
         "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+        "home_config_enabled": s.home_config_enabled,
+        "vehicle_log_enabled": s.vehicle_log_enabled,
+        "notif_batching_enabled": s.notif_batching_enabled,
     }
 
 
@@ -84,7 +87,10 @@ async def patch_settings(
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
     changes = {}
-    for field in ("factory_lat", "factory_lng", "radius_meters", "beacon_first_mode"):
+    for field in (
+        "factory_lat", "factory_lng", "radius_meters", "beacon_first_mode",
+        "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
+    ):
         val = getattr(body, field)
         if val is not None:
             changes[field] = {"old": getattr(s, field), "new": val}
@@ -94,6 +100,9 @@ async def patch_settings(
     return {
         "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
         "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+        "home_config_enabled": s.home_config_enabled,
+        "vehicle_log_enabled": s.vehicle_log_enabled,
+        "notif_batching_enabled": s.notif_batching_enabled,
     }
 
 
@@ -312,7 +321,11 @@ async def pending_employees(
 
     max_num = (
         await session.execute(
-            select(func.max(cast(Employee.emp_id, SAInteger))).where(Employee.emp_id.op("~")(r"^\d+$"))
+            # only the normal 4-digit id pool — a few legacy rows carry garbage
+            # 6-7 digit emp_ids (e.g. 3003200) and must never drive suggestions
+            select(func.max(cast(Employee.emp_id, SAInteger))).where(
+                Employee.emp_id.op("~")(r"^\d{1,4}$")
+            )
         )
     ).scalar() or 0
     suggested = f"{max_num + 1:04d}"

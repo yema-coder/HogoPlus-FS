@@ -6,10 +6,12 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { myAttendance } from "@/src/api/endpoints";
+import { myAttendance, sendBleDiag } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
+import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatTime } from "@/src/utils/format";
+import { storage } from "@/src/utils/storage";
 
 export default function PunchResultScreen() {
   const router = useRouter();
@@ -139,6 +141,32 @@ export default function PunchResultScreen() {
             {coords ? <Text style={styles.locationCoords}>{coords}</Text> : null}
           </View>
         ) : null}
+        {!isQueued ? (
+          <Text
+            testID="share-timings-button"
+            accessibilityRole="button"
+            style={styles.shareLink}
+            onPress={() => {
+              void (async () => {
+                try {
+                  const raw = await storage.getItem("hogo.lastPunchTimings");
+                  await sendBleDiag({
+                    kind: "punch_timing_card",
+                    timings: raw ? JSON.parse(raw) : null,
+                    zone: zone || null,
+                    level: level || null,
+                    shared_at: new Date().toISOString(),
+                  });
+                  showToast(t("att.timingsShared"), "success");
+                } catch {
+                  showToast(t("errors.server"), "error");
+                }
+              })();
+            }}
+          >
+            📤 {t("att.shareTimings")}
+          </Text>
+        ) : null}
       </View>
       <BigButton
         testID="result-home-button"
@@ -160,6 +188,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm },
+  shareLink: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    fontFamily: fonts.semiBold,
+    fontSize: type.sm,
+    color: colors.primary,
+  },
   locationBlock: {
     alignItems: "center",
     gap: 2,

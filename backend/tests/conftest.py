@@ -57,6 +57,8 @@ PHONES = {
     "cgm": "+919000000001",
     "prod_mgr": "+919000000002",
     "time_mgr": "+919000000003",
+    "sec_mgr": "+919000000004",
+    "w_sec": "+919000000016",
     "w_prod1": "+919000000011",
     "w_prod2": "+919000000012",
     "w_prod3": "+919000000013",
@@ -134,6 +136,8 @@ async def _seed_base():
         cgm = emp("0001", "Test CGM", PHONES["cgm"], "ADMIN", "CGM")
         prod_mgr = emp("0002", "Prod Manager", PHONES["prod_mgr"], "PRODUCTION", "Manager")
         time_mgr = emp("0003", "Time Manager", PHONES["time_mgr"], "TIME_OFFICE", "Manager")
+        sec_mgr = emp("0004", "Security Manager", PHONES["sec_mgr"], "SECURITY", "Manager")
+        emp("0016", "Security Watchman", PHONES["w_sec"], "SECURITY", "Worker")
         w1 = emp("0011", "Worker Prod1", PHONES["w_prod1"], "PRODUCTION", "Worker", eligible=True)
         w2 = emp("0012", "Worker Prod2", PHONES["w_prod2"], "PRODUCTION", "Worker", eligible=True)
         w3 = emp("0013", "Worker Prod3", PHONES["w_prod3"], "PRODUCTION", "Worker", eligible=True)
@@ -169,7 +173,7 @@ async def _seed_base():
         await s.flush()
 
         # dept managers
-        for code, mgr in (("PRODUCTION", prod_mgr), ("TIME_OFFICE", time_mgr)):
+        for code, mgr in (("PRODUCTION", prod_mgr), ("TIME_OFFICE", time_mgr), ("SECURITY", sec_mgr)):
             d = (await s.execute(text("SELECT id FROM departments WHERE code=:c"), {"c": code})).first()
             await s.execute(
                 text("UPDATE departments SET manager_employee_id=:m WHERE code=:c"),

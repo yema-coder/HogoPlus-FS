@@ -324,6 +324,16 @@ class FactorySettings(TimestampMixin, Base):
     # location identity; GPS/geofence become secondary evidence and never decide
     # the punch outcome. OFF = launch BEACON-WINS ladder, byte-identical.
     beacon_first_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Wave-1 dept upgrade flags (all default OFF; demo bubble bypasses them)
+    home_config_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    vehicle_log_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    notif_batching_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
 
 class BleBeacon(TimestampMixin, Base):
@@ -454,3 +464,51 @@ class ChatMessage(Base):
     )
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
+
+class HomeConfig(TimestampMixin, Base):
+    """Per-department/role home screen layout. Resolution order in the API:
+    (dept, role) > (dept, NULL) > (NULL, role) > None (app renders its built-in
+    fallback home). Changing a department's home after Wave 1 is a config edit
+    here — never an APK."""
+
+    __tablename__ = "home_configs"
+    __table_args__ = (
+        UniqueConstraint("department_code", "role_code", name="uq_home_config_dept_role"),
+    )
+    id: Mapped[uuid.UUID] = uuid_pk()
+    department_code: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("departments.code"), nullable=True
+    )
+    role_code: Mapped[str | None] = mapped_column(String(20), ForeignKey("roles.code"), nullable=True)
+    config_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+
+
+class VehicleLog(TimestampMixin, Base):
+    """Security gate register: one row per vehicle movement (IN or OUT). An OUT
+    row is paired to its latest unpaired IN row (same plate, same demo class) —
+    both sides get paired_log_id so 'currently inside' = IN rows with NULL pair."""
+
+    __tablename__ = "vehicle_logs"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    plate: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    vehicle_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    direction: Mapped[str] = mapped_column(String(3), nullable=False)  # in | out
+    driver_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    voice_note_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    gate_zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    anpr_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    logged_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False
+    )
+    paired_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vehicle_logs.id"), nullable=True
+    )
+    client_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+    logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

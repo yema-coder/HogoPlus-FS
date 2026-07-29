@@ -17,9 +17,11 @@ from app.routers import (
     departments,
     files,
     forms,
+    home,
     incidents,
     notifications,
     shifts,
+    vehicles,
 )
 
 logging.basicConfig(
@@ -53,6 +55,8 @@ api.include_router(admin.router)
 api.include_router(notifications.router)
 api.include_router(ai.router)
 api.include_router(dashboard.router)
+api.include_router(home.router)
+api.include_router(vehicles.router)
 
 app.include_router(api)
 

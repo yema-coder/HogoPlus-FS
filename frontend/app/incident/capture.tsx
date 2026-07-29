@@ -417,6 +417,7 @@ function IncidentCaptureInner() {
           facing="back"
           mode={mode}
           videoQuality="720p"
+          videoBitrate={2_000_000}
         />
         {coach ? (
           <View style={styles.coachWrap} testID="camera-coach-overlay">

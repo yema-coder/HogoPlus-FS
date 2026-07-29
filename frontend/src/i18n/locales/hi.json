@@ -208,7 +208,9 @@
     "refPhoto": "संदर्भ फोटो",
     "punchPhoto": "पंच सेल्फी",
     "reasonNoBeacon": "बीकन नहीं मिला — केवल GPS",
-    "reasonNoBeaconNoGps": "न बीकन, न GPS"
+    "reasonNoBeaconNoGps": "न बीकन, न GPS",
+    "shareTimings": "स्पीड रिपोर्ट भेजें",
+    "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!"
   },
   "notif": {
     "title": "सूचनाएँ",
@@ -506,5 +508,53 @@
     "makeHod": "{{dept}} का विभाग प्रबंधक (HOD) बनाएं",
     "hodSet": "HOD अपडेट हुआ: {{name}}",
     "keepShift": "वर्तमान रखें"
+  },
+  "veh": {
+    "registerTitle": "गेट लॉग",
+    "newTitle": "वाहन एंट्री",
+    "newEntry": "नई एंट्री",
+    "in": "अंदर",
+    "out": "बाहर",
+    "todayIn": "आज अंदर",
+    "todayOut": "आज बाहर",
+    "inside": "अभी अंदर",
+    "tabToday": "आज",
+    "tabInside": "अंदर",
+    "empty": "अभी कोई एंट्री नहीं",
+    "plateTitle": "गाड़ी नंबर",
+    "scanPlate": "नंबर प्लेट का फोटो",
+    "scanning": "प्लेट पढ़ रहे हैं…",
+    "anprOk": "फोटो से नंबर मिला",
+    "anprMiss": "पढ़ नहीं पाए — नंबर टाइप करें",
+    "plateNeeded": "गाड़ी नंबर डालें",
+    "typeTitle": "गाड़ी का प्रकार",
+    "purposeTitle": "काम",
+    "driverTitle": "ड्राइवर / पार्टी (वैकल्पिक)",
+    "driverPh": "नाम",
+    "zoneSearching": "गेट खोज रहे हैं…",
+    "submitIn": "अंदर दर्ज करें",
+    "submitOut": "बाहर दर्ज करें",
+    "saved": "एंट्री सेव हुई",
+    "queued": "नेटवर्क नहीं — सेव हुआ, बाद में जाएगा",
+    "type": {
+      "truck": "ट्रक",
+      "tractor": "ट्रैक्टर",
+      "tempo": "टेम्पो",
+      "car": "कार",
+      "bike": "बाइक",
+      "bus": "बस",
+      "jcb": "जेसीबी",
+      "bullock_cart": "बैलगाड़ी",
+      "other": "अन्य"
+    },
+    "purpose": {
+      "cane": "गन्ना",
+      "delivery": "डिलीवरी",
+      "dispatch": "डिस्पैच",
+      "visitor": "विज़िटर",
+      "contractor": "ठेकेदार",
+      "official": "ऑफिशियल",
+      "other": "अन्य"
+    }
   }
 }

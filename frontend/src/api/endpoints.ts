@@ -287,3 +287,57 @@ export const assignDeptManager = (code: string, employeeId: string) =>
     `/admin/departments/${code}/assign-manager`,
     { method: "POST", body: { employee_id: employeeId } },
   );
+
+// ---- Wave 1: config-driven home + Security vehicle log ----
+
+export interface HomeWidgetItem {
+  key?: string;
+  icon?: string;
+  emoji?: string;
+  label?: Record<string, string>;
+  route?: string;
+  color?: string;
+  testID?: string;
+}
+export interface HomeWidget {
+  type: string;
+  items?: HomeWidgetItem[];
+}
+export interface HomeConfigResult {
+  config: { widgets: HomeWidget[] } | null;
+}
+
+export const getHomeConfig = () => api<HomeConfigResult>("/home/config");
+export const getHomeCounts = () => api<Record<string, number>>("/home/counts");
+
+export interface VehicleLogItem {
+  id: string;
+  plate: string;
+  vehicle_type: string;
+  direction: "in" | "out";
+  driver_name: string | null;
+  purpose: string | null;
+  photo_key: string | null;
+  voice_note_key: string | null;
+  gate_zone: string | null;
+  anpr_used: boolean;
+  paired_log_id: string | null;
+  logged_at: string;
+  hours_inside?: number;
+}
+
+export const createVehicleLog = (body: Record<string, unknown>) =>
+  api<{ log: VehicleLogItem; duplicate: boolean }>("/vehicles/log", { method: "POST", body });
+
+export const listVehicleLogs = (params: { day?: string; plate?: string; direction?: string } = {}) => {
+  const qs = Object.entries(params)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return api<VehicleLogItem[]>(`/vehicles/logs${qs ? `?${qs}` : ""}`);
+};
+
+export const vehiclesInside = () => api<VehicleLogItem[]>("/vehicles/inside");
+
+export const vehiclesSummary = () =>
+  api<{ today_in: number; today_out: number; currently_inside: number }>("/vehicles/summary");
