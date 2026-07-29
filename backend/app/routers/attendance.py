@@ -140,6 +140,17 @@ async def punch_in(
         inside = distance <= fs.radius_meters
     if matched_beacon:
         level = "verified_plus"
+    elif fs.beacon_first_mode:
+        # BEACON-FIRST POLICY (settings flag, ships OFF): the beacon zone is the
+        # PRIMARY location identity. GPS is still captured and stored as secondary
+        # evidence (gps_verified keeps the geofence truth) but never decides the
+        # outcome — a no-beacon punch is ACCEPTED and flagged for Time Office review.
+        level = "flagged"
+        flagged_reason = (
+            "no_beacon_gps_only"
+            if body.gps_lat is not None and body.gps_lng is not None
+            else "no_beacon_no_gps"
+        )
     elif body.gps_lat is None or body.gps_lng is None:
         level = "flagged"
         flagged_reason = "gps_missing"

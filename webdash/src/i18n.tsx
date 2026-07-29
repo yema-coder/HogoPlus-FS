@@ -131,6 +131,11 @@ const D: Record<string, [string, string, string]> = {
   page: ["page", "पृष्ठ", "पान"],
   // Admin
   geofence: ["Factory geofence", "फैक्ट्री जियोफेंस", "कारखाना जिओफेन्स"],
+  beaconFirst: [
+    "Beacon-first attendance (zone primary, GPS secondary)",
+    "बीकन-प्रथम उपस्थिति (ज़ोन प्राथमिक, GPS द्वितीयक)",
+    "बीकन-प्रथम हजेरी (झोन प्राथमिक, GPS दुय्यम)",
+  ],
   lat: ["Latitude", "अक्षांश", "अक्षांश"],
   lng: ["Longitude", "देशांतर", "रेखांश"],
   radius: ["Radius (meters)", "त्रिज्या (मीटर)", "त्रिज्या (मीटर)"],

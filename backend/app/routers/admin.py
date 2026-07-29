@@ -67,7 +67,10 @@ async def get_settings(
     s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
-    return {"factory_lat": s.factory_lat, "factory_lng": s.factory_lng, "radius_meters": s.radius_meters}
+    return {
+        "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
+        "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+    }
 
 
 @router.patch("/settings")
@@ -80,14 +83,17 @@ async def patch_settings(
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
     changes = {}
-    for field in ("factory_lat", "factory_lng", "radius_meters"):
+    for field in ("factory_lat", "factory_lng", "radius_meters", "beacon_first_mode"):
         val = getattr(body, field)
         if val is not None:
             changes[field] = {"old": getattr(s, field), "new": val}
             setattr(s, field, val)
     await write_audit(session, employee.id, "settings.updated", "settings", str(s.id), changes)
     await session.commit()
-    return {"factory_lat": s.factory_lat, "factory_lng": s.factory_lng, "radius_meters": s.radius_meters}
+    return {
+        "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
+        "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+    }
 
 
 # ---------------- employees ----------------

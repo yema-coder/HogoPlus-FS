@@ -219,6 +219,7 @@ class SettingsPatchIn(BaseModel):
     factory_lat: float | None = None
     factory_lng: float | None = None
     radius_meters: int | None = Field(default=None, ge=50, le=10000)
+    beacon_first_mode: bool | None = None
 
 
 class EmployeePatchIn(BaseModel):

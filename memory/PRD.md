@@ -760,3 +760,35 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - Pending user actions: deploy 2a407ed/f80b1f4 backend pack; build v1.0.11 via Publish (AAB for
   Play with PEPK existing-key setup BEFORE first upload); field protocol in STAGE3_v1.0.11_TEST_PLAN.md;
   reject 4 flagged rows; clear refs 0001/1212 (curl reset-reference-selfie); then RUN CLEANUP.
+
+## Launch-day Tasks A/B/C — full beacon registry + beacon-first flag (2026-06 fork) ✅
+- TASK C ROOT CAUSE (user suspicion CONFIRMED): registry held only the 6 OUTDOOR minors
+  (33/18/7/34/4/15); v1.0.14 scanner matches ONLY registry entries (BleScanner.ts L96-99 set build,
+  L126-133 silent skip of unregistered, L99 empty-registry instant null) → all 23 indoor beacons
+  invisible → punches stored ble_beacon_id=NULL. DATA-ONLY FIX (Task A). Server evidence: only 2 real
+  punches existed on 2026-07-29 (0001 Amey, 1212 Yema — both beacon EMPTY, flagged reference_bootstrap);
+  the other claimed ~15 punches never reached the server (only 10 real logins since 27th).
+- TASK A DONE (production, api.hogoplus.in): bulk-imported 23 indoor iBeacons (shared UUID
+  01122334-4556-6778-899A-ABBCCDDEEFF0, major 1) → 29 total active zones; hi/mr labels PATCHed on the
+  23 new rows (6 originals untouched). MINOR 0 = Civil verified SAFE end-to-end (all checks use
+  `is not None` / string set keys); live prod demo punch with minor 0 → verified_plus zone Civil.
+  Resolver proof for all 23 minors + negative controls (999, 6, wrong-major). Mobile fetches
+  /attendance/beacon-registry fresh on every punch (punch.tsx L63-68) → NO REBUILD NEEDED.
+  Evidence scripts: scripts/taska_register_beacons.py / taska_resolver_proof.py / taska_minor0_e2e.py /
+  taskc_evidence.py.
+- TASK B SHIPPED (backend+webdash, flag DEFAULT OFF — byte-identical when off): migration 0011 adds
+  settings.beacon_first_mode (applied to Neon; old EC2 code ignores the column). Punch ladder
+  (attendance.py): flag ON → beacon match = verified_plus (unchanged); NO beacon = ACCEPTED but
+  flagged no_beacon_gps_only / no_beacon_no_gps; geofence never gates (gps_verified still stored as
+  evidence). Incidents NEVER blocked/flagged for beacon (already true; zone display already prominent
+  on webdash feed/modals + mobile detail — zone > address > coords). Admin GET/PATCH /settings expose
+  the flag; webdash Admin geofence card got a "Beacon-first attendance" checkbox (rebuilt to
+  webdash_dist). Tests 210/210 (test_beacon_first.py: 6-case matrix ×ON/OFF + incident non-block +
+  settings roundtrip). Live demo-side matrix run on prod DB in both flag states
+  (scripts/taskb_live_matrix.py), flag reverted OFF after.
+- APP-SIDE: NOTHING requires a new APK. v1.0.15 batch (cosmetic only): i18n strings for the two new
+  flag reasons (mobile Time Office queue shows the raw readable string until then).
+- NOT COMMITTED to git (privacy.html conflict branch conflict_280726_2331 still unresolved — sync
+  main before any Save to GitHub).
+- Test infra reinstalled this fork (apt PG15+redis, pgvector v0.8.0 from source, role hogo,
+  hogoplus_test + vector ext).

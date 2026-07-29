@@ -320,6 +320,10 @@ class FactorySettings(TimestampMixin, Base):
     factory_lat: Mapped[float] = mapped_column(Float, nullable=False)
     factory_lng: Mapped[float] = mapped_column(Float, nullable=False)
     radius_meters: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Beacon-first policy flag (Task B, ships OFF): beacon zone is the primary
+    # location identity; GPS/geofence become secondary evidence and never decide
+    # the punch outcome. OFF = launch BEACON-WINS ladder, byte-identical.
+    beacon_first_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class BleBeacon(TimestampMixin, Base):
