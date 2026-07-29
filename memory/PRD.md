@@ -912,3 +912,22 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - frontend/.env EXPO_PUBLIC_BACKEND_URL restored to api.hogoplus.in for the build.
 - NOTE: backend/.env ALLOW_NEW_REGISTRATION left "true" (validated state). Deployed backend env
   is controlled via Deployment Secrets — user must set it true there for Play Store users.
+
+## v1.0.19 QUEUE (user-approved 2026-06, DO NOT build until user green-lights)
+1. emp_id suggestion query: IGNORE outlier ids (300312/300319/3003200 stay as-is — history
+   references them; do NOT renumber rows). Suggest next free id from the normal 4-digit range
+   (e.g. max emp_id where length=4 / value < 10000, excluding demo).
+2. One-tap "Share diagnostics": post the punch timing card to POST /api/attendance/ble-diag
+   automatically from the timing card UI (approved — factory numbers without screenshots).
+3. Perf app-side: /incidents LIMIT+pagination (backend), video bitrate cap (~2 Mbps) on
+   incident recording, /departments client cache, parallel auth-hydration storage reads.
+4. OTP IP-level rate limiting per /app/docs/OTP_IP_RATE_LIMIT_DESIGN.md (shadow mode first).
+5. DB migration Neon SG → Mumbai: user executes separately per
+   /app/docs/DB_MIGRATION_PLAN_MUMBAI.md (WRITTEN PLAN ONLY, pre-flight = confirm backend region).
+
+## TESTING POLICY (user directive 2026-06 — PERMANENT)
+- NEVER use +918483029039 (user's personal number) in automated tests again.
+- Automated tests use the sealed demo bubble: CGM D500 +919000000500, Worker D001 +919000000001
+  (fixed OTP 123456, is_demo, no SMS ever). Real-account path when needed: 0021 +917972540971
+  (permanent Play-reviewer whitelist account). Unknown-number/registration tests: +91999990001x
+  range (verified no employee rows).
