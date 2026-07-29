@@ -880,3 +880,35 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - Prod app-version row still "1.0.7" — in-app update fires only when row bumped above installed
   version AND a higher build is live on the same Play track. Play Console: no extra config; app
   must be installed VIA Play.
+
+## v1.0.18 batch (2026-06 fork) — keyboard overlap + prod DB task + self-reg validation
+- TASK 1 (prod DB): employee 0061 Sunil Kondiram Vavhal phone updated in LIVE Neon DB
+  +917020792694 → +917020892694 (dup-checked: none; format matches PHONE_REGEX; send-otp
+  resolution dry-checked; no redis locks). seed_employees.csv row updated to match — seed.py is
+  INSERT-ONLY (skips existing emp_ids), so GitHub seed edits can NEVER drift/overwrite live rows.
+- TASK 2 (keyboard, THE v1.0.18 build): app-wide migration to react-native-keyboard-controller
+  1.18.5 (SDK 54). KeyboardProvider in root _layout. KeyboardAwareScrollView (bottomOffset 24) on:
+  phone, otp, register-name, announce, swap/new, incident/[id], incident/capture preview,
+  EmployeeForm, FormRenderer (kept scrollRef/scrollToFirstError). RNKC KeyboardAvoidingView
+  behavior="padding" inside Modals: EscalateModal sheet, submission/[id] reject, approvals reject.
+  sahayak chat = behavior="translate-with-padding". employees list: keyboardDismissMode="on-drag".
+  RNKC is NATIVE-ONLY (web no-op) → real avoidance verifiable only on the APK; web regression
+  sweep all-PASS (login, sahayak, announce, employees+form, swap, incident detail, escalate modal,
+  forms engine text field). app.json bumped 1.0.18/10018.
+- TASK 3 (self-reg E2E): VALIDATED against live stack (ALLOW_NEW_REGISTRATION=true in backend/.env):
+  unknown number → send-otp 200 → verify-otp is_new+reg-token → selfie upload (reg token) →
+  Rekognition face gate LIVE (rejected pixel image, passed real portrait) → register →
+  pending_approval + auto emp_id → re-login lands pending → CGM sees registrant in
+  /admin/employees/pending with selfie. Test row fully cleaned from prod DB.
+  Repeatable script: backend/scripts/selfreg_e2e.py.
+- FINDING: real employees with garbage emp_ids poison auto-ID: 3003200 "Haru", 300319 "Shubham",
+  300312 "Karan" (is_demo=false) → next self-reg emp_id becomes 3003201 and suggested_emp_id
+  3003202. Needs user decision (fix rows or change suggestion query).
+- TASK 4 (perf profile, REPORT ONLY per user): /app/docs/PERF_PROFILE_v1.0.17.md — smoking gun:
+  backend↔Neon(ap-southeast-1) = 217ms/query, Redis 215ms/op → every request pays RTT × query
+  count (incidents 2.7s ≈ 12 RTTs vs dashboard/summary 123ms). Payloads tiny (≤5.4KB). Bundle
+  5.66MB/3906 modules. Video 720p/30s no bitrate cap = dominant upload. Fixes proposed for
+  v1.0.19 (LIMIT on /incidents, pending-query optimization, region co-location, videoBitrate).
+- frontend/.env EXPO_PUBLIC_BACKEND_URL restored to api.hogoplus.in for the build.
+- NOTE: backend/.env ALLOW_NEW_REGISTRATION left "true" (validated state). Deployed backend env
+  is controlled via Deployment Secrets — user must set it true there for Play Store users.

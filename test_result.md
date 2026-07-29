@@ -423,3 +423,20 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - pytest 218/218; tsc+eslint clean; ibeacon unit tests 16/16; iter20 frontend E2E all pass.
 - .env restored to api.hogoplus.in. Prod app-version row still 1.0.7 — bump via PUT /admin/app-version
   when 1.0.18 ships to trigger the in-app update flow.
+
+## v1.0.18 — keyboard-controller migration + prod phone update + self-reg validation (2026-06 fork)
+- Emp 0061 phone updated LIVE Neon → +917020892694 (dup-check none, dry auth-check ok, CSV synced;
+  seed.py insert-only so no re-seed drift possible).
+- Keyboard: react-native-keyboard-controller@1.18.5 everywhere (see PRD). NATIVE-ONLY — web is
+  passthrough; APK field test required for actual avoidance. Web regression sweep (agent iter21 +
+  main-agent JWT-injection Playwright): sahayak/announce/employees/emp-form/swap/incident/escalate/
+  form-engine inputs ALL accept text, zero regressions. eslint clean.
+- Testing-agent harness note: hidden OTP input is flaky under Playwright locator.fill (real users
+  unaffected). Workaround that WORKS: fetch JWT via /api/auth/verify-otp, inject localStorage keys
+  hogo.access/hogo.refresh (JSON.stringify'd), hogo.profile (double-stringified), hogo.langPicked/
+  permsPrimed/permsReprimed/faceEnrollAsked = "true", then navigate.
+- Self-registration API E2E ALL PASS (scripts/selfreg_e2e.py); Rekognition face gate confirmed live;
+  test registrant rows cleaned from prod DB (+919999900011/12 → NONE).
+- Perf report: /app/docs/PERF_PROFILE_v1.0.17.md (fixes deferred to v1.0.19 per user).
+- app.json 1.0.18/10018; frontend/.env restored to api.hogoplus.in. Prod app_versions row still
+  1.0.7 — bump via PUT /admin/app-version after 1.0.18 goes live to trigger in-app update.
