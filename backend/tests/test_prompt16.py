@@ -20,6 +20,7 @@ async def test_app_version_empty_then_set(client, monkeypatch):
         "latest_version": "1.0.7",
         "apk_url": "https://example.com/hogo.apk",
         "notes": "polish",
+        "force_update": False,
     }
     # update overwrites the same single row
     r = await client.put("/api/admin/app-version", json={"latest_version": "1.0.8"}, headers=cgm)

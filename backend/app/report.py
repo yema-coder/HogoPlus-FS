@@ -170,7 +170,8 @@ def generate_report_pdf(data: dict, lang: str) -> bytes:
     pdf.set_text_color(40, 37, 29)
     if crit:
         for c in crit:
-            pdf.cell(0, 7, f"• {c['category']} — {c['dept']}")
+            zone = f" — 📍 {c['zone']}" if c.get("zone") else ""
+            pdf.cell(0, 7, f"• {c['category']} — {c['dept']}{zone}")
             pdf.ln(7)
     else:
         pdf.cell(0, 7, t["none"])

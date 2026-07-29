@@ -12,7 +12,7 @@ from app.audit import write_audit
 from app.database import get_session
 from app.models import Attendance, BleBeacon, Department, Employee, FactorySettings
 from app.notify import dispatcher, template
-from app.schemas import BleDiagIn, PunchInIn
+from app.schemas import BeaconAttachIn, BleDiagIn, PunchInIn
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
 from app.storage import get_storage
@@ -108,6 +108,65 @@ async def beacon_registry(
         if b.mac_address
     ]
     return {"macs": macs, "ibeacons": ibeacons, "macs_detail": macs_detail}
+
+
+@router.post("/attendance/{attendance_id}/attach-beacon")
+async def attach_beacon(
+    attendance_id: uuid.UUID,
+    body: BeaconAttachIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.17 SPEED PACK: the punch waits ≤5s for a beacon and never blocks. If the
+    background zone scan matches AFTER submit, the app attaches it here — upgrading a
+    location-flagged/verified row to verified_plus. Face-verification flags are never
+    touched. Idempotent: a row that already has a beacon is returned unchanged."""
+    rec = await session.get(Attendance, attendance_id)
+    if rec is None or rec.employee_id != employee.id or bool(rec.is_demo) != bool(employee.is_demo):
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    if rec.ble_beacon_id:
+        return _out(rec)
+    if rec.punch_in_at is not None:
+        punched = rec.punch_in_at if rec.punch_in_at.tzinfo else rec.punch_in_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - punched > timedelta(minutes=15):
+            raise HTTPException(status_code=409, detail="Attach window closed")
+    from app.ble import beacon_ref, resolve_beacon
+
+    matched = await resolve_beacon(
+        session,
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    if matched is None:
+        raise HTTPException(status_code=404, detail="Beacon not registered")
+    rec.ble_beacon_id = beacon_ref(
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    rec.ble_zone = matched.zone_label_en
+    # BEACON WINS — but only over LOCATION-derived outcomes, never over face flags,
+    # and never after Time Office has already reviewed the row.
+    location_reasons = ("outside_geofence", "gps_missing", "no_beacon")
+    if rec.approved_by is None and (
+        rec.verification_level == "verified"
+        or (
+            rec.verification_level == "flagged"
+            and (rec.flagged_reason or "").startswith(location_reasons)
+        )
+    ):
+        rec.verification_level = "verified_plus"
+        rec.flagged_reason = None
+    await write_audit(
+        session, employee.id, "attendance.beacon_attached", "attendance", str(rec.id),
+        {"zone": rec.ble_zone, "level": rec.verification_level},
+    )
+    await session.commit()
+    await session.refresh(rec)
+    return _out(rec)
 
 
 @router.post("/attendance/ble-diag")

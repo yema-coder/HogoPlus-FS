@@ -842,10 +842,17 @@ async def set_app_version(
     row.latest_version = body.latest_version
     row.apk_url = body.apk_url
     row.notes = body.notes
+    row.force_update = body.force_update
     await write_audit(session, actor.id, "admin.app_version", "app_version", None,
-                      {"latest_version": body.latest_version}, is_demo=False)
+                      {"latest_version": body.latest_version, "force_update": body.force_update},
+                      is_demo=False)
     await session.commit()
-    return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}
+    return {
+        "latest_version": row.latest_version,
+        "apk_url": row.apk_url,
+        "notes": row.notes,
+        "force_update": row.force_update,
+    }
 
 
 # ---------------- Prompt 17: direct-add employee + emp-id suggest ----------------

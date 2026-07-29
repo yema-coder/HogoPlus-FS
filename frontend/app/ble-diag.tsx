@@ -31,6 +31,7 @@ import {
   type BleDiagScan,
 } from "@/src/ble/BleScanner";
 import { colors, fonts, spacing } from "@/src/theme/tokens";
+import { storage } from "@/src/utils/storage";
 
 type Registry = Awaited<ReturnType<typeof beaconRegistry>>;
 
@@ -60,6 +61,7 @@ export default function BleDiagScreen() {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<BleDiagScan | null>(null);
   const [sending, setSending] = useState(false);
+  const [punchTimings, setPunchTimings] = useState<Record<string, number | string> | null>(null);
 
   const refreshPerms = useCallback(async () => {
     const isAndroid31 = Platform.OS === "android" && Number(Platform.Version) >= 31;
@@ -105,6 +107,12 @@ export default function BleDiagScreen() {
   useEffect(() => {
     void refreshPerms();
     void loadRegistry();
+    void storage
+      .getItem<string>("hogo.lastPunchTimings", "")
+      .then((raw) => {
+        if (raw) setPunchTimings(JSON.parse(String(raw)) as Record<string, number | string>);
+      })
+      .catch(() => undefined);
   }, [refreshPerms, loadRegistry]);
 
   const runScan = async () => {
@@ -143,6 +151,7 @@ export default function BleDiagScreen() {
             }
           : { error: regError },
         scan: result,
+        last_punch_timings: punchTimings,
       };
       await sendBleDiag(report);
       showToast("Report sent to server ✓", "success");
@@ -186,6 +195,15 @@ export default function BleDiagScreen() {
             </Text>
           ))}
         </View>
+
+        {punchTimings ? (
+          <View style={styles.card} testID="punch-timings">
+            <Text style={styles.cardTitle}>Last punch timing breakdown (ms)</Text>
+            {Object.entries(punchTimings).map(([k, v]) => (
+              <Row key={k} label={k} value={String(v)} color={colors.text} />
+            ))}
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.btn, scanning && styles.btnDisabled]}

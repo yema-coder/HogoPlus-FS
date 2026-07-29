@@ -352,6 +352,16 @@ class AppVersionIn(BaseModel):
     latest_version: str = Field(min_length=1, max_length=20)
     apk_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
+    force_update: bool = False
+
+
+class BeaconAttachIn(BaseModel):
+    """v1.0.17 speed pack: attach a late-arriving beacon match to a just-created punch."""
+
+    ble_beacon_id: str | None = Field(default=None, max_length=17)
+    ble_ibeacon_uuid: str | None = Field(default=None, max_length=36)
+    ble_ibeacon_major: int | None = Field(default=None, ge=0, le=65535)
+    ble_ibeacon_minor: int | None = Field(default=None, ge=0, le=65535)
 
 
 class DirectAddEmployeeIn(BaseModel):

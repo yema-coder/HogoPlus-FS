@@ -967,7 +967,10 @@ async def _report_data(session, target_date) -> dict:
         "incidents": {
             "opened": opened,
             "resolved": resolved,
-            "critical": [{"category": c.category, "dept_code": c.department_code} for c in critical_rows],
+            "critical": [
+                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone}
+                for c in critical_rows
+            ],
         },
         "approvals": approvals,
     }
@@ -986,7 +989,10 @@ def _localize_report(data: dict, lang: str) -> dict:
         "incidents": {
             "opened": data["incidents"]["opened"],
             "resolved": data["incidents"]["resolved"],
-            "critical": [{"category": c["category"], "dept": nm(c["dept_code"])} for c in data["incidents"]["critical"]],
+            "critical": [
+                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone")}
+                for c in data["incidents"]["critical"]
+            ],
         },
         "approvals": [{"dept": nm(r["dept_code"]), "manager": r["manager"], "count": r["count"], "oldest_days": r["oldest_days"]} for r in data["approvals"]],
     }

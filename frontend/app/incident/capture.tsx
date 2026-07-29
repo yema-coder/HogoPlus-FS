@@ -35,9 +35,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, listDepartments, beaconRegistry } from "@/src/api/endpoints";
+import { createIncident, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
-import { getBleScanner, ensureBlePermissions, beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
+import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
+import { startZoneSession } from "@/src/ble/zoneSession";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -170,50 +171,19 @@ function IncidentCaptureInner() {
 
   // Background BLE zone scan (non-blocking, dual-mode). Optional context only —
   // any failure/timeout is silently ignored and the incident submits beacon=null.
+  // v1.0.17: EXACT same code path as the punch flow — shared ZoneSession (cached
+  // registry, successive 5s LOW_LATENCY windows for up to 60s, early exit on match).
+  // The v1.0.16 single mount-time 10s window competed with camera init and never
+  // retried, which is why incidents shipped without a zone even when punch matched.
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const scanner = getBleScanner();
-        if (!scanner.isReal) return;
-        let registry: Awaited<ReturnType<typeof beaconRegistry>>;
-        try {
-          registry = await beaconRegistry();
-        } catch {
-          return;
-        }
-        const allowed = await ensureBlePermissions();
-        if (!allowed) return;
-        // 10s LOW_LATENCY window, early-exit on first match (opportunistic zone tag —
-        // still non-blocking: no beacon heard = incident proceeds exactly as before).
-        const hit = await scanner.scan(10000, registry);
-        if (!active) return;
-        bleHitRef.current = hit;
-        if (hit) {
-          // resolve the matched zone label in the user's language for the live chip
-          const lang = i18n.language;
-          const pick = (e?: { zone_en?: string; zone_hi?: string; zone_mr?: string }) => {
-            if (!e) return null;
-            const v = lang === "hi" ? e.zone_hi : lang === "mr" ? e.zone_mr : e.zone_en;
-            return v ?? e.zone_en ?? null;
-          };
-          if (hit.ibeacon) {
-            const k = hit.ibeacon;
-            setBleZone(pick(registry.ibeacons?.find(
-              (b) => b.uuid.toLowerCase() === k.uuid.toLowerCase() && b.major === k.major && b.minor === k.minor,
-            )));
-          } else if (hit.mac) {
-            setBleZone(pick(registry.macs_detail?.find(
-              (m) => m.mac.toUpperCase() === hit.mac!.toUpperCase(),
-            )));
-          }
-        }
-      } catch {
-        // beacon is optional — never block or surface capture errors
-      }
-    })();
+    const session = startZoneSession();
+    const off = session.onUpdate(() => {
+      bleHitRef.current = session.getHit();
+      setBleZone(session.getZone());
+    });
     return () => {
-      active = false;
+      off();
+      session.stop();
     };
   }, []);
 

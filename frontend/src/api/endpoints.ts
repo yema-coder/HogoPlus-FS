@@ -194,6 +194,10 @@ export const rejectAttendance = (id: string) =>
 export const sendBleDiag = (report: unknown) =>
   api<{ stored: boolean }>("/attendance/ble-diag", { method: "POST", body: { report } });
 
+/** v1.0.17 speed pack: attach a late-arriving beacon match to a just-created punch. */
+export const attachBeacon = (id: string, body: Record<string, unknown>) =>
+  api<AttendanceRecord>(`/attendance/${id}/attach-beacon`, { method: "POST", body });
+
 // ---------- Phase 4: AI services ----------
 
 export const aiAnpr = (photoKey: string) =>
@@ -218,7 +222,12 @@ export const aiChat = (message: string, conversationId?: string | null) =>
   });
 
 export const getAppVersion = () =>
-  api<{ latest_version: string | null; apk_url: string | null; notes: string | null }>(
+  api<{
+    latest_version: string | null;
+    apk_url: string | null;
+    notes: string | null;
+    force_update?: boolean;
+  }>(
     "/app-version",
     { auth: false },
   );

@@ -406,6 +406,8 @@ class AppVersion(TimestampMixin, Base):
     latest_version: Mapped[str] = mapped_column(String(20), nullable=False)
     apk_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # v1.0.17: when True the Play in-app update runs IMMEDIATE (blocking) instead of flexible
+    force_update: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
 
 class SopDoc(TimestampMixin, Base):

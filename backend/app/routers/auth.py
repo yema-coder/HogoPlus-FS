@@ -419,5 +419,10 @@ async def app_version(session: AsyncSession = Depends(get_session)):
         await session.execute(select(AppVersion).order_by(AppVersion.updated_at.desc()).limit(1))
     ).scalar_one_or_none()
     if row is None:
-        return {"latest_version": None, "apk_url": None, "notes": None}
-    return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}
+        return {"latest_version": None, "apk_url": None, "notes": None, "force_update": False}
+    return {
+        "latest_version": row.latest_version,
+        "apk_url": row.apk_url,
+        "notes": row.notes,
+        "force_update": row.force_update,
+    }

@@ -1,20 +1,21 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { useRouter } from "expo-router";
 import { Check, X } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { beaconRegistry, punchIn } from "@/src/api/endpoints";
+import { attachBeacon, punchIn } from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
-import { getBleScanner, requestBlePermissions, beaconPayload, type BeaconRegistry } from "@/src/ble/BleScanner";
+import { beaconPayload } from "@/src/ble/BleScanner";
+import { startZoneSession, type ZoneSession } from "@/src/ble/zoneSession";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
@@ -44,76 +45,122 @@ function PunchInInner() {
   const { t } = useTranslation();
   const enqueue = useOutboxStore((s) => s.enqueue);
   const [steps, setSteps] = useState<Steps | null>(null);
+  // v1.0.17 SPEED PACK: pre-warm the zone scan the moment the screen opens so it runs
+  // in PARALLEL with the selfie — not sequentially after it (v1.0.16 field timing: ~1 min).
+  const sessionRef = useRef<ZoneSession | null>(null);
+  useEffect(() => {
+    void (async () => {
+      const asked = await storage.getItem<boolean>("hogo.bleAsked", false);
+      if (!asked) {
+        showToast(t("perm.bleExplain"), "info");
+        await storage.setItem("hogo.bleAsked", true);
+      }
+      sessionRef.current = startZoneSession();
+    })();
+    // The session is NOT stopped on unmount: it self-terminates (≤60s) and powers the
+    // post-submit late-attach upgrade when a match lands after the punch is stored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const setStep = (key: keyof Steps, state: StepState) =>
     setSteps((prev) => (prev ? { ...prev, [key]: state } : prev));
 
   const run = async (uri: string) => {
-    setSteps({ gps: "running", zone: "pending", upload: "pending" });
+    const T: Record<string, number | string> = {};
+    const t0 = Date.now();
+    setSteps({ gps: "running", zone: "running", upload: "running" });
+    const session = sessionRef.current ?? (sessionRef.current = startZoneSession());
 
-    const { fix } = await acquireGps(8000);
-    setStep("gps", fix ? "ok" : "skip");
-    const address = fix ? await reverseGeocode(fix.lat, fix.lng) : null;
-
-    setStep("zone", "running");
-    let ble = null;
-    try {
-      const scanner = getBleScanner();
-      if (scanner.isReal) {
-        let registry: BeaconRegistry = { macs: [], ibeacons: [] };
-        try {
-          registry = await beaconRegistry();
-        } catch {
-          registry = { macs: [], ibeacons: [] }; // offline / endpoint failure → skip zone step gracefully
-        }
-        const asked = await storage.getItem<boolean>("hogo.bleAsked", false);
-        if (!asked) {
-          showToast(t("perm.bleExplain"), "info");
-          await storage.setItem("hogo.bleAsked", true);
-        }
-        // FAIL CLOSED (field order 2026-07-27): Nearby-devices permission is REQUIRED
-        // for attendance — a silent skip here is how ghost "no beacon" punches happened.
-        const perm = await requestBlePermissions();
-        if (perm === "denied" || perm === "blocked") {
-          showToast(t("att.blePermRequired"), "error");
-          setSteps(null);
-          router.replace("/(tabs)/home");
-          return;
-        }
-        // 10s LOW_LATENCY window with early-exit on first registered match — the old
-        // 3s low-power window could miss the beacons' advertising interval entirely.
-        ble = await scanner.scan(10000, registry);
-      } else {
-        ble = await scanner.scan(3000, { macs: [], ibeacons: [] });
-      }
-    } catch {
-      ble = null;
+    // FAIL CLOSED (field order 2026-07-27): Nearby-devices permission is REQUIRED
+    // for attendance — a silent skip here is how ghost "no beacon" punches happened.
+    const perm = await session.permissionReady;
+    if (perm === "denied" || perm === "blocked") {
+      showToast(t("att.blePermRequired"), "error");
+      setSteps(null);
+      router.replace("/(tabs)/home");
+      return;
     }
-    setStep("zone", ble ? "ok" : "skip");
 
-    setStep("upload", "running");
+    // Everything below runs in PARALLEL (strictly sequential in ≤1.0.16):
+    // compress→upload | GPS fix | zone wait (≤5s cap) | reverse-geocode (≤3s, display-only)
+    const compressP = (async () => {
+      const t = Date.now();
+      let out = uri;
+      try {
+        const c = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 720 } }], {
+          compress: 0.7,
+          format: ImageManipulator.SaveFormat.JPEG,
+        });
+        out = c.uri;
+      } catch {
+        // upload original if compression fails
+      }
+      T.compressMs = Date.now() - t;
+      return out;
+    })();
+    const uploadP = compressP.then(async (su) => {
+      const t = Date.now();
+      const up = await uploadFile(su, "selfie.jpg");
+      T.uploadMs = Date.now() - t;
+      return up;
+    });
+    uploadP.catch(() => undefined); // handled at the await below
+    const gpsP = (async () => {
+      const t = Date.now();
+      const r = await acquireGps(8000);
+      T.gpsMs = Date.now() - t;
+      return r;
+    })();
+    const zoneP = (async () => {
+      const t = Date.now();
+      // NEVER hold the punch hostage: pre-warmed sessions usually already have the
+      // hit here (0ms); otherwise wait at most 5s and attach late if it arrives.
+      const h = await session.waitForHit(5000);
+      T.zoneWaitMs = Date.now() - t;
+      return h;
+    })();
+
+    const [{ fix }, ble] = await Promise.all([gpsP, zoneP]);
+    setStep("gps", fix ? "ok" : "skip");
+    setStep("zone", ble ? "ok" : "skip");
+    const addressP: Promise<string | null> = fix
+      ? Promise.race([
+          reverseGeocode(fix.lat, fix.lng),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ])
+      : Promise.resolve(null);
+
     const payload: Record<string, unknown> = {
       gps_lat: fix?.lat ?? null,
       gps_lng: fix?.lng ?? null,
       ...beaconPayload(ble),
     };
-
-    let selfieUri = uri;
-    try {
-      const compressed = await ImageManipulator.manipulateAsync(
-        uri,
-        [{ resize: { width: 720 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
-      );
-      selfieUri = compressed.uri;
-    } catch {
-      // upload original if compression fails
-    }
+    const selfieUri = await compressP;
 
     try {
-      const uploaded = await uploadFile(selfieUri, "selfie.jpg");
+      const uploaded = await uploadP;
+      const tSubmit = Date.now();
       const record = (await punchIn({ ...payload, selfie_key: uploaded.key })) as AttendanceRecord;
+      T.submitMs = Date.now() - tSubmit;
       setStep("upload", "ok");
+      T.totalMs = Date.now() - t0;
+      T.sessionPermissionMs = session.timings.permissionMs ?? -1;
+      T.sessionRegistryMs = session.timings.registryMs ?? -1;
+      T.sessionFirstMatchMs = session.timings.firstMatchMs ?? -1;
+      T.at = new Date().toISOString();
+      void storage.setItem("hogo.lastPunchTimings", JSON.stringify(T));
+      if (ble) {
+        session.stop();
+      } else {
+        // LATE ATTACH: the background scan keeps running (≤60s). If it matches after
+        // submit, upgrade the stored row — the worker never waited for it.
+        session.onceMatched((hit) => {
+          void attachBeacon(record.id, beaconPayload(hit) as Record<string, unknown>).catch(
+            () => undefined,
+          );
+        });
+      }
+      const address = await addressP;
       router.replace({
         pathname: "/attendance/result",
         params: {
@@ -127,6 +174,7 @@ function PunchInInner() {
         },
       });
     } catch (e) {
+      session.stop();
       if (e instanceof ApiError && e.status === 409) {
         showToast(t("att.already"), "error");
         router.replace("/(tabs)/home");
