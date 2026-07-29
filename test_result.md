@@ -440,3 +440,20 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - Perf report: /app/docs/PERF_PROFILE_v1.0.17.md (fixes deferred to v1.0.19 per user).
 - app.json 1.0.18/10018; frontend/.env restored to api.hogoplus.in. Prod app_versions row still
   1.0.7 — bump via PUT /admin/app-version after 1.0.18 goes live to trigger in-app update.
+
+## WAVE 1 dept upgrade (v1.0.19) — 2026-06 fork
+- Backend: migration 0013 (home_configs, vehicle_logs, 3 settings flags default OFF) applied to
+  prod Neon; routers home.py + vehicles.py; notify batching/quiet-hours/retry; vehicle_overstay
+  sweep in scheduler (hourly :12). 231/231 pytest. conftest adds sec_mgr 0004 / w_sec 0016.
+- IMPORTANT GOTCHA: mobile api client base = EXPO_PUBLIC_API_URL (NOT EXPO_PUBLIC_BACKEND_URL).
+  For preview testing set EXPO_PUBLIC_API_URL to the preview URL + restart expo; restore to
+  https://api.hogoplus.in before builds. Metro also caches inlined env — bust with
+  mv /app/frontend/.metro-cache if changes don't appear.
+- Vehicle log day filters are IST-based on both app and webdash (toLocaleDateString en-CA
+  Asia/Kolkata) — matches backend IST day windows.
+- test_demo_isolation nightly-report test was flaky between 18:30-24:00 UTC (IST date rollover);
+  fixed by using UTC date consistent with _report_data's func.date(created_at).
+- Testing agent iteration_22: ALL PASS (17/17 API, all mobile flows, webdash incl. XLSX).
+  live_v1019_api.py added under backend/tests (live spot-check script).
+- Flags to flip for real users when user says go: PATCH /api/admin/settings
+  {home_config_enabled, vehicle_log_enabled, notif_batching_enabled}.

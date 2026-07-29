@@ -931,3 +931,36 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   (fixed OTP 123456, is_demo, no SMS ever). Real-account path when needed: 0021 +917972540971
   (permanent Play-reviewer whitelist account). Unknown-number/registration tests: +91999990001x
   range (verified no employee rows).
+
+## WAVE 1 — Department Upgrade Sprint (2026-06, ships in v1.0.19)
+- Part A discovery doc: /app/docs/DEPT_UPGRADE_DISCOVERY.md (13 depts from live DB, per-dept
+  blocks, notification event matrix, wave plan). FLAGGED: SECURITY gate_entry form overlaps
+  vehicle log -> proposed rename to "Visitor entry" (AWAITING USER YES); only 1 real employee
+  has a push token; "bootstrap confirmations" interpretation is an assumption.
+- CONFIG-DRIVEN HOME: home_configs table + GET /api/home/config ((dept,role)>(dept)>(role)>null)
+  + GET /api/home/counts (single-round-trip aggregate) + PUT/GET /api/admin/home-configs (rank≤2).
+  App: src/home/ConfigHome.tsx widget registry (count_tiles, action_grid; unknown types skipped
+  = forward compatible). Fallback = original home byte-identical. Changing dept homes after
+  v1.0.19 = config edit only, NO APK. Seeded configs: SECURITY, TIME_OFFICE, CGM, MD
+  (scripts/seed_home_configs.py, idempotent).
+- VEHICLE LOG: vehicle_logs table; POST /api/vehicles/log (plate normalisation, IN/OUT pairing,
+  client_uuid idempotency = offline outbox dedup DONE for this endpoint), logs/inside/summary/
+  export.xlsx; mobile /vehicle + /vehicle/new (ANPR photo prefill via existing /api/ai/anpr AND
+  manual path, icon type grid, purpose chips, BLE gate zone chip, outbox "vehicle" kind);
+  webdash Vehicle Register screen (filters + inside + XLSX). vehicle_overstay hourly sweep >12h
+  -> Security HOD, 1/day/vehicle redis dedup.
+- NOTIFICATIONS wave-1: push retry x3 detached from request path; 30-min batching + quiet hours
+  22-06 IST for registration_pending/submission_pending (flag notif_batching_enabled, OFF);
+  deep-links extended (form_submission -> /submission/{id}, employee -> approvals, vehicle ->
+  /vehicle) in usePushSetup + alerts tab.
+- Queued items DONE in this build: /incidents limit+offset (default 100, cap 200); emp_id
+  suggestion now 4-digit pool only; videoBitrate 2Mbps cap on incident video; share-timings
+  one-tap on punch result -> POST /attendance/ble-diag (verified 200).
+- FLAGS (settings table, via PATCH /api/admin/settings): home_config_enabled, vehicle_log_enabled,
+  notif_batching_enabled — ALL OFF in production; demo bubble bypasses. Migration 0013 applied to
+  prod (additive, inert).
+- Tests: 231 passed backend (new: test_vehicle_log.py 8, test_home_config.py 5); testing agent
+  iteration_22 ALL PASS (mobile flows via JWT injection + webdash + API spot checks).
+- Evidence: /app/docs/WAVE1_FIELD_PROTOCOL.md (field protocol + APK autopsy greps + flag flip).
+- app.json now 1.0.19/10019. frontend/.env restored to api.hogoplus.in (BOTH EXPO_PUBLIC_API_URL
+  and EXPO_PUBLIC_BACKEND_URL — NOTE: the api client uses EXPO_PUBLIC_API_URL!).
