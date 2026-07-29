@@ -2,15 +2,13 @@ import { useRouter } from "expo-router";
 import { Megaphone } from "lucide-react-native";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -78,11 +76,12 @@ export default function AnnounceScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="announce-screen">
       <ScreenHeader title={t("announce.title")} />
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.hero}>
             <Megaphone size={32} color={colors.primary} strokeWidth={2} />
             <Text style={styles.heroText}>{t("announce.heading")}</Text>
@@ -163,8 +162,7 @@ export default function AnnounceScreen() {
             disabled={!canSend}
             onPress={() => void submit()}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

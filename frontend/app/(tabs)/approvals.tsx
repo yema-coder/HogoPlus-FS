@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, fileUrl } from "@/src/api/client";
@@ -637,7 +638,7 @@ export default function ApprovalsScreen() {
         animationType="fade"
         onRequestClose={() => setRejectTarget(null)}
       >
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalBackdrop}>
           <View style={styles.modalCard} testID="approvals-reject-modal">
             <Text style={styles.modalTitle}>{t("approvals.rejectReason")}</Text>
             <TextInput
@@ -671,7 +672,7 @@ export default function ApprovalsScreen() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal

@@ -19,18 +19,16 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -566,11 +564,12 @@ function IncidentCaptureInner() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-preview-screen">
       <ScreenHeader title={t("incident.preview")} />
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        contentContainerStyle={styles.previewScroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
           {/* off-screen full-size composite for the burn-in — never visible */}
           {shot ? (
             <View
@@ -671,8 +670,7 @@ function IncidentCaptureInner() {
               style={{ flex: 2 }}
             />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       {/* full-screen media viewer */}
       <Modal visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>

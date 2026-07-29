@@ -2,14 +2,12 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -63,14 +61,12 @@ export default function PhoneEntry() {
 
   return (
     <SafeAreaView style={styles.safe} testID="phone-entry-screen">
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
           <View style={styles.hero}>
             <Image
               source={require("@/assets/images/logo.png")}
@@ -110,9 +106,8 @@ export default function PhoneEntry() {
             height={64}
             style={{ marginTop: spacing.xl }}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
-      </SafeAreaView>
+      </KeyboardAwareScrollView>
+    </SafeAreaView>
   );
 }
 

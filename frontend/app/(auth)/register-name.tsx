@@ -1,13 +1,11 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -24,8 +22,12 @@ export default function RegisterName() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="register-name-screen">
       <ScreenHeader title={t("reg.nameTitle")} />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
           <Text style={styles.hint}>{t("reg.nameHint")}</Text>
           <TextInput
             testID="register-name-input"
@@ -47,8 +49,7 @@ export default function RegisterName() {
             height={64}
             style={{ marginTop: spacing.xl }}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

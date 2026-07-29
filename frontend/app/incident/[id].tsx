@@ -5,12 +5,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -155,7 +155,11 @@ export default function IncidentDetailScreen() {
           <EyeLoader size={40} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={24}
+        >
           {detail.video_key || detail.photo_key ? (
             <View testID="incident-media-card">
               <MediaCard
@@ -409,7 +413,7 @@ export default function IncidentDetailScreen() {
               ) : null}
             </View>
           ) : null}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
       <PhotoCaptureModal
         visible={photoModal}

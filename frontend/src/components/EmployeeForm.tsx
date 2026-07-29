@@ -1,15 +1,13 @@
 import React, { useEffect, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
 import { listDepartments } from "@/src/api/endpoints";
@@ -91,8 +89,12 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
     (mode === "edit" || values.emp_id.trim().length >= 1);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      bottomOffset={24}
+    >
         <Text style={styles.label}>{t("emp.name")}</Text>
         <TextInput
           testID="emp-name-input"
@@ -207,8 +209,7 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
           disabled={!canSubmit}
           onPress={() => onSubmit({ ...values, phone: values.phone.trim() })}
         />
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

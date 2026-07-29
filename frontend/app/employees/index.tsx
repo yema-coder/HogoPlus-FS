@@ -78,6 +78,7 @@ export default function EmployeesScreen() {
           data={results}
           keyExtractor={(item) => item.id}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingBottom: spacing.xl }}
           ListEmptyComponent={
             <Text style={styles.empty} testID="employees-empty">
