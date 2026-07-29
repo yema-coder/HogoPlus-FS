@@ -850,3 +850,33 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   E2E roundtrip on live DB (demo D002 report → CGM read), web smoke: diag screen renders 29-entry
   registry. frontend/.env restored to api.hogoplus.in.
 - NOTE: test infra (PG15/redis/pgvector) was wiped again by pod reset and reinstalled.
+
+## v1.0.17 — SPEED PACK + incident zone + Play in-app updates (2026-06 fork) ✅ code complete, build pending
+- ITEM 1 (speed): v1.0.16 punch was fully SEQUENTIAL after the selfie (GPS≤8s → geocode → registry
+  RTT → perm → 10s scan → compress → upload → submit ≈ 60s field-observed). NEW: shared
+  src/ble/zoneSession.ts — pre-warms scan at screen OPEN, registry cached (AsyncStorage 10-min TTL,
+  bg refresh, stale-if-offline), successive 5s LOW_LATENCY windows ≤60s w/ early exit, singleton
+  (serialized stopDeviceScan). punch.tsx: GPS|compress+upload|zone(≤5s cap)|geocode(≤3s, display-only)
+  all PARALLEL; per-stage timings stored → shown in BLE Diagnostics "Last punch timing breakdown"
+  + included in diag report. LATE ATTACH: POST /api/attendance/{id}/attach-beacon (self-only,
+  15-min window, idempotent, beacon wins over location outcomes ONLY — face flags + reviewed rows
+  untouched) called automatically when match lands post-submit.
+- ITEM 2 (incident zone): root cause = single mount-time 10s window competing with camera init,
+  never retried. Now uses the EXACT same ZoneSession (chip subscribes via onUpdate). Zone shown:
+  capture chip, app detail, webdash feed/modals/department (already), nightly PDF critical list
+  (added "— 📍 zone"). Backend halves deployable now.
+- ITEM 3 (performance): measured — hot API payloads all ≤2.2KB; latency is RTT-bound per request;
+  selfie 720px/q0.7 ≈80-150KB; incident photo 1600px/q0.7 ≈300-500KB (already compressed);
+  remaining candidates: video (uncompressed, up to tens of MB) and on-device cold-start (needs
+  device numbers — timing card now provides punch numbers).
+- ITEM 4 (in-app updates): sp-react-native-in-app-updates@2 + react-native-device-info@15 installed
+  (autolink at prebuild). UpdateGate in root layout: backend GET /app-version drives it — flexible
+  by default, IMMEDIATE when force_update=true (migration 0012, applied to Neon; PUT
+  /admin/app-version now accepts force_update). Sideload/Expo Go/web fail OPEN → existing
+  UpdateBanner fallback. TESTING AGENT P0 FIX (keep!): UpdateGate.web.tsx stub — metro statically
+  resolves native-only require on web, stub prevents blank web bundle.
+- app.json 1.0.17/10017. pytest 218/218 (test_attach_beacon.py new, prompt16 updated for
+  force_update); iter20 frontend E2E PASS (punch ~6s on web, incident, /ble-diag, attach-beacon).
+- Prod app-version row still "1.0.7" — in-app update fires only when row bumped above installed
+  version AND a higher build is live on the same Play track. Play Console: no extra config; app
+  must be installed VIA Play.

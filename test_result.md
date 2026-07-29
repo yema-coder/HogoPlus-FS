@@ -410,3 +410,16 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   with per-candidate verdicts; POST /api/attendance/ble-diag stores report as audit ble.diag;
   GET /api/admin/ble-diag (CGM/MD) reads back. pytest 214/214, tsc+eslint clean, web smoke OK.
 - frontend/.env restored to api.hogoplus.in after smoke.
+
+## v1.0.17 SPEED PACK + incident zone session + Play in-app updates (iter 20 PASS)
+- Punch flow rewritten for parallelism (pre-warmed shared ZoneSession, GPS|upload|zone(<=5s)|geocode
+  in parallel, late attach via POST /attendance/{id}/attach-beacon). Incident uses the SAME session.
+- Registry cached locally (10-min TTL, bg refresh, stale-if-offline). Punch timing breakdown stored
+  and visible in BLE Diagnostics + included in diag report.
+- Play In-App Updates via sp-react-native-in-app-updates + UpdateGate (flexible default,
+  IMMEDIATE when app_versions.force_update=true — migration 0012). UpdateGate.web.tsx stub added by
+  testing agent (P0: metro static-resolves native-only require on web) — KEEP.
+- PDF nightly: critical incidents now show beacon zone.
+- pytest 218/218; tsc+eslint clean; ibeacon unit tests 16/16; iter20 frontend E2E all pass.
+- .env restored to api.hogoplus.in. Prod app-version row still 1.0.7 — bump via PUT /admin/app-version
+  when 1.0.18 ships to trigger the in-app update flow.
