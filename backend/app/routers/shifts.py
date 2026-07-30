@@ -194,7 +194,9 @@ async def respond_swap(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    swap = await session.get(ShiftSwapRequest, swap_id)
+    # FOR UPDATE: serialize concurrent respond/decide/cancel on the same swap —
+    # the status check below then sees the committed truth, never a stale read
+    swap = await session.get(ShiftSwapRequest, swap_id, with_for_update=True)
     if swap is None:
         raise HTTPException(status_code=404, detail="Swap request not found")
     if swap.target_id != employee.id:
@@ -236,7 +238,7 @@ async def decide_swap(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    swap = await session.get(ShiftSwapRequest, swap_id)
+    swap = await session.get(ShiftSwapRequest, swap_id, with_for_update=True)
     if swap is None or swap.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Swap request not found")
     requester = await session.get(Employee, swap.requester_id)
@@ -302,7 +304,7 @@ async def cancel_swap(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    swap = await session.get(ShiftSwapRequest, swap_id)
+    swap = await session.get(ShiftSwapRequest, swap_id, with_for_update=True)
     if swap is None:
         raise HTTPException(status_code=404, detail="Swap request not found")
     if swap.requester_id != employee.id:

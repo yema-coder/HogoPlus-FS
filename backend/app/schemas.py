@@ -116,6 +116,7 @@ class FormSubmitIn(BaseModel):
     gps_lat: float | None = None
     gps_lng: float | None = None
     address_text: str | None = Field(default=None, max_length=300)
+    client_uuid: str | None = Field(default=None, max_length=64)
 
 
 class RejectIn(BaseModel):
@@ -148,6 +149,7 @@ class IncidentCreateIn(BaseModel):
     department_code: str
     photo_key: str | None = None
     video_key: str | None = None
+    client_uuid: str | None = Field(default=None, max_length=64)
     gps_lat: float | None = None
     gps_lng: float | None = None
     address_text: str | None = Field(default=None, max_length=300)

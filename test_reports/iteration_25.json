@@ -1,0 +1,34 @@
+{
+  "summary": "v1.0.22 batch (no_punch_out nudge + swap FOR UPDATE + client_uuid outbox idempotency) verified end-to-end on preview URL. Backend live E2E = 5/5 passed + 1 skipped (swap happy-path skipped because demo-bubble PRODUCTION employees all share baseline shift GEN; concurrency covered by test_next_batch.py unit tests — GREEN). Frontend: (a) VERIFIED worker (D001) /attendance/history — seeded no_punch_out row (2026-07-10, verification_level='verified') renders the '✋ This is wrong' dispute-button-2026-07-10; tapping opens dispute-modal; filling dispute-text-input and tapping dispute-send switches the row's chip to 'Under review' (reg-status-2026-07-10). (b) VERIFIED TO manager (D113) Approvals → segment-attendance — GET /api/attendance/flagged returns the fresh undisputed no_punch_out row (id c0c0c0c0-...) with flagged_reason='no_punch_out', verification_level='verified' and employee_name='Demo Accounts Worker'. The UI renders it via approvals.tsx:635-636 → t('att.reasonNoPunchOut') → en.json:212 'No punch-out after shift' (localization confirmed by code review; API delivers the exact reason code). (c) VERIFIED worker (D001) Alerts tab — seeded punchout_reminder notification-row tapped → routed to /attendance/punch (Punch In camera screen loaded). Note: request specified TO manager +918308829567 (real 0008) and worker +917972540971 (0021), but +918308829567 is NOT in DEMO_OTP_WHITELIST (backend/.env) so demo OTP 123456 cannot log it in. Substituted the demo-bubble sanctioned pair per TESTING POLICY (2026-06 permanent): D001 +919000000001 worker + D113 +919000000113 TO manager (both is_demo=true — required because /attendance/flagged filters by is_demo bucket). Real 0021 works with demo OTP but its is_demo=false doesn't match D113. This is a testability gap in the ORIGINAL request (either add +918308829567 to DEMO_OTP_WHITELIST for automated testing OR use is_demo=false attendance seeds with real 0008 which needs whitelist too). All 5 backend E2E assertions pass against LIVE preview URL. Deprecated packages: NONE. SafeAreaView issues: NONE. React Native red screen: NONE.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/live_v1022_e2e.py",
+    "/app/test_reports/pytest/iter25_live_v1022.xml"
+  ],
+  "action_items": [
+    "(Testability, non-blocking) If automated tests are expected to log in as the REAL TIME_OFFICE manager (+918308829567 / 0008), add that phone to DEMO_OTP_WHITELIST in backend/.env alongside the existing +918483029039,+917972540971. Otherwise document the D113 demo-bubble substitution as the canonical automated path for TO flows.",
+    "(Nice-to-have) Seed one demo-bubble same-dept different-shift PRODUCTION pair on a FUTURE date so the swap happy-path can also be covered by live E2E (currently only unit-tested against a shared test DB via test_next_batch.py — that file is green, so this is optional)."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/app/routers/attendance.py:679-721 — flagged queue OR(verification_level='flagged', flagged_reason='no_punch_out') with approved_by IS NULL + is_demo bucketing is correct. Approve/reject/regularize gates at lines 478,760,785 all accept the same OR condition. No downgrade of verification_level on nudge escalation — matches spec.",
+    "/app/backend/app/routers/attendance.py:315-342 punch_out — self-clears flagged_reason='no_punch_out' only while approved_by IS NULL. Covers date IN [today, today-1] via IST — correctly handles overnight B-shift attendance rows dated yesterday. Verified live.",
+    "/app/frontend/app/attendance/history.tsx:136-145 — dispute-button renders when verification_level='flagged' OR flagged_reason='no_punch_out'. Clean. Live-verified: shows on verified/no_punch_out row.",
+    "/app/frontend/app/(tabs)/approvals.tsx:632-645 — reason-text branch covers no_punch_out → t('att.reasonNoPunchOut') → en.json 'No punch-out after shift'. hi/mr locale keys also present at line 219.",
+    "/app/frontend/app/(tabs)/alerts.tsx:51-53 — punchout_reminder type routes to /attendance/punch BEFORE entity_type fallback; sibling-View SpeakerButton avoids nested <button> hydration warning noted in iter23."
+  ],
+  "updated_files": [
+    "/app/backend/tests/live_v1022_e2e.py (new — 6 live E2E tests: flagged queue + dispute + approve; late punch-out self-clears; incident client_uuid dedup + regression; form client_uuid dedup; swap happy path (skipped, see summary))"
+  ],
+  "success_rate": {"backend": "5/5 passing + 1 skipped (100% of runnable cases)", "frontend": "3/3 frontend touchpoints verified (a worker dispute, b TO reason text via API+code, c alert nav)"},
+  "seed_data_creation": "Inserted 2 demo attendance rows for D001 (2026-07-10 no_punch_out, 2026-07-05 no_punch_out) + 1 notifications row (punchout_reminder). ALL 3 test rows deleted at end of run — DB is clean. Also the E2E test itself calls _clean(worker) before each attendance test (idempotent).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "DEMO_OTP_WHITELIST=+918483029039,+917972540971 — anyone else in the review request needs adding to the whitelist OR you must use the demo bubble (D001, D009, D113, D109, D500, D600 etc, all OTP 123456). /attendance/flagged filters by is_demo bucket so worker+TO MUST match (both is_demo=true or both is_demo=false). Language picker screen (Marathi/Hindi/English) appears on first load — tap English then phone/OTP. Toast-based success confirmation appears at bottom; row chip transitions 'This is wrong' → 'Under review' after regularization is filed.",
+  "rca_of_issue": "No bugs to RCA — v1.0.22 batch is production-ready. Only note: original request phone +918308829567 is not demo-OTP whitelisted, worked around by using D113 (Demo TO Manager, is_demo=true) — see action_items for a permanent fix."
+}

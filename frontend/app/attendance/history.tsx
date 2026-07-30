@@ -133,7 +133,8 @@ export default function AttendanceHistory() {
                 {t(`att.reg_${item.regularization.status}`)}
               </Text>
             </View>
-          ) : item.verification_level === "flagged" && !item.approved_by ? (
+          ) : (item.verification_level === "flagged" || item.flagged_reason === "no_punch_out") &&
+            !item.approved_by ? (
             <Pressable
               testID={`dispute-button-${item.date}`}
               accessibilityRole="button"

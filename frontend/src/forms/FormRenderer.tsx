@@ -252,6 +252,8 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
       data[f.key] = v;
     }
 
+    // offline outbox idempotency: replays of this submission return the same row
+    const clientUuid = `form-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     try {
       const photoKeys: string[] = [];
       for (const file of localFiles) {
@@ -267,6 +269,7 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
         gps_lat: gpsLat,
         gps_lng: gpsLng,
         address_text: addressText,
+        client_uuid: clientUuid,
       });
       await clearDraft(definition.id);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -286,6 +289,7 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
             gps_lat: gpsLat,
             gps_lng: gpsLng,
             address_text: addressText,
+            client_uuid: clientUuid,
           },
           photoUri: null,
           photoName: "",

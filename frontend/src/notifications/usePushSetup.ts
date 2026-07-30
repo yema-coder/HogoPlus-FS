@@ -46,7 +46,8 @@ export function usePushSetup(): void {
     return addNotificationTapListener((data) => {
       const type = String(data?.entity_type ?? "");
       const id = data?.entity_id ? String(data.entity_id) : "";
-      if (type === "incident" && id) router.push(`/incident/${id}`);
+      if (String(data?.type ?? "") === "punchout_reminder") router.push("/attendance/punch");
+      else if (type === "incident" && id) router.push(`/incident/${id}`);
       else if (type === "form_submission" && id) router.push(`/submission/${id}`);
       else if (type === "employee") router.push("/(tabs)/approvals");
       else if (type === "vehicle") router.push("/vehicle");

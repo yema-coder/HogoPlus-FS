@@ -793,10 +793,17 @@ def detect_plate_task(kind: str, record_id: str) -> dict:
 # ---------------- Punch-out reminder ----------------
 
 async def _punchout_reminder_async(now=None) -> dict:
-    """Every 15 min: punched-in employees whose shift ended >15 min ago with no
-    punch-out get ONE reminder per day (redis SETNX guard)."""
+    """Every 15 min, two escalation stages for punched-in employees with no punch-out:
+    1. shift ended >15 min ago → ONE reminder per attendance day (redis SETNX guard),
+       tap = punch screen.
+    2. shift ended >punchout_flag_after_hours ago → flag the day for Time Office
+       (flagged_reason='no_punch_out', lands in the existing flagged queue) + tell the
+       worker. NEVER writes a punch-out time — a real late punch-out clears the flag.
+    Includes yesterday's rows so overnight (C) shifts ending this morning are covered."""
     from datetime import datetime as dt, timedelta
 
+    from app.audit import write_audit
+    from app.config import settings
     from app.models import Attendance, Employee
     from app.notify import dispatcher, template
     from app.shift_logic import IST, get_shift, now_ist, resolve_shift_code
@@ -804,6 +811,7 @@ async def _punchout_reminder_async(now=None) -> dict:
 
     engine, sm = _session_factory()
     sent = 0
+    flagged = 0
     try:
         now = now or now_ist()
         today = now.date()
@@ -812,36 +820,60 @@ async def _punchout_reminder_async(now=None) -> dict:
                 await session.execute(
                     select(Attendance, Employee)
                     .join(Employee, Attendance.employee_id == Employee.id)
-                    .where(Attendance.date == today, Attendance.punch_out_at.is_(None))
+                    .where(
+                        Attendance.date.in_([today, today - timedelta(days=1)]),
+                        Attendance.punch_out_at.is_(None),
+                    )
                 )
             ).all()
             r = _fresh_redis()
             try:
                 for att, emp in rows:
-                    shift_code = await resolve_shift_code(session, emp.id, today)
+                    shift_code = await resolve_shift_code(session, emp.id, att.date)
                     shift = await get_shift(session, shift_code) if shift_code else None
                     if shift is None:
                         continue
-                    end_dt = dt.combine(today, shift.end_time, tzinfo=IST)
+                    end_dt = dt.combine(att.date, shift.end_time, tzinfo=IST)
                     if shift.end_time < shift.start_time:  # overnight shift ends next day
                         end_dt += timedelta(days=1)
                     if now < end_dt + timedelta(minutes=15):
                         continue
-                    guard = f"punchout_reminder:{emp.id}:{today.isoformat()}"
-                    if not r.set(guard, "1", nx=True, ex=86400):
-                        continue  # already reminded today
-                    title, body = template("punchout_reminder")
-                    await dispatcher.notify(
-                        session, emp.id, "punchout_reminder", title, body,
-                        "attendance", str(att.id),
-                    )
-                    sent += 1
+                    guard = f"punchout_reminder:{emp.id}:{att.date.isoformat()}"
+                    # remind only while punching out is still a sane action (shift
+                    # ended recently); stale rows skip straight to the flag stage
+                    if now < end_dt + timedelta(hours=12) and r.set(guard, "1", nx=True, ex=86400):
+                        title, body = template("punchout_reminder")
+                        await dispatcher.notify(
+                            session, emp.id, "punchout_reminder", title, body,
+                            "attendance", str(att.id),
+                        )
+                        sent += 1
+                    # stage 2: still nothing hours later → Time Office review (no auto punch-out)
+                    if (
+                        now >= end_dt + timedelta(hours=settings.punchout_flag_after_hours)
+                        and att.flagged_reason != "no_punch_out"
+                        and att.verification_level != "flagged"
+                        and att.approved_by is None
+                    ):
+                        att.flagged_reason = "no_punch_out"
+                        title, body = template("punchout_flagged")
+                        await dispatcher.notify(
+                            session, emp.id, "punchout_flagged", title, body,
+                            "attendance", str(att.id),
+                        )
+                        await write_audit(
+                            session, None, "attendance.no_punch_out_flagged",
+                            "attendance", str(att.id),
+                            {"shift_code": shift_code, "shift_end": end_dt.isoformat()},
+                            is_demo=emp.is_demo,
+                        )
+                        flagged += 1
             finally:
                 r.close()
             await session.commit()
     finally:
         await engine.dispose()
-    return {"sent": sent}
+    return {"sent": sent, "flagged": flagged}
 
 
 @celery.task(name="app.tasks.punchout_reminder_sweep")

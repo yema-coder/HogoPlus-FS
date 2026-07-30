@@ -48,7 +48,10 @@ export default function AlertsScreen() {
       setReadIds((prev) => new Set(prev).add(item.id));
       markNotificationRead(item.id).catch(() => undefined);
     }
-    if (item.entity_type === "incident" && item.entity_id) {
+    if (item.type === "punchout_reminder") {
+      // one tap from the nudge to the punch screen
+      router.push("/attendance/punch");
+    } else if (item.entity_type === "incident" && item.entity_id) {
       router.push({ pathname: "/incident/[id]", params: { id: item.entity_id } });
     } else if (item.entity_type === "form_submission" && item.entity_id) {
       router.push({ pathname: "/submission/[id]", params: { id: item.entity_id } });

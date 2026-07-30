@@ -309,6 +309,8 @@ function IncidentCaptureInner() {
       address_text: address,
       description: desc.trim() || null,
       severity: "normal",
+      // offline outbox idempotency: replays of this report return the same incident
+      client_uuid: `inc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       ...beaconPayload(bleHitRef.current),
     };
     // voice note already uploaded during transcription — reuse the key

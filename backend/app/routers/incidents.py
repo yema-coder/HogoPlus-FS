@@ -78,6 +78,14 @@ async def create_incident(
     employee: Employee = Depends(get_current_employee),  # pending users MAY report incidents
     session: AsyncSession = Depends(get_session),
 ):
+    # offline outbox idempotency: same client_uuid replayed → same incident back
+    if body.client_uuid:
+        existing = (
+            await session.execute(select(Incident).where(Incident.client_uuid == body.client_uuid))
+        ).scalar_one_or_none()
+        if existing:
+            return _out(existing)
+
     dept = (
         await session.execute(select(Department).where(Department.code == body.department_code))
     ).scalar_one_or_none()
@@ -120,6 +128,7 @@ async def create_incident(
         description=body.description,
         voice_note_key=body.voice_note_key,
         severity=body.severity,
+        client_uuid=body.client_uuid,
         assigned_manager_id=assigned,
         status="submitted",
         plate_status="pending" if body.photo_key else None,

@@ -209,6 +209,7 @@
     "punchPhoto": "Punch selfie",
     "reasonNoBeacon": "Beacon not detected — GPS only",
     "reasonNoBeaconNoGps": "No beacon & no GPS",
+    "reasonNoPunchOut": "No punch-out after shift",
     "shareTimings": "Share speed report",
     "timingsShared": "Report sent — thank you!",
     "myMonth": "My Month",
