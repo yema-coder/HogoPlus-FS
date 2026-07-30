@@ -10,6 +10,7 @@ from app.audit import write_audit
 from app.database import get_session
 from app.models import (
     AppVersion,
+    AuditEvent,
     BleBeacon,
     Department,
     Employee,
@@ -67,7 +68,13 @@ async def get_settings(
     s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
-    return {"factory_lat": s.factory_lat, "factory_lng": s.factory_lng, "radius_meters": s.radius_meters}
+    return {
+        "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
+        "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+        "home_config_enabled": s.home_config_enabled,
+        "vehicle_log_enabled": s.vehicle_log_enabled,
+        "notif_batching_enabled": s.notif_batching_enabled,
+    }
 
 
 @router.patch("/settings")
@@ -80,14 +87,23 @@ async def patch_settings(
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
     changes = {}
-    for field in ("factory_lat", "factory_lng", "radius_meters"):
+    for field in (
+        "factory_lat", "factory_lng", "radius_meters", "beacon_first_mode",
+        "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
+    ):
         val = getattr(body, field)
         if val is not None:
             changes[field] = {"old": getattr(s, field), "new": val}
             setattr(s, field, val)
     await write_audit(session, employee.id, "settings.updated", "settings", str(s.id), changes)
     await session.commit()
-    return {"factory_lat": s.factory_lat, "factory_lng": s.factory_lng, "radius_meters": s.radius_meters}
+    return {
+        "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
+        "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
+        "home_config_enabled": s.home_config_enabled,
+        "vehicle_log_enabled": s.vehicle_log_enabled,
+        "notif_batching_enabled": s.notif_batching_enabled,
+    }
 
 
 # ---------------- employees ----------------
@@ -305,7 +321,11 @@ async def pending_employees(
 
     max_num = (
         await session.execute(
-            select(func.max(cast(Employee.emp_id, SAInteger))).where(Employee.emp_id.op("~")(r"^\d+$"))
+            # only the normal 4-digit id pool — a few legacy rows carry garbage
+            # 6-7 digit emp_ids (e.g. 3003200) and must never drive suggestions
+            select(func.max(cast(Employee.emp_id, SAInteger))).where(
+                Employee.emp_id.op("~")(r"^\d{1,4}$")
+            )
         )
     ).scalar() or 0
     suggested = f"{max_num + 1:04d}"
@@ -835,10 +855,17 @@ async def set_app_version(
     row.latest_version = body.latest_version
     row.apk_url = body.apk_url
     row.notes = body.notes
+    row.force_update = body.force_update
     await write_audit(session, actor.id, "admin.app_version", "app_version", None,
-                      {"latest_version": body.latest_version}, is_demo=False)
+                      {"latest_version": body.latest_version, "force_update": body.force_update},
+                      is_demo=False)
     await session.commit()
-    return {"latest_version": row.latest_version, "apk_url": row.apk_url, "notes": row.notes}
+    return {
+        "latest_version": row.latest_version,
+        "apk_url": row.apk_url,
+        "notes": row.notes,
+        "force_update": row.force_update,
+    }
 
 
 # ---------------- Prompt 17: direct-add employee + emp-id suggest ----------------
@@ -853,7 +880,9 @@ async def emp_id_suggest(
 
     row = (
         await session.execute(
-            sa_text(r"SELECT COALESCE(MAX(emp_id::int), 0) FROM employees WHERE emp_id ~ '^\d+$'")
+            # only the normal 4-digit id pool — legacy rows carry garbage 6-7 digit
+            # emp_ids (e.g. 300312, 3003200) and must never drive suggestions
+            sa_text(r"SELECT COALESCE(MAX(emp_id::int), 0) FROM employees WHERE emp_id ~ '^\d{1,4}$'")
         )
     ).scalar() or 0
     return {"suggested_emp_id": f"{row + 1:04d}"}
@@ -965,3 +994,33 @@ async def send_announcement(
     )
     await session.commit()
     return {"sent": True, "recipients": len(recipient_ids), "audience": body.audience}
+
+
+@router.get("/ble-diag")
+async def list_ble_diag(
+    limit: int = 10,
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.16 field instrumentation: read the most recent on-device BLE diagnostic
+    reports submitted via POST /api/attendance/ble-diag."""
+    limit = max(1, min(limit, 50))
+    rows = (
+        await session.execute(
+            select(AuditEvent, Employee.emp_id, Employee.full_name)
+            .join(Employee, Employee.id == AuditEvent.actor_id, isouter=True)
+            .where(AuditEvent.action == "ble.diag")
+            .order_by(AuditEvent.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    return [
+        {
+            "id": str(ev.id),
+            "emp_id": emp_id,
+            "name": full_name,
+            "created_at": ev.created_at,
+            "report": ev.detail_json,
+        }
+        for ev, emp_id, full_name in rows
+    ]

@@ -75,7 +75,7 @@ export default function Admin() {
     try {
       const res = await api("/admin/settings", {
         method: "PATCH",
-        body: JSON.stringify({ factory_lat: Number(geo.factory_lat), factory_lng: Number(geo.factory_lng), radius_meters: Number(geo.radius_meters) }),
+        body: JSON.stringify({ factory_lat: Number(geo.factory_lat), factory_lng: Number(geo.factory_lng), radius_meters: Number(geo.radius_meters), beacon_first_mode: !!geo.beacon_first_mode }),
       });
       setGeo(res);
       setGeoMsg(`✓ ${t("saved")}`);
@@ -263,6 +263,11 @@ export default function Admin() {
                   <input data-testid="geo-lng" type="number" step="0.000001" value={geo.factory_lng} onChange={(e) => setGeo({ ...geo, factory_lng: e.target.value })} /></div>
                 <div><label style={{ fontSize: 13, color: "var(--muted)" }}>{t("radius")}</label><br />
                   <input data-testid="geo-radius" type="number" min={50} max={10000} value={geo.radius_meters} onChange={(e) => setGeo({ ...geo, radius_meters: e.target.value })} /></div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8 }}>
+                  <input data-testid="geo-beacon-first" type="checkbox" checked={!!geo.beacon_first_mode}
+                    onChange={(e) => setGeo({ ...geo, beacon_first_mode: e.target.checked })} />
+                  <label style={{ fontSize: 13 }}>{t("beaconFirst")}</label>
+                </div>
                 <button className="btn primary" data-testid="geo-save" onClick={saveGeo}>{t("save")}</button>
                 {geoMsg && <span style={{ fontSize: 13, color: geoMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{geoMsg}</span>}
               </div>

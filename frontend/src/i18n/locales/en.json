@@ -206,7 +206,11 @@
     "reasonFace": "Face mismatch",
     "faceScore": "Face match {{s}}%",
     "refPhoto": "Reference",
-    "punchPhoto": "Punch selfie"
+    "punchPhoto": "Punch selfie",
+    "reasonNoBeacon": "Beacon not detected — GPS only",
+    "reasonNoBeaconNoGps": "No beacon & no GPS",
+    "shareTimings": "Share speed report",
+    "timingsShared": "Report sent — thank you!"
   },
   "notif": {
     "title": "Alerts",
@@ -504,5 +508,53 @@
     "makeHod": "Set as department manager (HOD) of {{dept}}",
     "hodSet": "HOD updated: {{name}}",
     "keepShift": "Keep current"
+  },
+  "veh": {
+    "registerTitle": "Gate Log",
+    "newTitle": "Vehicle Entry",
+    "newEntry": "New entry",
+    "in": "IN",
+    "out": "OUT",
+    "todayIn": "In today",
+    "todayOut": "Out today",
+    "inside": "Inside now",
+    "tabToday": "Today",
+    "tabInside": "Inside",
+    "empty": "No entries yet",
+    "plateTitle": "Vehicle number",
+    "scanPlate": "Photo of number plate",
+    "scanning": "Reading plate…",
+    "anprOk": "Number read from photo",
+    "anprMiss": "Could not read — type the number",
+    "plateNeeded": "Enter the vehicle number",
+    "typeTitle": "Vehicle type",
+    "purposeTitle": "Purpose",
+    "driverTitle": "Driver / party (optional)",
+    "driverPh": "Name",
+    "zoneSearching": "Finding gate…",
+    "submitIn": "Mark IN",
+    "submitOut": "Mark OUT",
+    "saved": "Entry saved",
+    "queued": "No network — saved, will send later",
+    "type": {
+      "truck": "Truck",
+      "tractor": "Tractor",
+      "tempo": "Tempo",
+      "car": "Car",
+      "bike": "Bike",
+      "bus": "Bus",
+      "jcb": "JCB",
+      "bullock_cart": "Bullock cart",
+      "other": "Other"
+    },
+    "purpose": {
+      "cane": "Cane",
+      "delivery": "Delivery",
+      "dispatch": "Dispatch",
+      "visitor": "Visitor",
+      "contractor": "Contractor",
+      "official": "Official",
+      "other": "Other"
+    }
   }
 }

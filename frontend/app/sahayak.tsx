@@ -2,14 +2,13 @@ import { MessageCircleQuestion, Send } from "lucide-react-native";
 import React, { useRef, useState } from "react";
 import {
   FlatList,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -84,11 +83,7 @@ export default function SahayakScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="sahayak-screen">
       <ScreenHeader title={t("sahayak.title")} />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="translate-with-padding">
         {messages.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>

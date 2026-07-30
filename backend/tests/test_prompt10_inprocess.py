@@ -14,6 +14,7 @@ def test_scheduler_jobs_registry():
         "ai_suggestion_timeout_sweep",
         "punchout_reminder_sweep",
         "demo_cleanup_sweep",
+        "vehicle_overstay_sweep",
         "nightly_backup",
         "nightly_report",
     ]
@@ -23,6 +24,7 @@ def test_scheduler_jobs_registry():
         "ai_suggestion_timeout_sweep": 5 * 60,
         "punchout_reminder_sweep": 15 * 60,
         "demo_cleanup_sweep": 15 * 60,
+        "vehicle_overstay_sweep": 60 * 60,
         "nightly_backup": 4 * 3600,
         "nightly_report": 24 * 3600,
     }

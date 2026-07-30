@@ -19,25 +19,24 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Image,
-  KeyboardAvoidingView,
   Linking,
   Modal,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, listDepartments, beaconRegistry } from "@/src/api/endpoints";
+import { createIncident, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
-import { getBleScanner, ensureBlePermissions, beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
+import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
+import { startZoneSession } from "@/src/ble/zoneSession";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -134,6 +133,8 @@ function IncidentCaptureInner() {
   // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
   // never waits on it — whatever is found by Submit time travels with the payload.
   const bleHitRef = useRef<BleBeaconHit | null>(null);
+  // v1.0.15: matched zone label (user's language) for the live "📍 zone" chip.
+  const [bleZone, setBleZone] = useState<string | null>(null);
 
   const departments = useCachedFetch<DepartmentItem[]>("departments", listDepartments);
   const selectedDept = departments.data?.find((d) => d.code === dept) ?? null;
@@ -168,30 +169,19 @@ function IncidentCaptureInner() {
 
   // Background BLE zone scan (non-blocking, dual-mode). Optional context only —
   // any failure/timeout is silently ignored and the incident submits beacon=null.
+  // v1.0.17: EXACT same code path as the punch flow — shared ZoneSession (cached
+  // registry, successive 5s LOW_LATENCY windows for up to 60s, early exit on match).
+  // The v1.0.16 single mount-time 10s window competed with camera init and never
+  // retried, which is why incidents shipped without a zone even when punch matched.
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      try {
-        const scanner = getBleScanner();
-        if (!scanner.isReal) return;
-        let registry = { macs: [] as string[], ibeacons: [] as { uuid: string; major: number; minor: number }[] };
-        try {
-          registry = await beaconRegistry();
-        } catch {
-          return;
-        }
-        const allowed = await ensureBlePermissions();
-        if (!allowed) return;
-        // 10s LOW_LATENCY window, early-exit on first match (opportunistic zone tag —
-        // still non-blocking: no beacon heard = incident proceeds exactly as before).
-        const hit = await scanner.scan(10000, registry);
-        if (active) bleHitRef.current = hit;
-      } catch {
-        // beacon is optional — never block or surface capture errors
-      }
-    })();
+    const session = startZoneSession();
+    const off = session.onUpdate(() => {
+      bleHitRef.current = session.getHit();
+      setBleZone(session.getZone());
+    });
     return () => {
-      active = false;
+      off();
+      session.stop();
     };
   }, []);
 
@@ -427,6 +417,7 @@ function IncidentCaptureInner() {
           facing="back"
           mode={mode}
           videoQuality="720p"
+          videoBitrate={2_000_000}
         />
         {coach ? (
           <View style={styles.coachWrap} testID="camera-coach-overlay">
@@ -459,6 +450,11 @@ function IncidentCaptureInner() {
               <X size={26} color="#FFFFFF" strokeWidth={2.6} />
             </Pressable>
             {gpsChip()}
+            {bleZone ? (
+              <View style={[styles.gpsChip, { backgroundColor: colors.primary }]} testID="zone-chip">
+                <Text style={styles.gpsChipText}>📍 {bleZone}</Text>
+              </View>
+            ) : null}
           </View>
           <View style={styles.shutterRow}>
             {!recording ? (
@@ -544,6 +540,7 @@ function IncidentCaptureInner() {
         <View style={styles.locLine} testID="capture-location-line">
           <MapPin size={18} color={colors.success} strokeWidth={2.4} />
           <Text style={styles.locText} numberOfLines={1}>
+            {bleZone ? `📍 ${bleZone} · ` : ""}
             {address ?? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}`}
           </Text>
         </View>
@@ -568,11 +565,12 @@ function IncidentCaptureInner() {
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-preview-screen">
       <ScreenHeader title={t("incident.preview")} />
-      <KeyboardAvoidingView
+      <KeyboardAwareScrollView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        contentContainerStyle={styles.previewScroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
-        <ScrollView contentContainerStyle={styles.previewScroll} keyboardShouldPersistTaps="handled">
           {/* off-screen full-size composite for the burn-in — never visible */}
           {shot ? (
             <View
@@ -673,8 +671,7 @@ function IncidentCaptureInner() {
               style={{ flex: 2 }}
             />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
 
       {/* full-screen media viewer */}
       <Modal visible={viewerOpen} animationType="fade" onRequestClose={() => setViewerOpen(false)}>

@@ -211,12 +211,16 @@ async def test_escalation_sweep_stays_in_class(client, db_session):
 
 
 async def test_nightly_report_excludes_demo_rows(client, db_session):
-    from app.shift_logic import now_ist
+    from datetime import datetime, timezone
+
     from app.tasks import _report_data
 
     demo_w = await login(client, D_ACC_WORKER)
     await _create_incident(client, demo_w, "ACCOUNTS", "fire", "critical")
-    today = now_ist().date()
+    # _report_data buckets incidents by func.date(created_at) which resolves in
+    # the DB session timezone (UTC) — use the UTC date so the test is stable
+    # across the 18:30–24:00 UTC window where the IST date is already tomorrow.
+    today = datetime.now(timezone.utc).date()
     data = await _report_data(db_session, today)
     real_count = (
         await db_session.execute(

@@ -967,7 +967,10 @@ async def _report_data(session, target_date) -> dict:
         "incidents": {
             "opened": opened,
             "resolved": resolved,
-            "critical": [{"category": c.category, "dept_code": c.department_code} for c in critical_rows],
+            "critical": [
+                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone}
+                for c in critical_rows
+            ],
         },
         "approvals": approvals,
     }
@@ -986,7 +989,10 @@ def _localize_report(data: dict, lang: str) -> dict:
         "incidents": {
             "opened": data["incidents"]["opened"],
             "resolved": data["incidents"]["resolved"],
-            "critical": [{"category": c["category"], "dept": nm(c["dept_code"])} for c in data["incidents"]["critical"]],
+            "critical": [
+                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone")}
+                for c in data["incidents"]["critical"]
+            ],
         },
         "approvals": [{"dept": nm(r["dept_code"]), "manager": r["manager"], "count": r["count"], "oldest_days": r["oldest_days"]} for r in data["approvals"]],
     }
@@ -1069,3 +1075,71 @@ def nightly_report() -> dict:
     result = asyncio.run(generate_report_async(yesterday))
     logger.info("Nightly report generated: %s", result)
     return result
+
+
+async def _vehicle_overstay_sweep_async() -> dict:
+    """Wave 1: alert the Security HOD once per day per vehicle that has been IN
+    for more than 12 hours without an OUT pairing. Real rows require
+    settings.vehicle_log_enabled; demo rows always sweep (sealed bubble)."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.models import Department, Employee, FactorySettings, VehicleLog
+    from app.notify import dispatcher, template
+    from app.redis_client import redis_client
+    from app.shift_logic import now_ist
+
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    sm = async_sessionmaker(bind=engine, expire_on_commit=False)
+    alerted = 0
+    try:
+        async with sm() as session:
+            fs = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+            real_enabled = bool(fs and fs.vehicle_log_enabled)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=12)
+            q = select(VehicleLog).where(
+                VehicleLog.direction == "in",
+                VehicleLog.paired_log_id.is_(None),
+                VehicleLog.logged_at < cutoff,
+            )
+            if not real_enabled:
+                q = q.where(VehicleLog.is_demo.is_(True))
+            rows = (await session.execute(q)).scalars().all()
+
+            async def _security_hod(is_demo: bool):
+                dept = (
+                    await session.execute(select(Department).where(Department.code == "SECURITY"))
+                ).scalar_one_or_none()
+                if dept and dept.manager_employee_id and not is_demo:
+                    return await session.get(Employee, dept.manager_employee_id)
+                return (
+                    await session.execute(
+                        select(Employee).where(
+                            Employee.department_code == "SECURITY",
+                            Employee.role_code == "Manager",
+                            Employee.is_demo == is_demo,
+                            Employee.is_active.is_(True),
+                        ).limit(1)
+                    )
+                ).scalar_one_or_none()
+
+            for v in rows:
+                day_key = f"overstay:{v.id}:{now_ist().date().isoformat()}"
+                try:
+                    fresh = await redis_client.set(day_key, "1", nx=True, ex=26 * 3600)
+                except Exception:
+                    fresh = True
+                if not fresh:
+                    continue  # already alerted today
+                hod = await _security_hod(bool(v.is_demo))
+                if not hod:
+                    continue
+                hours = int((datetime.now(timezone.utc) - v.logged_at).total_seconds() // 3600)
+                title, body = template("vehicle_overstay", f"{v.plate} — {hours}h ({v.gate_zone or 'gate'})")
+                await dispatcher.notify(session, hod.id, "vehicle_overstay", title, body, "vehicle", str(v.id))
+                alerted += 1
+            await session.commit()
+        return {"overstay_alerts": alerted}
+    finally:
+        await engine.dispose()

@@ -215,6 +215,7 @@ export function SelfieCamera({ hint, onUse, busy = false, busyLabel, testIDPrefi
 
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: "#000000" },
+  center: { alignItems: "center", justifyContent: "center" },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",

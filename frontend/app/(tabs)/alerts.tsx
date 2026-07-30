@@ -57,6 +57,8 @@ export default function AlertsScreen() {
       if (rank <= 3) router.push("/(tabs)/approvals");
     } else if (item.entity_type === "attendance") {
       router.push("/attendance/history");
+    } else if (item.entity_type === "vehicle") {
+      router.push("/vehicle");
     }
   };
 

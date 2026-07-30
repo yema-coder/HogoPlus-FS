@@ -4,12 +4,14 @@ import { useEffect } from "react";
 import { LogBox } from "react-native";
 import { useFonts } from "expo-font";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import "@/src/i18n";
 import { ToastHost } from "@/src/components/Toast";
 import { OfflineStrip } from "@/src/components/OfflineStrip";
+import { UpdateGate } from "@/src/components/UpdateGate";
 import { usePushSetup } from "@/src/notifications/usePushSetup";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
@@ -66,6 +68,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
       <SafeAreaProvider>
         <OfflineStrip />
         <Stack
@@ -75,7 +78,9 @@ export default function RootLayout() {
           }}
         />
         <ToastHost />
+        <UpdateGate />
       </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

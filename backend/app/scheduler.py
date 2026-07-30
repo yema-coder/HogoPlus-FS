@@ -63,6 +63,12 @@ async def _demo_cleanup():
     return await _demo_cleanup_sweep_async()
 
 
+async def _vehicle_overstay():
+    from app.tasks import _vehicle_overstay_sweep_async
+
+    return await _vehicle_overstay_sweep_async()
+
+
 async def _backup():
     from starlette.concurrency import run_in_threadpool
 
@@ -87,6 +93,7 @@ JOBS = [
     ("ai_suggestion_timeout_sweep", {"minute": "*/5"}, 4 * 60, _ai_timeout),
     ("punchout_reminder_sweep", {"minute": "*/15"}, 12 * 60, _punchout),
     ("demo_cleanup_sweep", {"minute": "7,22,37,52"}, 12 * 60, _demo_cleanup),
+    ("vehicle_overstay_sweep", {"minute": "12"}, 50 * 60, _vehicle_overstay),
     ("nightly_backup", {"hour": "3,7,11,15,19,23", "minute": "0"}, 210 * 60, _backup),
     ("nightly_report", {"hour": "0", "minute": "30"}, 20 * 3600, _report),
 ]

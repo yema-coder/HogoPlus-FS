@@ -9,6 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, localizedDetail } from "@/src/api/client";
@@ -95,7 +96,7 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <KeyboardAvoidingView behavior="padding" style={styles.backdrop}>
         <View style={styles.sheet} testID="escalate-modal">
           <Text style={styles.title}>{t("escalate.title")}</Text>
 
@@ -195,7 +196,7 @@ export function EscalateModal({ incidentId, visible, onClose, onDone }: Props) {
             />
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

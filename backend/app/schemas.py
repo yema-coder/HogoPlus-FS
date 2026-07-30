@@ -215,10 +215,20 @@ class SwapDecideIn(BaseModel):
     reason: str | None = None
 
 
+class BleDiagIn(BaseModel):
+    """v1.0.16 field instrumentation: free-form BLE diagnostic report from the app."""
+
+    report: dict
+
+
 class SettingsPatchIn(BaseModel):
     factory_lat: float | None = None
     factory_lng: float | None = None
     radius_meters: int | None = Field(default=None, ge=50, le=10000)
+    beacon_first_mode: bool | None = None
+    home_config_enabled: bool | None = None
+    vehicle_log_enabled: bool | None = None
+    notif_batching_enabled: bool | None = None
 
 
 class EmployeePatchIn(BaseModel):
@@ -345,6 +355,16 @@ class AppVersionIn(BaseModel):
     latest_version: str = Field(min_length=1, max_length=20)
     apk_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
+    force_update: bool = False
+
+
+class BeaconAttachIn(BaseModel):
+    """v1.0.17 speed pack: attach a late-arriving beacon match to a just-created punch."""
+
+    ble_beacon_id: str | None = Field(default=None, max_length=17)
+    ble_ibeacon_uuid: str | None = Field(default=None, max_length=36)
+    ble_ibeacon_major: int | None = Field(default=None, ge=0, le=65535)
+    ble_ibeacon_minor: int | None = Field(default=None, ge=0, le=65535)
 
 
 class DirectAddEmployeeIn(BaseModel):
@@ -372,3 +392,26 @@ class AnnouncementIn(BaseModel):
 
 class FaceEnrollIn(BaseModel):
     selfie_key: str = Field(min_length=1, max_length=500)
+
+
+# ---- Wave 1: Security vehicle log + config-driven home ----
+
+class VehicleLogIn(BaseModel):
+    plate: str = Field(min_length=3, max_length=15)
+    vehicle_type: str = Field(max_length=20)
+    direction: Literal["in", "out"]
+    driver_name: str | None = Field(default=None, max_length=100)
+    purpose: str | None = Field(default=None, max_length=100)
+    photo_key: str | None = Field(default=None, max_length=500)
+    voice_note_key: str | None = Field(default=None, max_length=500)
+    gate_zone: str | None = Field(default=None, max_length=100)
+    anpr_used: bool = False
+    client_uuid: str | None = Field(default=None, max_length=64)
+    logged_at: _datetime.datetime | None = None
+
+
+class HomeConfigUpsertIn(BaseModel):
+    department_code: str | None = Field(default=None, max_length=30)
+    role_code: str | None = Field(default=None, max_length=20)
+    config_json: dict
+    is_active: bool = True

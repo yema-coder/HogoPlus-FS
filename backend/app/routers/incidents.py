@@ -413,6 +413,8 @@ async def incident_detail(
 async def list_incidents(
     department_code: str | None = None,
     status: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -429,7 +431,11 @@ async def list_incidents(
         if status not in ("submitted", "seen", "in_progress", "resolved", "escalated"):
             raise HTTPException(status_code=422, detail="Invalid status filter")
         query = query.where(Incident.status == status)
-    rows = (await session.execute(query.order_by(Incident.created_at.desc()))).scalars().all()
+    rows = (
+        await session.execute(
+            query.order_by(Incident.created_at.desc()).limit(min(max(limit, 1), 200)).offset(max(offset, 0))
+        )
+    ).scalars().all()
     return [_out(i) for i in rows]
 
 

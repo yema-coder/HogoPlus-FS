@@ -88,8 +88,18 @@ export const punchIn = (body: Record<string, unknown>) =>
 
 export const beaconMacs = () => api<{ macs: string[] }>("/attendance/beacon-macs");
 
+export interface RegistryZoneLabels {
+  zone_en?: string;
+  zone_hi?: string;
+  zone_mr?: string;
+}
+
 export const beaconRegistry = () =>
-  api<{ macs: string[]; ibeacons: { uuid: string; major: number; minor: number }[] }>(
+  api<{
+    macs: string[];
+    ibeacons: ({ uuid: string; major: number; minor: number } & RegistryZoneLabels)[];
+    macs_detail?: ({ mac: string } & RegistryZoneLabels)[];
+  }>(
     "/attendance/beacon-registry",
   );
 
@@ -177,6 +187,17 @@ export const flaggedAttendance = (date?: string) =>
 export const approveAttendance = (id: string) =>
   api<AttendanceRecord>(`/attendance/${id}/approve`, { method: "POST" });
 
+export const rejectAttendance = (id: string) =>
+  api<AttendanceRecord>(`/attendance/${id}/reject`, { method: "POST" });
+
+/** v1.0.16 field instrumentation: ship a BLE diagnostic report to the server. */
+export const sendBleDiag = (report: unknown) =>
+  api<{ stored: boolean }>("/attendance/ble-diag", { method: "POST", body: { report } });
+
+/** v1.0.17 speed pack: attach a late-arriving beacon match to a just-created punch. */
+export const attachBeacon = (id: string, body: Record<string, unknown>) =>
+  api<AttendanceRecord>(`/attendance/${id}/attach-beacon`, { method: "POST", body });
+
 // ---------- Phase 4: AI services ----------
 
 export const aiAnpr = (photoKey: string) =>
@@ -201,7 +222,12 @@ export const aiChat = (message: string, conversationId?: string | null) =>
   });
 
 export const getAppVersion = () =>
-  api<{ latest_version: string | null; apk_url: string | null; notes: string | null }>(
+  api<{
+    latest_version: string | null;
+    apk_url: string | null;
+    notes: string | null;
+    force_update?: boolean;
+  }>(
     "/app-version",
     { auth: false },
   );
@@ -261,3 +287,57 @@ export const assignDeptManager = (code: string, employeeId: string) =>
     `/admin/departments/${code}/assign-manager`,
     { method: "POST", body: { employee_id: employeeId } },
   );
+
+// ---- Wave 1: config-driven home + Security vehicle log ----
+
+export interface HomeWidgetItem {
+  key?: string;
+  icon?: string;
+  emoji?: string;
+  label?: Record<string, string>;
+  route?: string;
+  color?: string;
+  testID?: string;
+}
+export interface HomeWidget {
+  type: string;
+  items?: HomeWidgetItem[];
+}
+export interface HomeConfigResult {
+  config: { widgets: HomeWidget[] } | null;
+}
+
+export const getHomeConfig = () => api<HomeConfigResult>("/home/config");
+export const getHomeCounts = () => api<Record<string, number>>("/home/counts");
+
+export interface VehicleLogItem {
+  id: string;
+  plate: string;
+  vehicle_type: string;
+  direction: "in" | "out";
+  driver_name: string | null;
+  purpose: string | null;
+  photo_key: string | null;
+  voice_note_key: string | null;
+  gate_zone: string | null;
+  anpr_used: boolean;
+  paired_log_id: string | null;
+  logged_at: string;
+  hours_inside?: number;
+}
+
+export const createVehicleLog = (body: Record<string, unknown>) =>
+  api<{ log: VehicleLogItem; duplicate: boolean }>("/vehicles/log", { method: "POST", body });
+
+export const listVehicleLogs = (params: { day?: string; plate?: string; direction?: string } = {}) => {
+  const qs = Object.entries(params)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return api<VehicleLogItem[]>(`/vehicles/logs${qs ? `?${qs}` : ""}`);
+};
+
+export const vehiclesInside = () => api<VehicleLogItem[]>("/vehicles/inside");
+
+export const vehiclesSummary = () =>
+  api<{ today_in: number; today_out: number; currently_inside: number }>("/vehicles/summary");

@@ -1,15 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -102,8 +100,12 @@ export default function OtpEntry() {
 
   return (
     <SafeAreaView style={styles.safe} testID="otp-entry-screen">
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
           <Text style={styles.title}>{t("auth.otpTitle")}</Text>
           <Text style={styles.hint}>{t("auth.otpSent", { phone })}</Text>
           <View style={styles.delayRow} testID="otp-delay-hint">
@@ -164,8 +166,7 @@ export default function OtpEntry() {
               <Text style={styles.link}>{t("auth.changePhone")}</Text>
             </Pressable>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

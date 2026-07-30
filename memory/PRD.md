@@ -760,3 +760,222 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - Pending user actions: deploy 2a407ed/f80b1f4 backend pack; build v1.0.11 via Publish (AAB for
   Play with PEPK existing-key setup BEFORE first upload); field protocol in STAGE3_v1.0.11_TEST_PLAN.md;
   reject 4 flagged rows; clear refs 0001/1212 (curl reset-reference-selfie); then RUN CLEANUP.
+
+## Launch-day Tasks A/B/C — full beacon registry + beacon-first flag (2026-06 fork) ✅
+- TASK C ROOT CAUSE (user suspicion CONFIRMED): registry held only the 6 OUTDOOR minors
+  (33/18/7/34/4/15); v1.0.14 scanner matches ONLY registry entries (BleScanner.ts L96-99 set build,
+  L126-133 silent skip of unregistered, L99 empty-registry instant null) → all 23 indoor beacons
+  invisible → punches stored ble_beacon_id=NULL. DATA-ONLY FIX (Task A). Server evidence: only 2 real
+  punches existed on 2026-07-29 (0001 Amey, 1212 Yema — both beacon EMPTY, flagged reference_bootstrap);
+  the other claimed ~15 punches never reached the server (only 10 real logins since 27th).
+- TASK A DONE (production, api.hogoplus.in): bulk-imported 23 indoor iBeacons (shared UUID
+  01122334-4556-6778-899A-ABBCCDDEEFF0, major 1) → 29 total active zones; hi/mr labels PATCHed on the
+  23 new rows (6 originals untouched). MINOR 0 = Civil verified SAFE end-to-end (all checks use
+  `is not None` / string set keys); live prod demo punch with minor 0 → verified_plus zone Civil.
+  Resolver proof for all 23 minors + negative controls (999, 6, wrong-major). Mobile fetches
+  /attendance/beacon-registry fresh on every punch (punch.tsx L63-68) → NO REBUILD NEEDED.
+  Evidence scripts: scripts/taska_register_beacons.py / taska_resolver_proof.py / taska_minor0_e2e.py /
+  taskc_evidence.py.
+- TASK B SHIPPED (backend+webdash, flag DEFAULT OFF — byte-identical when off): migration 0011 adds
+  settings.beacon_first_mode (applied to Neon; old EC2 code ignores the column). Punch ladder
+  (attendance.py): flag ON → beacon match = verified_plus (unchanged); NO beacon = ACCEPTED but
+  flagged no_beacon_gps_only / no_beacon_no_gps; geofence never gates (gps_verified still stored as
+  evidence). Incidents NEVER blocked/flagged for beacon (already true; zone display already prominent
+  on webdash feed/modals + mobile detail — zone > address > coords). Admin GET/PATCH /settings expose
+  the flag; webdash Admin geofence card got a "Beacon-first attendance" checkbox (rebuilt to
+  webdash_dist). Tests 210/210 (test_beacon_first.py: 6-case matrix ×ON/OFF + incident non-block +
+  settings roundtrip). Live demo-side matrix run on prod DB in both flag states
+  (scripts/taskb_live_matrix.py), flag reverted OFF after.
+- APP-SIDE: NOTHING requires a new APK. v1.0.15 batch (cosmetic only): i18n strings for the two new
+  flag reasons (mobile Time Office queue shows the raw readable string until then).
+- NOT COMMITTED to git (privacy.html conflict branch conflict_280726_2331 still unresolved — sync
+  main before any Save to GitHub).
+- Test infra reinstalled this fork (apt PG15+redis, pgvector v0.8.0 from source, role hogo,
+  hogoplus_test + vector ext).
+
+## v1.0.15 — neverForLocation ARTIFACT root cause + batch (2026-06 fork) ✅ code complete, build pending
+- TRUE ROOT CAUSE of all beacon failures (user's APK autopsy: BLUETOOTH_SCAN usesPermissionFlags=
+  0x00010000 in the v1.0.14 artifact; versionCode 133 ≠ app.json 10014 proving pipeline overrides):
+  react-native-ble-plx's LIBRARY AndroidManifest.xml (in the AAR) declares BLUETOOTH_SCAN with
+  neverForLocation; the GRADLE MANIFEST MERGER re-injects it into every artifact AFTER prebuild —
+  repo/app.json fixes can never win, and prebuild-output checks look clean while artifacts are dirty.
+  With that flag the OS strips ALL iBeacon frames before the app sees them.
+- FIX (merge-time authority): local config plugin frontend/plugins/withBleScanNoNeverForLocation.js
+  (LAST in app.json plugins) stamps tools:remove="android:usesPermissionFlags" onto the app
+  manifest's BLUETOOTH_SCAN + ensures xmlns:tools. Manifest merger MUST strip the attr regardless
+  of library contributions; every pipeline prebuild re-applies the stamp. VERIFIED via prebuild in
+  /tmp copy: `<uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+  tools:remove="android:usesPermissionFlags"/>`. ACCESS_FINE_LOCATION requirement (needed without
+  the flag) already satisfied: manifest has it (expo-location) + strict guards force grant+GPS-ON
+  pre-scan. app.json: version 1.0.15, versionCode 10015 (pipeline will assign its own >133).
+- v1.0.15 batch (all shipped in repo): Approvals→Attendance REJECT button (att-reject-<id>,
+  paired with approve, optimistic, POST /attendance/{id}/reject); flag-reason i18n
+  att.reasonNoBeacon/att.reasonNoBeaconNoGps ×3 (parity 430 keys); incident capture live zone chip
+  (testID zone-chip, native only) fed by enriched GET /attendance/beacon-registry (entries now carry
+  zone_en/hi/mr + macs_detail — additive, old builds ignore; backend half deployable NOW);
+  SelfieCamera styles.center pre-existing tsc error fixed.
+- Tests: pytest 211/211; tsc clean; eslint clean; testing_agent iteration_19 ALL PASS (reject flow
+  E2E with live no_beacon_gps_only rows in en+mr, no key leaks, capture web regression).
+  beacon_first_mode verified False after tests; frontend/.env restored to api.hogoplus.in.
+- USER ARTIFACT AUTOPSY before install: aapt2 dump xmltree (BLUETOOTH_SCAN must have NO
+  usesPermissionFlags), aapt2 dump badging (versionCode >133, versionName 1.0.15), strings on
+  assets/index.android.bundle (api.hogoplus.in pinned, no preview/localhost).
+
+## v1.0.16 — TRUE ROOT CAUSE + FIELD INSTRUMENTATION (2026-06 fork) ✅ code complete, build pending
+- v1.0.15 artifact verified CLEAN by user (no usesPermissionFlags, versionCode 135, correct API
+  base) yet detection still failed with beacon in hand. TRUE BUG FOUND with code evidence:
+  react-native-ble-plx 3.5.1 Android AdvertisementData.parseManufacturerData (L200-204) keeps ONE
+  manufacturerData field and OVERWRITES it for EVERY 0xFF AD structure in the merged ADV+SCAN_RSP
+  record. Vendor beacons (SmartConfig-configurable) interleave a vendor config frame in the scan
+  response → it clobbers the Apple 4C 00 02 15 frame → the app's header-anchored parseIBeacon saw
+  only the vendor frame → null → no match ever, on every beacon, every version.
+- FIX: new pure module src/ble/ibeaconParse.ts — extractIBeacons() signature-scans
+  device.rawScanRecord (full merged record, exposed by ble-plx) for 4C 00 02 15 at ANY offset,
+  returns ALL frames; ibKey() lowercases uuid + Number-coerces major/minor. BleScanner.scan uses
+  rawScanRecord+manufacturerData candidates. User hypotheses (a) case (b) type (c) uuid-format
+  ELIMINATED via unit test frontend/scripts/test-ibeacon-parse.js (16/16 incl. repro of old
+  parser failing on vendor-clobbered payload while new extractor recovers from rawScanRecord).
+- Permission hardening: requestBlePermissions/checkBlePermissions on Android 12+ now also
+  require+request ACCESS_FINE_LOCATION (mandatory for scan results once neverForLocation is
+  removed; an "approximate-only" location grant silently yields zero scan results). Punch flow
+  remains fail-closed (punch.tsx L74-82 aborts w/ toast on denied/blocked).
+- INSTRUMENTATION (temporary): hidden BLE Diagnostics screen app/ble-diag.tsx — entry: LONG-PRESS
+  the avatar on Profile tab (600ms). Shows permissions/radio/location-services, fetched registry
+  (29 entries), 15s diagnostic scan (allowDuplicates ON, frames merged per device) with parsed
+  iBeacon candidates + per-candidate verdict (matched/uuid_mismatch/major_mismatch/
+  minor_not_registered/no_ibeacon_frame/no_mfg_data), and "Send report to server".
+  Backend: POST /api/attendance/ble-diag (audit action ble.diag, 150KB cap, 413 oversize),
+  GET /api/admin/ble-diag?limit= (CGM/MD rank<=2). scanDiagnostics() added to BleScanner.
+- app.json 1.0.16/10016. pytest 214/214 (tests/test_ble_diag.py new), tsc clean, eslint clean,
+  E2E roundtrip on live DB (demo D002 report → CGM read), web smoke: diag screen renders 29-entry
+  registry. frontend/.env restored to api.hogoplus.in.
+- NOTE: test infra (PG15/redis/pgvector) was wiped again by pod reset and reinstalled.
+
+## v1.0.17 — SPEED PACK + incident zone + Play in-app updates (2026-06 fork) ✅ code complete, build pending
+- ITEM 1 (speed): v1.0.16 punch was fully SEQUENTIAL after the selfie (GPS≤8s → geocode → registry
+  RTT → perm → 10s scan → compress → upload → submit ≈ 60s field-observed). NEW: shared
+  src/ble/zoneSession.ts — pre-warms scan at screen OPEN, registry cached (AsyncStorage 10-min TTL,
+  bg refresh, stale-if-offline), successive 5s LOW_LATENCY windows ≤60s w/ early exit, singleton
+  (serialized stopDeviceScan). punch.tsx: GPS|compress+upload|zone(≤5s cap)|geocode(≤3s, display-only)
+  all PARALLEL; per-stage timings stored → shown in BLE Diagnostics "Last punch timing breakdown"
+  + included in diag report. LATE ATTACH: POST /api/attendance/{id}/attach-beacon (self-only,
+  15-min window, idempotent, beacon wins over location outcomes ONLY — face flags + reviewed rows
+  untouched) called automatically when match lands post-submit.
+- ITEM 2 (incident zone): root cause = single mount-time 10s window competing with camera init,
+  never retried. Now uses the EXACT same ZoneSession (chip subscribes via onUpdate). Zone shown:
+  capture chip, app detail, webdash feed/modals/department (already), nightly PDF critical list
+  (added "— 📍 zone"). Backend halves deployable now.
+- ITEM 3 (performance): measured — hot API payloads all ≤2.2KB; latency is RTT-bound per request;
+  selfie 720px/q0.7 ≈80-150KB; incident photo 1600px/q0.7 ≈300-500KB (already compressed);
+  remaining candidates: video (uncompressed, up to tens of MB) and on-device cold-start (needs
+  device numbers — timing card now provides punch numbers).
+- ITEM 4 (in-app updates): sp-react-native-in-app-updates@2 + react-native-device-info@15 installed
+  (autolink at prebuild). UpdateGate in root layout: backend GET /app-version drives it — flexible
+  by default, IMMEDIATE when force_update=true (migration 0012, applied to Neon; PUT
+  /admin/app-version now accepts force_update). Sideload/Expo Go/web fail OPEN → existing
+  UpdateBanner fallback. TESTING AGENT P0 FIX (keep!): UpdateGate.web.tsx stub — metro statically
+  resolves native-only require on web, stub prevents blank web bundle.
+- app.json 1.0.17/10017. pytest 218/218 (test_attach_beacon.py new, prompt16 updated for
+  force_update); iter20 frontend E2E PASS (punch ~6s on web, incident, /ble-diag, attach-beacon).
+- Prod app-version row still "1.0.7" — in-app update fires only when row bumped above installed
+  version AND a higher build is live on the same Play track. Play Console: no extra config; app
+  must be installed VIA Play.
+
+## v1.0.18 batch (2026-06 fork) — keyboard overlap + prod DB task + self-reg validation
+- TASK 1 (prod DB): employee 0061 Sunil Kondiram Vavhal phone updated in LIVE Neon DB
+  +917020792694 → +917020892694 (dup-checked: none; format matches PHONE_REGEX; send-otp
+  resolution dry-checked; no redis locks). seed_employees.csv row updated to match — seed.py is
+  INSERT-ONLY (skips existing emp_ids), so GitHub seed edits can NEVER drift/overwrite live rows.
+- TASK 2 (keyboard, THE v1.0.18 build): app-wide migration to react-native-keyboard-controller
+  1.18.5 (SDK 54). KeyboardProvider in root _layout. KeyboardAwareScrollView (bottomOffset 24) on:
+  phone, otp, register-name, announce, swap/new, incident/[id], incident/capture preview,
+  EmployeeForm, FormRenderer (kept scrollRef/scrollToFirstError). RNKC KeyboardAvoidingView
+  behavior="padding" inside Modals: EscalateModal sheet, submission/[id] reject, approvals reject.
+  sahayak chat = behavior="translate-with-padding". employees list: keyboardDismissMode="on-drag".
+  RNKC is NATIVE-ONLY (web no-op) → real avoidance verifiable only on the APK; web regression
+  sweep all-PASS (login, sahayak, announce, employees+form, swap, incident detail, escalate modal,
+  forms engine text field). app.json bumped 1.0.18/10018.
+- TASK 3 (self-reg E2E): VALIDATED against live stack (ALLOW_NEW_REGISTRATION=true in backend/.env):
+  unknown number → send-otp 200 → verify-otp is_new+reg-token → selfie upload (reg token) →
+  Rekognition face gate LIVE (rejected pixel image, passed real portrait) → register →
+  pending_approval + auto emp_id → re-login lands pending → CGM sees registrant in
+  /admin/employees/pending with selfie. Test row fully cleaned from prod DB.
+  Repeatable script: backend/scripts/selfreg_e2e.py.
+- FINDING: real employees with garbage emp_ids poison auto-ID: 3003200 "Haru", 300319 "Shubham",
+  300312 "Karan" (is_demo=false) → next self-reg emp_id becomes 3003201 and suggested_emp_id
+  3003202. Needs user decision (fix rows or change suggestion query).
+- TASK 4 (perf profile, REPORT ONLY per user): /app/docs/PERF_PROFILE_v1.0.17.md — smoking gun:
+  backend↔Neon(ap-southeast-1) = 217ms/query, Redis 215ms/op → every request pays RTT × query
+  count (incidents 2.7s ≈ 12 RTTs vs dashboard/summary 123ms). Payloads tiny (≤5.4KB). Bundle
+  5.66MB/3906 modules. Video 720p/30s no bitrate cap = dominant upload. Fixes proposed for
+  v1.0.19 (LIMIT on /incidents, pending-query optimization, region co-location, videoBitrate).
+- frontend/.env EXPO_PUBLIC_BACKEND_URL restored to api.hogoplus.in for the build.
+- NOTE: backend/.env ALLOW_NEW_REGISTRATION left "true" (validated state). Deployed backend env
+  is controlled via Deployment Secrets — user must set it true there for Play Store users.
+
+## v1.0.19 QUEUE (user-approved 2026-06, DO NOT build until user green-lights)
+1. emp_id suggestion query: IGNORE outlier ids (300312/300319/3003200 stay as-is — history
+   references them; do NOT renumber rows). Suggest next free id from the normal 4-digit range
+   (e.g. max emp_id where length=4 / value < 10000, excluding demo).
+2. One-tap "Share diagnostics": post the punch timing card to POST /api/attendance/ble-diag
+   automatically from the timing card UI (approved — factory numbers without screenshots).
+3. Perf app-side: /incidents LIMIT+pagination (backend), video bitrate cap (~2 Mbps) on
+   incident recording, /departments client cache, parallel auth-hydration storage reads.
+4. OTP IP-level rate limiting per /app/docs/OTP_IP_RATE_LIMIT_DESIGN.md (shadow mode first).
+5. DB migration Neon SG → Mumbai: user executes separately per
+   /app/docs/DB_MIGRATION_PLAN_MUMBAI.md (WRITTEN PLAN ONLY, pre-flight = confirm backend region).
+
+## TESTING POLICY (user directive 2026-06 — PERMANENT)
+- NEVER use +918483029039 (user's personal number) in automated tests again.
+- Automated tests use the sealed demo bubble: CGM D500 +919000000500, Worker D001 +919000000001
+  (fixed OTP 123456, is_demo, no SMS ever). Real-account path when needed: 0021 +917972540971
+  (permanent Play-reviewer whitelist account). Unknown-number/registration tests: +91999990001x
+  range (verified no employee rows).
+
+## WAVE 1 — Department Upgrade Sprint (2026-06, ships in v1.0.19)
+- Part A discovery doc: /app/docs/DEPT_UPGRADE_DISCOVERY.md (13 depts from live DB, per-dept
+  blocks, notification event matrix, wave plan). FLAGGED: SECURITY gate_entry form overlaps
+  vehicle log -> proposed rename to "Visitor entry" (AWAITING USER YES); only 1 real employee
+  has a push token; "bootstrap confirmations" interpretation is an assumption.
+- CONFIG-DRIVEN HOME: home_configs table + GET /api/home/config ((dept,role)>(dept)>(role)>null)
+  + GET /api/home/counts (single-round-trip aggregate) + PUT/GET /api/admin/home-configs (rank≤2).
+  App: src/home/ConfigHome.tsx widget registry (count_tiles, action_grid; unknown types skipped
+  = forward compatible). Fallback = original home byte-identical. Changing dept homes after
+  v1.0.19 = config edit only, NO APK. Seeded configs: SECURITY, TIME_OFFICE, CGM, MD
+  (scripts/seed_home_configs.py, idempotent).
+- VEHICLE LOG: vehicle_logs table; POST /api/vehicles/log (plate normalisation, IN/OUT pairing,
+  client_uuid idempotency = offline outbox dedup DONE for this endpoint), logs/inside/summary/
+  export.xlsx; mobile /vehicle + /vehicle/new (ANPR photo prefill via existing /api/ai/anpr AND
+  manual path, icon type grid, purpose chips, BLE gate zone chip, outbox "vehicle" kind);
+  webdash Vehicle Register screen (filters + inside + XLSX). vehicle_overstay hourly sweep >12h
+  -> Security HOD, 1/day/vehicle redis dedup.
+- NOTIFICATIONS wave-1: push retry x3 detached from request path; 30-min batching + quiet hours
+  22-06 IST for registration_pending/submission_pending (flag notif_batching_enabled, OFF);
+  deep-links extended (form_submission -> /submission/{id}, employee -> approvals, vehicle ->
+  /vehicle) in usePushSetup + alerts tab.
+- Queued items DONE in this build: /incidents limit+offset (default 100, cap 200); emp_id
+  suggestion now 4-digit pool only; videoBitrate 2Mbps cap on incident video; share-timings
+  one-tap on punch result -> POST /attendance/ble-diag (verified 200).
+- FLAGS (settings table, via PATCH /api/admin/settings): home_config_enabled, vehicle_log_enabled,
+  notif_batching_enabled — ALL OFF in production; demo bubble bypasses. Migration 0013 applied to
+  prod (additive, inert).
+- Tests: 231 passed backend (new: test_vehicle_log.py 8, test_home_config.py 5); testing agent
+  iteration_22 ALL PASS (mobile flows via JWT injection + webdash + API spot checks).
+- Evidence: /app/docs/WAVE1_FIELD_PROTOCOL.md (field protocol + APK autopsy greps + flag flip).
+- app.json now 1.0.19/10019. frontend/.env restored to api.hogoplus.in (BOTH EXPO_PUBLIC_API_URL
+  and EXPO_PUBLIC_BACKEND_URL — NOTE: the api client uses EXPO_PUBLIC_API_URL!).
+
+## v1.0.19 Queued-Items AUDIT (fork session, 2026-06)
+- Handoff claimed 4 queued items missing; previous session claimed all done. AUDIT RESULT: 3 of 4
+  fully existed; emp_id fix was INCOMPLETE (only 1 of 2 endpoints patched).
+- EXISTS: /incidents limit+offset (incidents.py:412-439, cap 200; live_v1019_api.py tests);
+  share-timings one-tap (attendance/result.tsx share-timings-button -> POST /attendance/ble-diag,
+  test_ble_diag.py); video cap (incident/capture.tsx videoQuality="720p" videoBitrate=2_000_000).
+- WAS MISSING, NOW FIXED: GET /api/admin/emp-id-suggest (admin.py:~883) still used regex '^\d+$'
+  including garbage IDs (3003200 etc) -> suggested "3003201". Fixed to '^\d{1,4}$' (same as
+  /admin/pending). Used by /employees/new direct-add form. Verified live: now returns "1220".
+  New test: tests/test_emp_id_suggest.py. Backend suite 233 passed.
+- Flags re-verified OFF in prod DB: home_config_enabled / vehicle_log_enabled /
+  notif_batching_enabled all False. §C artifact strings all present in frontend source.
+  app.json 1.0.19 / versionCode 10019. NOTE: backend fix must be deployed to user's EC2
+  (api.hogoplus.in) — repo code is fixed; preview backend verified.

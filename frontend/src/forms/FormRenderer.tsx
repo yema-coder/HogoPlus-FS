@@ -1,13 +1,12 @@
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
@@ -371,11 +370,12 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView
+    <View style={{ flex: 1 }}>
+      <KeyboardAwareScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
       >
         {fields.map((f) => (
           <FieldWrapper
@@ -406,7 +406,7 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           onPress={() => void submit()}
         />
         {fillableCount >= 2 ? <View style={{ height: 72 }} /> : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
       {fillableCount >= 2 ? (
         <VoiceFillButton
           formDefinitionId={definition.id}
@@ -414,7 +414,7 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
           testID="voice-fill-fab"
         />
       ) : null}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

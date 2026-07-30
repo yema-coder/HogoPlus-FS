@@ -12,7 +12,7 @@ from app.audit import write_audit
 from app.database import get_session
 from app.models import Attendance, BleBeacon, Department, Employee, FactorySettings
 from app.notify import dispatcher, template
-from app.schemas import PunchInIn
+from app.schemas import BeaconAttachIn, BleDiagIn, PunchInIn
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
 from app.storage import get_storage
@@ -82,7 +82,9 @@ async def beacon_registry(
 ):
     """Dual-mode registry for the mobile scanner: active registered MACs AND
     active registered iBeacon (UUID/Major/Minor) triples. The scanner matches a
-    detected device if EITHER its MAC or its iBeacon triple is in this list."""
+    detected device if EITHER its MAC or its iBeacon triple is in this list.
+    v1.0.15: entries carry trilingual zone labels so the app can show a live
+    zone chip at capture time (older builds ignore the extra keys)."""
     rows = (
         await session.execute(
             select(BleBeacon).where(BleBeacon.is_active.is_(True))
@@ -90,11 +92,100 @@ async def beacon_registry(
     ).scalars().all()
     macs = [b.mac_address for b in rows if b.mac_address]
     ibeacons = [
-        {"uuid": b.beacon_uuid, "major": b.major, "minor": b.minor}
+        {
+            "uuid": b.beacon_uuid, "major": b.major, "minor": b.minor,
+            "zone_en": b.zone_label_en, "zone_hi": b.zone_label_hi, "zone_mr": b.zone_label_mr,
+        }
         for b in rows
         if b.beacon_uuid and b.major is not None and b.minor is not None
     ]
-    return {"macs": macs, "ibeacons": ibeacons}
+    macs_detail = [
+        {
+            "mac": b.mac_address,
+            "zone_en": b.zone_label_en, "zone_hi": b.zone_label_hi, "zone_mr": b.zone_label_mr,
+        }
+        for b in rows
+        if b.mac_address
+    ]
+    return {"macs": macs, "ibeacons": ibeacons, "macs_detail": macs_detail}
+
+
+@router.post("/attendance/{attendance_id}/attach-beacon")
+async def attach_beacon(
+    attendance_id: uuid.UUID,
+    body: BeaconAttachIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.17 SPEED PACK: the punch waits ≤5s for a beacon and never blocks. If the
+    background zone scan matches AFTER submit, the app attaches it here — upgrading a
+    location-flagged/verified row to verified_plus. Face-verification flags are never
+    touched. Idempotent: a row that already has a beacon is returned unchanged."""
+    rec = await session.get(Attendance, attendance_id)
+    if rec is None or rec.employee_id != employee.id or bool(rec.is_demo) != bool(employee.is_demo):
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    if rec.ble_beacon_id:
+        return _out(rec)
+    if rec.punch_in_at is not None:
+        punched = rec.punch_in_at if rec.punch_in_at.tzinfo else rec.punch_in_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - punched > timedelta(minutes=15):
+            raise HTTPException(status_code=409, detail="Attach window closed")
+    from app.ble import beacon_ref, resolve_beacon
+
+    matched = await resolve_beacon(
+        session,
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    if matched is None:
+        raise HTTPException(status_code=404, detail="Beacon not registered")
+    rec.ble_beacon_id = beacon_ref(
+        mac=body.ble_beacon_id,
+        ibeacon_uuid=body.ble_ibeacon_uuid,
+        major=body.ble_ibeacon_major,
+        minor=body.ble_ibeacon_minor,
+    )
+    rec.ble_zone = matched.zone_label_en
+    # BEACON WINS — but only over LOCATION-derived outcomes, never over face flags,
+    # and never after Time Office has already reviewed the row.
+    location_reasons = ("outside_geofence", "gps_missing", "no_beacon")
+    if rec.approved_by is None and (
+        rec.verification_level == "verified"
+        or (
+            rec.verification_level == "flagged"
+            and (rec.flagged_reason or "").startswith(location_reasons)
+        )
+    ):
+        rec.verification_level = "verified_plus"
+        rec.flagged_reason = None
+    await write_audit(
+        session, employee.id, "attendance.beacon_attached", "attendance", str(rec.id),
+        {"zone": rec.ble_zone, "level": rec.verification_level},
+    )
+    await session.commit()
+    await session.refresh(rec)
+    return _out(rec)
+
+
+@router.post("/attendance/ble-diag")
+async def submit_ble_diag(
+    body: BleDiagIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.16 field instrumentation: persist a raw on-device BLE diagnostic report
+    (scan dump + permission states) as an audit event so beacon-detection failures
+    can be analyzed server-side instead of described verbally. Read back via
+    GET /api/admin/ble-diag (CGM/MD)."""
+    import json as _json
+
+    if len(_json.dumps(body.report, default=str)) > 150_000:
+        raise HTTPException(status_code=413, detail="Report too large")
+    await write_audit(session, employee.id, "ble.diag", "employee", str(employee.id), body.report)
+    await session.commit()
+    return {"stored": True}
 
 
 @router.post("/attendance/punch-in")
@@ -140,6 +231,17 @@ async def punch_in(
         inside = distance <= fs.radius_meters
     if matched_beacon:
         level = "verified_plus"
+    elif fs.beacon_first_mode:
+        # BEACON-FIRST POLICY (settings flag, ships OFF): the beacon zone is the
+        # PRIMARY location identity. GPS is still captured and stored as secondary
+        # evidence (gps_verified keeps the geofence truth) but never decides the
+        # outcome — a no-beacon punch is ACCEPTED and flagged for Time Office review.
+        level = "flagged"
+        flagged_reason = (
+            "no_beacon_gps_only"
+            if body.gps_lat is not None and body.gps_lng is not None
+            else "no_beacon_no_gps"
+        )
     elif body.gps_lat is None or body.gps_lng is None:
         level = "flagged"
         flagged_reason = "gps_missing"
