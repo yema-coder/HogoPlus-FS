@@ -1008,3 +1008,36 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   written but NOT RUN — run when test DB returns.
 - USER DEPLOY STEPS (EC2): git pull; docker compose up -d --build backend;
   docker exec hogoplus-backend alembic upgrade head (0014); APK build v1.0.20 via Publish.
+
+## v1.0.21 P0 — Voice-first reporting + Read-aloud TTS (2026-06 fork) ✅ CHECKPOINT 1
+- BACKEND: POST /api/ai/voice-describe {audio_key} → Whisper STT → LLM writes 1-3 sentence
+  description in SPEAKER's language (ai_core.describe_from_transcript; LLM failure falls back to
+  raw transcript — never a dead end). Per-user daily cap settings.voice_describe_daily_cap=20
+  (redis ai:usercap:voice_describe:{date}:{emp_id}) → trilingual 429 voice_cap_reached.
+- POST /api/ai/tts {text ≤600} → OpenAI tts-1/alloy via emergentintegrations → mp3 to storage;
+  server cache redis tts:key:{sha256(text)} → key (TTL 30d, refreshed) — same text NEVER
+  synthesized twice; cached hits bypass cap. Cap settings.tts_daily_cap=30 → trilingual 429.
+- tasks._classify_impl: transcript now also FILLS inc.description when empty (offline-queued voice
+  reports) + timeline event voice_transcribed {transcript, language}. Typed desc never overwritten.
+- MOBILE: capture.tsx voice-first layout (🎙 speakFirst header + VoiceFieldInput ABOVE the desc
+  input, typing optional); onVoiceChange → upload + /ai/voice-describe → desc filled + AI chip
+  (manual edit clears); voiceKeyRef reuses the uploaded key at submit (no double upload); offline/
+  failure → toast willTranscribeLater, note still queues via outbox. SpeakerButton component
+  (Volume2 icon 44px, loading EyeLoader, playing = stop square; expo-audio player) + ttsCache.ts
+  (AsyncStorage hogo.tts.map hash→local mp3 in cacheDirectory/tts — OFFLINE playback of anything
+  played before; 200-entry LRU-ish trim). Placements: every Alerts row (sibling of row pressable —
+  nested <button> web fix), incident detail AI assessment card (mr for mr/hi users, en for en),
+  success screen AI suggestion card, registration pending screen. i18n voice.* +8 keys ×3 (495 parity).
+- TESTS: tests/test_voice_tts.py (14: caps trilingual/per-user, cache-bypasses-cap, STT 502, LLM
+  fallback, 404/401/422, offline description fill + typed-desc-not-overwritten). Suite 249 passed
+  (1 pre-existing order-dependent flake test_attach_beacon_iter20 passes standalone/rerun).
+- LIVE EVIDENCE: scripts/live_voice_smoke.py — gTTS Marathi + 10dB machine noise → REAL Whisper
+  transcript (semantically complete, 47% exact-word due to orthographic variants पम्प/पंप etc.) →
+  REAL Gemini description "पम्प नम्बर 2 जवळ पाणी गळत आहे आणि मोटरमधून जळका वास येत आहे."; REAL TTS
+  4.2s mp3 + cached=true second call. testing_agent iteration_23 ALL PASS (incl. fake-camera
+  voice-first layout + submit regression + EN sweep).
+- Fixed 3 pre-existing tsc errors: type.xs token added (12), vehicle/new.tsx zone chip used
+  non-existent hit.zone (real bug → session.getZone()), result.tsx storage.getItem 2-arg. tsc CLEAN.
+- ENV: frontend/.env EXPO_PUBLIC_API_URL switched to preview URL for sandbox testing —
+  RESTORE to https://api.hogoplus.in before any build (release builds pin prod anyway).
+- P1 (My Month, Regularization, Same-as-last, Duplicate clustering) NOT started — next checkpoint.

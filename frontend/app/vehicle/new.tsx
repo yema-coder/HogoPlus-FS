@@ -56,7 +56,7 @@ export default function VehicleNewScreen() {
     const session = startZoneSession();
     sessionRef.current = session;
     void session.waitForHit(6000).then((hit) => {
-      if (hit?.zone) setZone(hit.zone);
+      if (hit) setZone(session.getZone());
     });
     return () => session.stop();
   }, []);
