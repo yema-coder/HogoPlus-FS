@@ -979,3 +979,12 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   notif_batching_enabled all False. §C artifact strings all present in frontend source.
   app.json 1.0.19 / versionCode 10019. NOTE: backend fix must be deployed to user's EC2
   (api.hogoplus.in) — repo code is fixed; preview backend verified.
+
+## RDS migration night (fork session)
+- User executing Neon->RDS tonight. Answers given: RDS PostgreSQL 18.4 (pgvector 0.8.2),
+  db.t4g.micro + 20GiB gp3 single-AZ. Runbook: /app/docs/DB_MIGRATION_TONIGHT.md.
+- Code: DB pool sizing now env-driven (config.db_pool_size/db_max_overflow, defaults 40/110
+  Neon-era; EC2 .env sets 10/20 for micro's ~110 conn cap). Commit on main.
+- NOTE: sandbox local test Postgres/Redis sidecars (127.0.0.1:5432/6379) went DOWN mid-session
+  (pod-level; no binaries in container) — pytest suite CANNOT run until sidecars return.
+  Preview backend uses NEON directly (backend/.env) and is healthy.
