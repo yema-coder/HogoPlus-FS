@@ -179,6 +179,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
               photos: photoKeys,
               gps_lat: (payload.gps_lat as number | null) ?? null,
               gps_lng: (payload.gps_lng as number | null) ?? null,
+              client_uuid: (payload.client_uuid as string | null) ?? null, // idempotent replay
             });
           }
           const items = get().items.filter((i) => i.id !== item.id);

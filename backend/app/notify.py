@@ -223,6 +223,18 @@ T = {
             "mr": "तुमची शिफ्ट संपली — कृपया आत्ता पंच आउट करा.",
         },
     },
+    "punchout_flagged": {
+        "title": {
+            "en": "Punch-out missing — sent to Time Office",
+            "hi": "पंच-आउट नहीं हुआ — टाइम ऑफिस को भेजा",
+            "mr": "पंच-आउट झाले नाही — टाइम ऑफिसकडे पाठवले",
+        },
+        "body": {
+            "en": "No punch-out was recorded after your shift. Time Office will review this day — nothing is decided automatically. If something is wrong, open My Attendance and report it.",
+            "hi": "शिफ्ट के बाद पंच-आउट दर्ज नहीं हुआ। टाइम ऑफिस इस दिन की जाँच करेगा — अपने आप कुछ तय नहीं होता। कुछ गलत हो तो My Attendance में जाकर बताएं।",
+            "mr": "शिफ्टनंतर पंच-आउट नोंदले नाही. टाइम ऑफिस या दिवसाची तपासणी करेल — आपोआप काहीही ठरत नाही. काही चूक असेल तर My Attendance मध्ये जाऊन कळवा.",
+        },
+    },
     "vehicle_overstay": {
         "title": {
             "en": "🚚 Vehicle inside for over 12 hours",

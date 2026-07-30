@@ -209,6 +209,7 @@
     "punchPhoto": "पंच सेल्फी",
     "reasonNoBeacon": "बीकन नहीं मिला — केवल GPS",
     "reasonNoBeaconNoGps": "न बीकन, न GPS",
+    "reasonNoPunchOut": "शिफ्ट के बाद पंच-आउट नहीं",
     "shareTimings": "स्पीड रिपोर्ट भेजें",
     "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!",
     "myMonth": "मेरा महीना",

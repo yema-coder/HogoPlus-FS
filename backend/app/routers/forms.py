@@ -117,6 +117,15 @@ async def submit_form(
     definition = await session.get(FormDefinition, definition_id)
     if definition is None or not definition.is_active:
         raise HTTPException(status_code=404, detail="Form not found")
+    # offline outbox idempotency: same client_uuid replayed → same submission back
+    if body.client_uuid:
+        existing = (
+            await session.execute(
+                select(FormSubmission).where(FormSubmission.client_uuid == body.client_uuid)
+            )
+        ).scalar_one_or_none()
+        if existing:
+            return _sub_out(existing, definition.code)
     # only CGM/MD (rank <= 2) may submit on behalf of another department
     if employee.role.rank > 2 and definition.department_code != employee.department_code:
         raise HTTPException(status_code=403, detail="You can only submit forms of your own department")
@@ -136,6 +145,7 @@ async def submit_form(
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
         address_text=body.address_text,
+        client_uuid=body.client_uuid,
         status="submitted" if definition.requires_approval else "approved",
     )
     session.add(submission)

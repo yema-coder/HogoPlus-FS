@@ -466,3 +466,14 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   testing agent iteration_23 all pass incl. fake-camera capture flow.
 - Harness note: page.type(delay=100) on otp-input worked this time; JWT-injection fallback still valid.
 - frontend/.env EXPO_PUBLIC_API_URL → preview URL (restore api.hogoplus.in before builds).
+
+## v1.0.22 — nudge + swap FOR UPDATE + outbox idempotency (2026-07-30 fork)
+- Sweep two-stage (remind 15min / flag 2h no_punch_out, never auto-punch), covers overnight
+  B rows dated yesterday; flagged queue/regularize/approve/reject accept no_punch_out; punch-out
+  self-clears. client_uuid dedup on incidents+forms (migration 0016). with_for_update on swap
+  respond/decide/cancel — real concurrency tests prove single apply.
+- pytest 284 passed. testing_agent: backend 5/5 + frontend 3/3 PASS, 0 bugs. Whitelist gotcha:
+  use demo TO D113 (+919000000113) with demo worker D001 — real TO phone not in sandbox whitelist.
+- BACKUP_UPLOAD_ENABLED=0 in sandbox backend/.env is a DELIBERATE DR guard (sandbox dumps were
+  overwriting prod R2 backup keys) — never remove it; prod defaults ON.
+- frontend/.env restored to api.hogoplus.in; app.json 1.0.22/10022.

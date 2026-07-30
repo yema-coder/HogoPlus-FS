@@ -632,15 +632,17 @@ export default function ApprovalsScreen() {
     const isFaceMismatch = rec.flagged_reason === "face_mismatch";
     const reasonText = isFaceMismatch
       ? t("att.reasonFace")
-      : rec.flagged_reason === "no_beacon_gps_only"
-        ? t("att.reasonNoBeacon")
-        : rec.flagged_reason === "no_beacon_no_gps"
-          ? t("att.reasonNoBeaconNoGps")
-          : rec.flagged_reason?.includes("gps_missing")
-            ? t("att.reasonGps")
-            : rec.flagged_reason?.includes("outside_geofence")
-              ? t("att.reasonGeofence")
-              : (rec.flagged_reason ?? "");
+      : rec.flagged_reason === "no_punch_out"
+        ? t("att.reasonNoPunchOut")
+        : rec.flagged_reason === "no_beacon_gps_only"
+          ? t("att.reasonNoBeacon")
+          : rec.flagged_reason === "no_beacon_no_gps"
+            ? t("att.reasonNoBeaconNoGps")
+            : rec.flagged_reason?.includes("gps_missing")
+              ? t("att.reasonGps")
+              : rec.flagged_reason?.includes("outside_geofence")
+                ? t("att.reasonGeofence")
+                : (rec.flagged_reason ?? "");
     return (
       <View style={styles.regCard} testID={`approval-att-${rec.id}`}>
         <View style={styles.regTop}>

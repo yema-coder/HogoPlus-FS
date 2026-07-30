@@ -203,6 +203,8 @@ class FormSubmission(TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("form_definitions.id"), nullable=False
     )
     form_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # offline outbox idempotency: same client_uuid replayed → same row back
+    client_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     submitted_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False
     )
@@ -241,6 +243,8 @@ class Incident(TimestampMixin, Base):
     category: Mapped[str] = mapped_column(INCIDENT_CATEGORY, nullable=False)
     photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     video_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # offline outbox idempotency: same client_uuid replayed → same row back
+    client_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     address_text: Mapped[str | None] = mapped_column(String(300), nullable=True)

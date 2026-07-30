@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -333,6 +333,10 @@ async def punch_out(
     if record is None:
         raise HTTPException(status_code=404, detail="No open punch-in found")
     record.punch_out_at = datetime.now(timezone.utc)
+    # nudge lifecycle: a late punch-out self-resolves the "no punch-out" flag
+    # (only while Time Office hasn't touched it)
+    if record.flagged_reason == "no_punch_out" and record.approved_by is None:
+        record.flagged_reason = None
     await session.commit()
     await session.refresh(record)
     return _out(record)
@@ -471,7 +475,7 @@ async def request_regularization(
     record = await session.get(Attendance, attendance_id)
     if record is None or record.employee_id != employee.id:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if record.verification_level != "flagged":
+    if record.verification_level != "flagged" and record.flagged_reason != "no_punch_out":
         raise HTTPException(status_code=409, detail="Only flagged punches can be disputed")
     if record.approved_by is not None:
         raise HTTPException(status_code=409, detail="This punch is already resolved")
@@ -690,7 +694,12 @@ async def flagged_attendance(
         )
         .join(Employee, Attendance.employee_id == Employee.id)
         .where(
-            Attendance.verification_level == "flagged",
+            # verification-flagged punches OR missing punch-outs (nudge escalation) —
+            # both land in the same Time Office queue
+            or_(
+                Attendance.verification_level == "flagged",
+                Attendance.flagged_reason == "no_punch_out",
+            ),
             Attendance.approved_by.is_(None),
             Attendance.is_demo == employee.is_demo,
         )
@@ -748,7 +757,7 @@ async def approve_flagged(
     record = await session.get(Attendance, attendance_id)
     if record is None or record.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if record.verification_level != "flagged":
+    if record.verification_level != "flagged" and record.flagged_reason != "no_punch_out":
         raise HTTPException(status_code=409, detail="Only flagged records need approval")
     record.approved_by = employee.id
     await write_audit(session, employee.id, "attendance.approved", "attendance", str(record.id), {})
@@ -772,7 +781,9 @@ async def reject_flagged(
     record = await session.get(Attendance, attendance_id)
     if record is None or record.is_demo != employee.is_demo:
         raise HTTPException(status_code=404, detail="Attendance record not found")
-    if record.verification_level != "flagged" or record.approved_by is not None:
+    if (
+        record.verification_level != "flagged" and record.flagged_reason != "no_punch_out"
+    ) or record.approved_by is not None:
         raise HTTPException(status_code=409, detail="Only pending flagged records can be rejected")
     record.approved_by = employee.id
     record.face_verified = False

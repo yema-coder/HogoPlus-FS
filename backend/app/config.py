@@ -33,6 +33,7 @@ _EMPTY_USES_DEFAULT = {
     "backup_keep_last": 14,
     "voice_describe_daily_cap": 20,
     "tts_daily_cap": 30,
+    "punchout_flag_after_hours": 2,
 }
 
 
@@ -110,6 +111,9 @@ class Settings(BaseSettings):
     # v1.0.21 voice features — per-user daily cost caps (cached TTS hits are free)
     voice_describe_daily_cap: int = 20
     tts_daily_cap: int = 30
+    # shift-end nudge escalation: still no punch-out N hours after shift end →
+    # flag the day for Time Office review (NEVER auto-writes a punch-out time)
+    punchout_flag_after_hours: int = 2
     backup_keep_last: int = 14
     # SECURITY (Bug 1): the fixed demo OTP is accepted ONLY when this is explicitly
     # read as true from the environment — default is OFF.
