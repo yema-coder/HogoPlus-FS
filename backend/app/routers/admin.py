@@ -74,6 +74,9 @@ async def get_settings(
         "home_config_enabled": s.home_config_enabled,
         "vehicle_log_enabled": s.vehicle_log_enabled,
         "notif_batching_enabled": s.notif_batching_enabled,
+        "dup_window_minutes": s.dup_window_minutes,
+        "dup_same_zone": s.dup_same_zone,
+        "dup_same_category": s.dup_same_category,
     }
 
 
@@ -90,6 +93,7 @@ async def patch_settings(
     for field in (
         "factory_lat", "factory_lng", "radius_meters", "beacon_first_mode",
         "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
+        "dup_window_minutes", "dup_same_zone", "dup_same_category",
     ):
         val = getattr(body, field)
         if val is not None:
@@ -103,6 +107,9 @@ async def patch_settings(
         "home_config_enabled": s.home_config_enabled,
         "vehicle_log_enabled": s.vehicle_log_enabled,
         "notif_batching_enabled": s.notif_batching_enabled,
+        "dup_window_minutes": s.dup_window_minutes,
+        "dup_same_zone": s.dup_same_zone,
+        "dup_same_category": s.dup_same_category,
     }
 
 

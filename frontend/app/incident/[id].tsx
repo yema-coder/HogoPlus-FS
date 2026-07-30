@@ -1,5 +1,5 @@
 import * as Clipboard from "expo-clipboard";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, fileUrl, uploadFile } from "@/src/api/client";
-import { changeIncidentStatus, incidentDetail } from "@/src/api/endpoints";
+import { changeIncidentStatus, incidentDetail, unlinkDuplicate } from "@/src/api/endpoints";
 import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
 import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
@@ -41,6 +41,7 @@ export default function IncidentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
+  const router = useRouter();
   const adjustApprovals = useApprovalsStore((s) => s.adjust);
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
@@ -279,6 +280,48 @@ export default function IncidentDetailScreen() {
               {t("incident.capturedAt")}: {formatDateTime(detail.created_at)}
             </Text>
           </View>
+
+          {detail.duplicate_of ? (
+            // v1.0.21: display-only duplicate grouping — this report is intact,
+            // it is just grouped with an earlier one on manager cards
+            <View style={styles.dupBanner} testID="duplicate-banner">
+              <Text style={styles.dupBannerText}>🔁 {t("dup.grouped")}</Text>
+              <View style={{ flexDirection: "row", gap: spacing.md }}>
+                <Pressable
+                  testID="duplicate-view-original"
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({ pathname: "/incident/[id]", params: { id: detail.duplicate_of as string } })
+                  }
+                  style={({ pressed }) => [styles.dupAction, { opacity: pressed ? 0.8 : 1 }]}
+                >
+                  <Text style={styles.dupActionText}>{t("dup.viewOriginal")}</Text>
+                </Pressable>
+                {rank <= 3 ? (
+                  <Pressable
+                    testID="duplicate-unlink-button"
+                    accessibilityRole="button"
+                    onPress={() => {
+                      void unlinkDuplicate(detail.id)
+                        .then(() => {
+                          showToast(t("dup.unlinked"), "success");
+                          void load();
+                        })
+                        .catch(() => showToast(t("errors.server"), "error"));
+                    }}
+                    style={({ pressed }) => [
+                      styles.dupAction,
+                      { borderColor: colors.danger, opacity: pressed ? 0.8 : 1 },
+                    ]}
+                  >
+                    <Text style={[styles.dupActionText, { color: colors.danger }]}>
+                      {t("dup.unlink")}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
 
           {detail.severity_reason || detail.severity_reason_mr ? (
             <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
@@ -546,6 +589,23 @@ const styles = StyleSheet.create({
   plateMeta: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   plateMissTitle: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
   capturedRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  dupBanner: {
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  dupBannerText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.primary },
+  dupAction: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: 40,
+    justifyContent: "center",
+  },
+  dupActionText: { fontFamily: fonts.bold, fontSize: 13, color: colors.primary },
   capturedText: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   resolutionPhoto: {
     width: "100%",

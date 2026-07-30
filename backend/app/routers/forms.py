@@ -82,6 +82,30 @@ async def list_forms(
     return [_def_out(d) for d in defs]
 
 
+@router.get("/forms/{definition_id}/last-mine")
+async def last_form_submission_mine(
+    definition_id: uuid.UUID,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Same-as-last (v1.0.21): my latest submission's values for prefill. The
+    client copies ONLY simple field types — never photos/voice/gps evidence."""
+    row = (
+        await session.execute(
+            select(FormSubmission)
+            .where(
+                FormSubmission.form_definition_id == definition_id,
+                FormSubmission.submitted_by == employee.id,
+            )
+            .order_by(FormSubmission.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return {"data_json": None, "created_at": None}
+    return {"data_json": row.data_json, "created_at": row.created_at.isoformat()}
+
+
 @router.post("/forms/{definition_id}/submit")
 async def submit_form(
     definition_id: uuid.UUID,

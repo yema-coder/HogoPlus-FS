@@ -210,7 +210,18 @@
     "reasonNoBeacon": "Beacon not detected — GPS only",
     "reasonNoBeaconNoGps": "No beacon & no GPS",
     "shareTimings": "Share speed report",
-    "timingsShared": "Report sent — thank you!"
+    "timingsShared": "Report sent — thank you!",
+    "myMonth": "My Month",
+    "daysPresent": "Days present",
+    "lateDays": "Late days",
+    "prevMonth": "Last month: {{n}} days present",
+    "thisIsWrong": "This is wrong",
+    "disputeTitle": "Report attendance problem",
+    "disputeHint": "Tell us what happened (optional)",
+    "disputeSent": "Sent to Time Office",
+    "reg_open": "Under review",
+    "reg_approved": "Corrected ✓",
+    "reg_rejected": "Not accepted"
   },
   "notif": {
     "title": "Alerts",
@@ -262,7 +273,10 @@
     "noLocation": "No location captured",
     "faceOk": "Face detected",
     "faceUnknown": "Face not checked",
-    "possibleDuplicate": "Possible duplicate"
+    "possibleDuplicate": "Possible duplicate",
+    "dispute": "Attendance dispute",
+    "workerSays": "Worker says",
+    "voiceNote": "Voice note"
   },
   "errors": {
     "network": "No internet. Check your connection.",
@@ -324,7 +338,9 @@
     "micDenied": "Microphone permission needed. Allow it in Settings.",
     "dateHint": "DD/MM/YYYY HH:mm",
     "invalidDate": "Enter a valid date",
-    "viewDept": "View department"
+    "viewDept": "View department",
+    "sameAsLast": "Fill like last time",
+    "copiedChip": "copied"
   },
   "swap": {
     "title": "Swap shift",
@@ -576,6 +592,16 @@
       "contractor": "Contractor",
       "official": "Official",
       "other": "Other"
-    }
+    },
+    "sameAsLast": "Same as last entry",
+    "copiedNote": "Copied — check and submit",
+    "confirmPlate": "Same vehicle? {{plate}}"
+  },
+  "dup": {
+    "reports": "{{count}} reports",
+    "grouped": "Grouped with an earlier report of the same issue",
+    "unlink": "Not same — unlink",
+    "unlinked": "Unlinked",
+    "viewOriginal": "View first report"
   }
 }

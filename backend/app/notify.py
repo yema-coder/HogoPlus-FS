@@ -230,6 +230,20 @@ T = {
             "mr": "🚚 वाहन १२ तासांहून जास्त आत आहे",
         },
     },
+    "regularization_requested": {
+        "title": {
+            "en": "Attendance dispute raised",
+            "hi": "उपस्थिति पर आपत्ति दर्ज हुई",
+            "mr": "हजेरीवर आक्षेप नोंदवला",
+        },
+    },
+    "regularization_decided": {
+        "title": {
+            "en": "Your attendance request was reviewed",
+            "hi": "आपके उपस्थिति अनुरोध की समीक्षा हुई",
+            "mr": "तुमच्या हजेरी विनंतीचे पुनरावलोकन झाले",
+        },
+    },
 }
 
 

@@ -104,6 +104,10 @@ export type IncidentStatus = "submitted" | "seen" | "in_progress" | "resolved" |
 export interface Incident {
   id: string;
   reported_by: string;
+  /** present on list endpoints (v1.0.21) — for "2 reports: …" duplicate cards */
+  reporter_name?: string;
+  /** v1.0.21 duplicate clustering: id of the cluster-root incident (display-only) */
+  duplicate_of?: string | null;
   department_code: string;
   category: IncidentCategory;
   photo_key: string | null;
@@ -171,6 +175,8 @@ export interface AttendanceRecord {
   face_match_score: number | null;
   face_verified: boolean | null;
   approved_by: string | null;
+  /** v1.0.21: latest "this is wrong" dispute on this punch (worker view) */
+  regularization?: { id: string; status: "open" | "approved" | "rejected" } | null;
 }
 
 export interface ShiftDay {

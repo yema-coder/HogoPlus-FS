@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
+import { useAudioPlayer } from "expo-audio";
 import { useFocusEffect, useRouter } from "expo-router";
-import { ClipboardCheck } from "lucide-react-native";
+import { ClipboardCheck, Play, Square } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
@@ -22,14 +23,17 @@ import {
   approveAttendance,
   rejectAttendance,
   approveEmployee,
+  decideRegularization,
   decideSwap,
   flaggedAttendance,
   listDepartments,
   listIncidents,
+  listRegularizations,
   listSubmissions,
   pendingEmployees,
   pendingSwaps,
   rejectEmployee,
+  type RegularizationItem,
 } from "@/src/api/endpoints";
 import type {
   DepartmentItem,
@@ -87,6 +91,23 @@ export default function ApprovalsScreen() {
   const [rejectTarget, setRejectTarget] = useState<{ kind: "reg" | "swap"; id: string } | null>(null);
   const [reason, setReason] = useState("");
   const [acting, setActing] = useState(false);
+  // v1.0.21 attendance disputes (regularization requests) — TO queue
+  const [disputes, setDisputes] = useState<RegularizationItem[]>([]);
+  const voicePlayer = useAudioPlayer();
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+
+  const toggleDisputeVoice = (d: RegularizationItem) => {
+    if (!d.voice_note_url) return;
+    if (playingVoiceId === d.id) {
+      voicePlayer.pause();
+      setPlayingVoiceId(null);
+      return;
+    }
+    voicePlayer.replace({ uri: resolveUri(d.voice_note_url) });
+    voicePlayer.seekTo(0);
+    voicePlayer.play();
+    setPlayingVoiceId(d.id);
+  };
   const [approveTarget, setApproveTarget] = useState<EmployeeProfile | null>(null);
   const [apDept, setApDept] = useState<string | null>(null);
   const [apRole, setApRole] = useState("Worker");
@@ -122,7 +143,7 @@ export default function ApprovalsScreen() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    const [sub, esc, reg, swp, incSub, incEsc, att] = await Promise.allSettled([
+    const [sub, esc, reg, swp, incSub, incEsc, att, disp] = await Promise.allSettled([
       listSubmissions({ status: "submitted" }),
       listSubmissions({ status: "escalated" }),
       pendingEmployees(),
@@ -130,6 +151,7 @@ export default function ApprovalsScreen() {
       listIncidents({ status: "submitted" }),
       listIncidents({ status: "escalated" }),
       showAttendance ? flaggedAttendance(attDate) : Promise.resolve([]),
+      showAttendance ? listRegularizations("open") : Promise.resolve([]),
     ]);
     setSubs([
       ...(sub.status === "fulfilled" ? sub.value.items : []),
@@ -146,6 +168,7 @@ export default function ApprovalsScreen() {
     incItems.sort((a, b) => (sevRank[a.severity] ?? 2) - (sevRank[b.severity] ?? 2));
     setIncidents(incItems);
     setFlagged(att.status === "fulfilled" ? (att.value as FlaggedAttendance[]) : []);
+    setDisputes(disp.status === "fulfilled" ? (disp.value as RegularizationItem[]) : []);
     setLoading(false);
     void refreshCounts(showAttendance);
     void storage.setItem(
@@ -245,6 +268,25 @@ export default function ApprovalsScreen() {
       () => (approve ? approveAttendance(rec.id) : rejectAttendance(rec.id)),
     );
 
+  const actDispute = async (d: RegularizationItem, approve: boolean) => {
+    if (acting) return;
+    setActing(true);
+    try {
+      await decideRegularization(d.id, approve ? "approve" : "reject");
+      setDisputes((prev) => prev.filter((x) => x.id !== d.id));
+      // a decided dispute also resolves the underlying flagged punch
+      setFlagged((prev) => prev.filter((f) => f.id !== d.attendance.id));
+      showToast(t("approvals.actionDone"), "success");
+    } catch (e) {
+      showToast(
+        e instanceof ApiError && e.status === 0 ? t("errors.network") : t("errors.server"),
+        "error",
+      );
+    } finally {
+      setActing(false);
+    }
+  };
+
   const confirmReject = async () => {
     if (!rejectTarget || reason.trim().length === 0) return;
     const target = rejectTarget;
@@ -287,7 +329,7 @@ export default function ApprovalsScreen() {
           ? byDept(swaps)
           : segment === "incidents"
             ? byDept(incidents)
-            : byDept(flagged);
+            : [...disputes, ...byDept(flagged)];
 
   const renderItem = ({ item }: { item: unknown }) => {
     if (segment === "forms") {
@@ -508,6 +550,82 @@ export default function ApprovalsScreen() {
             ) : null}
           </View>
         </Pressable>
+      );
+    }
+    // v1.0.21: attendance dispute card — worker's request + original evidence
+    if (segment === "attendance" && (item as RegularizationItem).attendance !== undefined) {
+      const d = item as RegularizationItem;
+      const a = d.attendance;
+      return (
+        <View style={[styles.regCard, styles.disputeCard]} testID={`dispute-card-${d.id}`}>
+          <View style={styles.disputeBadge}>
+            <Text style={styles.disputeBadgeText}>✋ {t("approvals.dispute")}</Text>
+          </View>
+          <View style={styles.regTop}>
+            {a.selfie_url ? (
+              <Pressable
+                onPress={() => setViewImg(resolveUri(a.selfie_url as string))}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={t("media.viewFull")}
+              >
+                <Image source={{ uri: resolveUri(a.selfie_url) }} style={styles.attSelfie} />
+              </Pressable>
+            ) : null}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {d.employee_name} · {d.emp_id}
+              </Text>
+              <Text style={styles.cardMeta}>
+                {deptName(d.department_code ?? "")} · {dayjs(a.date).format("DD/MM")} ·{" "}
+                {formatTime(a.punch_in_at)}
+                {a.ble_zone ? ` · ${a.ble_zone}` : ""}
+              </Text>
+              <View style={styles.reasonChip}>
+                <Text style={styles.reasonChipText}>{a.flagged_reason ?? ""}</Text>
+              </View>
+            </View>
+          </View>
+          {d.text_note ? (
+            <Text style={styles.disputeNote}>
+              💬 {t("approvals.workerSays")}: {d.text_note}
+            </Text>
+          ) : null}
+          {d.voice_note_url ? (
+            <Pressable
+              testID={`dispute-voice-${d.id}`}
+              accessibilityRole="button"
+              onPress={() => toggleDisputeVoice(d)}
+              style={({ pressed }) => [styles.voiceBtn, { opacity: pressed ? 0.8 : 1 }]}
+            >
+              {playingVoiceId === d.id ? (
+                <Square size={16} color={colors.primary} strokeWidth={2.4} fill={colors.primary} />
+              ) : (
+                <Play size={16} color={colors.primary} strokeWidth={2.4} />
+              )}
+              <Text style={styles.voiceBtnText}>{t("approvals.voiceNote")}</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <BigButton
+                testID={`dispute-reject-${d.id}`}
+                label={t("approvals.reject")}
+                variant="danger"
+                disabled={acting}
+                onPress={() => void actDispute(d, false)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <BigButton
+                testID={`dispute-approve-${d.id}`}
+                label={t("approvals.approve")}
+                variant="success"
+                disabled={acting}
+                onPress={() => void actDispute(d, true)}
+              />
+            </View>
+          </View>
+        </View>
       );
     }
     const rec = item as FlaggedAttendance;
@@ -945,6 +1063,28 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: colors.surfaceTertiary,
   },
+  disputeCard: { borderColor: colors.warning, borderWidth: 1.5 },
+  disputeBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: `${colors.warning}22`,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  disputeBadgeText: { fontFamily: fonts.bold, fontSize: 12, color: colors.warning },
+  disputeNote: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
+  voiceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    minHeight: 40,
+  },
+  voiceBtnText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.primary },
   faceRow: { flexDirection: "row", gap: spacing.md, marginBottom: spacing.sm },
   faceCol: { flex: 1, alignItems: "center", gap: 4 },
   faceImg: {

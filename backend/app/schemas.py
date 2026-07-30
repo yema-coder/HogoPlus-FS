@@ -237,6 +237,19 @@ class SettingsPatchIn(BaseModel):
     home_config_enabled: bool | None = None
     vehicle_log_enabled: bool | None = None
     notif_batching_enabled: bool | None = None
+    dup_window_minutes: int | None = Field(default=None, ge=1, le=1440)
+    dup_same_zone: bool | None = None
+    dup_same_category: bool | None = None
+
+
+class RegularizeIn(BaseModel):
+    text_note: str | None = Field(default=None, max_length=500)
+    voice_note_key: str | None = Field(default=None, max_length=500)
+
+
+class RegularizeDecideIn(BaseModel):
+    action: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=500)
 
 
 class EmployeePatchIn(BaseModel):

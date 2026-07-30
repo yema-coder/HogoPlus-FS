@@ -1,0 +1,31 @@
+{
+  "summary": "v1.0.21 P1 batch verified end-to-end on preview URL. ALL 4 features PASSED. (1) MY MONTH: my-month-card renders on /attendance/history for Production worker (+919000000009) with current=3 present / 1 flagged / 0 late and 'Last month: 0 days present' line, sourced from GET /api/attendance/month-summary — same source as TO flagged queue. (2) REGULARIZATION lifecycle end-to-end: flagged row on 2026-07-18 → dispute submitted (via API in this run because the row was already open) → TO manager (+919000000113) Approvals → Attendance segment showed dispute-card-<id> with employee name, department, timestamp, flagged_reason chip, worker note, and original selfie evidence; dispute-approve-<id> clicked → card disappeared → worker re-check: reg-status-2026-07-18 changed from 'Under review' to 'Corrected ✓' AND /api/notifications/mine contains type=regularization_decided. Regression: verified rows (17th, 16th) show NO dispute button — confirmed. (3) SAME-AS-LAST: department form (hourly_process_log) shows same-as-last-pill after first submission → tap fills station+brix_value+remarks with 3 copied-<key> chips → editing remarks (input-remarks) clears copied-remarks chip immediately. Vehicle: security worker (+919000000011) had a prior log; /vehicle/new shows vehicle-same-as-last pill; tap → vehicle-copied-note appears, truck-type + direction/purpose fill, plate STAYS EMPTY; separate vehicle-confirm-last-plate chip → tap fills the previous plate (MH45TA3001) as designed. (4) DUPLICATE CLUSTERING (display): manager GET /api/incidents returns reporter_name and duplicate_of fields (verified live); Reports dept view for Production manager renders without crash (dup-badge count 0 since no live-classified duplicates exist yet — expected). BACKEND SANITY (live): GET /attendance/month-summary 200 (own), 403 (other worker), employee=<id> as expected; second POST /attendance/{id}/regularize on the SAME open dispute → 409 with detail.code='reg_already_open' (trilingual detail returned). Second regularize also returned trilingual en/hi/mr messages. Backend 276 pytest suite already green (not retested per request). Deprecated packages: NONE detected in P1 code. SafeAreaView issues: NONE.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/live_p1_ui_sanity.py",
+    "/app/backend/tests/test_p1_batch.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "/app/frontend/app/attendance/history.tsx:117-145 — clean state machine: if item.regularization exists render reg-status chip (open/approved/rejected localized labels), ELSE-IF flagged & !approved_by render dispute-button; verified row → neither element. Matches spec exactly (no dispute button on clean rows).",
+    "/app/frontend/app/(tabs)/approvals.tsx:556-629 — dispute-card renders selfie evidence (pressable → full-screen viewer), worker note, voice_note_url play button, reject+approve buttons with disabled=acting guard. Employee name+emp_id+dept+date+time+ble_zone+flagged_reason all shown. Good.",
+    "/app/frontend/src/forms/FormRenderer.tsx:114-119 + 126-140 — setValue clears copied[key] on ANY change; applySameAsLast copies only SIMPLE types (text/number/select/toggle/datetime/date/time) skipping anpr, photos, GPS. Pill disappears after apply (setLastVals(null)) — matches spec.",
+    "/app/frontend/app/vehicle/new.tsx:171,182,243 — TWO separate testIDs (same-as-last pill + confirm-last-plate chip); plate is NOT copied by the pill and only fills when the confirm chip is explicitly tapped. Verified live: pill sets type/direction/purpose+note but plate stays empty; confirm-chip fills plate MH45TA3001. Excellent split.",
+    "/app/frontend/app/(tabs)/reports.tsx:117-137 — dup-badge/dup-child/dup-unlink testIDs are wired against grouped incidents.duplicate_of; renders empty state without crash when there are no live-classified duplicates."
+  ],
+  "updated_files": [
+    "/app/backend/tests/live_p1_ui_sanity.py (new — 5 live API sanity tests for month-summary role boundaries, /attendance/mine shape, incidents dedup fields, 409 duplicate-regularize)"
+  ],
+  "success_rate": {"backend": "100% (5/5 live sanity + 276 pre-existing pytest)", "frontend": "100% (all 4 P1 UI flows + regression)"},
+  "seed_data_creation": "One regularization created via API for D009's flagged punch on 2026-07-18 (id=6aa6846a-e9be-47d5-91f0-39a140b93b17) then APPROVED by TO manager +919000000113 in-UI — this is demo bubble data (is_demo=true, nightly reseed). Also submitted one hourly_process_log form as D009 to exercise the same-as-last pill (also demo).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Same JWT-injection harness as iter23 works: single-stringify access+refresh, single-stringify profile (NOT double — the storage layer JSON.stringifies again automatically). Login via in-page fetch (server-side urllib gets 403 UA-blocked). vehicle-same-as-last / vehicle-confirm-last-plate are TWO separate testIDs — do not try to auto-fill plate via the pill.",
+  "rca_of_issue": "No bugs to RCA — v1.0.21 P1 batch (my-month, regularization, same-as-last vehicle+form, duplicate clustering DISPLAY + tuning + unlink) is production-ready. All wiring end-to-end verified against the live preview backend."
+}

@@ -12,6 +12,7 @@ Restores into the target database (default: the one in DATABASE_URL), then re-ru
 """
 import argparse
 import gzip
+import os
 import subprocess
 import sys
 import tempfile
@@ -100,9 +101,13 @@ def main() -> None:
     data_only = "CREATE TABLE" not in text_dump
     if data_only:
         print("  data-only dump detected — running alembic upgrade head first")
+        # alembic must build the schema in the TARGET db (drills use --target,
+        # which differs from the DATABASE_URL db)
+        target_url = f"postgresql+asyncpg://{user}:{pw}@{host}:{port}/{dbname}"
         subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=str(Path(__file__).resolve().parent.parent), check=True,
+            env={**os.environ, "DATABASE_URL": target_url},
         )
     filtered = "\n".join(
         line for line in text_dump.splitlines()

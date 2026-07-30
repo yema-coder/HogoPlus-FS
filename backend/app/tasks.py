@@ -484,6 +484,71 @@ async def _classify_incident_async(incident_id: str) -> dict:
                                  "reason": reason, "reason_mr": reason_mr},
                 )
             )
+
+            # ---- v1.0.21 duplicate clustering (DISPLAY-ONLY, rules-based) ----
+            # Same zone + same category within a tunable window → group cards.
+            # Both records stay intact; managers can unlink in one tap.
+            if inc.duplicate_of is None:
+                try:
+                    from sqlalchemy import String as SAString
+                    from sqlalchemy import func as sa_func
+
+                    from app.models import FactorySettings
+
+                    s = (
+                        await session.execute(select(FactorySettings).limit(1))
+                    ).scalar_one_or_none()
+                    window_min = s.dup_window_minutes if s else 30
+                    same_zone = s.dup_same_zone if s else True
+                    same_cat = s.dup_same_category if s else True
+                    zone_ok = not same_zone or bool(inc.ble_zone)
+                    if zone_ok:
+                        cand_q = (
+                            select(Incident)
+                            .where(
+                                Incident.id != inc.id,
+                                Incident.is_demo == inc.is_demo,
+                                Incident.duplicate_of.is_(None),  # roots only — no chains
+                                Incident.status != "resolved",
+                                Incident.created_at >= inc.created_at - timedelta(minutes=window_min),
+                                Incident.created_at <= inc.created_at,
+                            )
+                            .order_by(Incident.created_at.asc())
+                            .limit(1)
+                        )
+                        if same_zone:
+                            cand_q = cand_q.where(Incident.ble_zone == inc.ble_zone)
+                        if same_cat:
+                            # category is a PG enum, ai_suggested_category a varchar
+                            cand_q = cand_q.where(
+                                sa_func.coalesce(
+                                    Incident.ai_suggested_category,
+                                    Incident.category.cast(SAString()),
+                                )
+                                == category
+                            )
+                        root = (await session.execute(cand_q)).scalar_one_or_none()
+                        if root is not None:
+                            inc.duplicate_of = root.id
+                            session.add(
+                                IncidentTimeline(
+                                    incident_id=inc.id, actor_id=None, event="duplicate_linked",
+                                    detail_json={
+                                        "root_id": str(root.id),
+                                        "rule": {
+                                            "window_minutes": window_min,
+                                            "same_zone": same_zone,
+                                            "same_category": same_cat,
+                                            "zone": inc.ble_zone,
+                                            "category": category,
+                                        },
+                                    },
+                                )
+                            )
+                            logger.info("Incident %s clustered under %s", inc.id, root.id)
+                except Exception as e:
+                    logger.warning("Duplicate clustering skipped for %s: %s", incident_id, e)
+
             await session.commit()
 
             r = _fresh_redis()

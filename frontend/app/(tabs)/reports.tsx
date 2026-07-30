@@ -1,11 +1,11 @@
 import { useFocusEffect, useRouter } from "expo-router";
-import { ClipboardList, CloudOff } from "lucide-react-native";
-import React, { useCallback, useState } from "react";
+import { ClipboardList, CloudOff, Unlink } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { listIncidents, myIncidents } from "@/src/api/endpoints";
+import { listIncidents, myIncidents, unlinkDuplicate } from "@/src/api/endpoints";
 import type { Incident } from "@/src/api/types";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
@@ -13,15 +13,17 @@ import { EyeLoader } from "@/src/components/EyeLoader";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SkeletonRows } from "@/src/components/Skeleton";
 import { StatusChip } from "@/src/components/StatusChip";
+import { showToast } from "@/src/components/Toast";
 import { UpdatedNote } from "@/src/components/UpdatedNote";
 import { categoryDef } from "@/src/constants/categories";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { formatDateTime, timeAgo } from "@/src/utils/format";
+import { formatDateTime, formatTime, timeAgo } from "@/src/utils/format";
 
 type Scope = "mine" | "dept";
+type GroupedIncident = Incident & { children: Incident[] };
 
 export default function ReportsScreen() {
   const router = useRouter();
@@ -37,6 +39,47 @@ export default function ReportsScreen() {
 
   const outboxIncidents = useOutboxStore((s) => s.items).filter((i) => i.type === "incident");
   const uploadingId = useOutboxStore((s) => s.uploadingId);
+  const [unlinking, setUnlinking] = useState(false);
+
+  // v1.0.21 duplicate clustering: in the DEPT view, incidents linked to a root
+  // collapse under the root's card ("2 reports: 10:14, 10:31"). DISPLAY-ONLY —
+  // each record keeps its own reporter, status and detail screen.
+  const grouped: GroupedIncident[] = useMemo(() => {
+    const items = data ?? [];
+    if (scope !== "dept") return items.map((i) => ({ ...i, children: [] }));
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const childrenOf = new Map<string, Incident[]>();
+    const roots: Incident[] = [];
+    for (const i of items) {
+      if (i.duplicate_of && byId.has(i.duplicate_of)) {
+        const arr = childrenOf.get(i.duplicate_of) ?? [];
+        arr.push(i);
+        childrenOf.set(i.duplicate_of, arr);
+      } else {
+        roots.push(i); // root, or orphan child whose root isn't in this page
+      }
+    }
+    return roots.map((r) => ({
+      ...r,
+      children: (childrenOf.get(r.id) ?? []).sort((a, b) =>
+        (a.created_at ?? "").localeCompare(b.created_at ?? ""),
+      ),
+    }));
+  }, [data, scope]);
+
+  const doUnlink = async (child: Incident) => {
+    if (unlinking) return;
+    setUnlinking(true);
+    try {
+      await unlinkDuplicate(child.id);
+      showToast(t("dup.unlinked"), "success");
+      void refresh();
+    } catch {
+      showToast(t("errors.server"), "error");
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -44,29 +87,65 @@ export default function ReportsScreen() {
     }, [refresh]),
   );
 
-  const renderRow = ({ item }: { item: Incident }) => {
+  const renderRow = ({ item }: { item: GroupedIncident }) => {
     const def = categoryDef(item.category);
     const Icon = def.icon;
+    const all = [item, ...item.children];
     return (
-      <Pressable
-        testID={`incident-row-${item.id}`}
-        accessibilityRole="button"
-        onPress={() => router.push({ pathname: "/incident/[id]", params: { id: item.id } })}
-        style={({ pressed }) => [styles.row, { opacity: pressed ? 0.85 : 1 }]}
-      >
-        <View style={[styles.iconWrap, { backgroundColor: `${def.tint}18` }]}>
-          <Icon size={26} color={def.tint} strokeWidth={2.2} />
-        </View>
-        <View style={styles.rowBody}>
-          <Text style={styles.rowTitle} numberOfLines={1}>
-            {t(def.tKey)}
-          </Text>
-          <Text style={styles.rowSub} numberOfLines={1}>
-            {timeAgo(item.created_at)}
-          </Text>
-        </View>
-        <StatusChip status={item.status} />
-      </Pressable>
+      <View>
+        <Pressable
+          testID={`incident-row-${item.id}`}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: "/incident/[id]", params: { id: item.id } })}
+          style={({ pressed }) => [
+            styles.row,
+            item.children.length > 0 && styles.rowClustered,
+            { opacity: pressed ? 0.85 : 1 },
+          ]}
+        >
+          <View style={[styles.iconWrap, { backgroundColor: `${def.tint}18` }]}>
+            <Icon size={26} color={def.tint} strokeWidth={2.2} />
+          </View>
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {t(def.tKey)}
+            </Text>
+            <Text style={styles.rowSub} numberOfLines={1}>
+              {timeAgo(item.created_at)}
+            </Text>
+            {item.children.length > 0 ? (
+              <Text style={styles.dupBadge} testID={`dup-badge-${item.id}`}>
+                🔁 {t("dup.reports", { count: all.length })}:{" "}
+                {all.map((i) => formatTime(i.created_at)).join(", ")}
+              </Text>
+            ) : null}
+          </View>
+          <StatusChip status={item.status} />
+        </Pressable>
+        {item.children.map((c) => (
+          <View key={c.id} style={styles.childRow} testID={`dup-child-${c.id}`}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: "/incident/[id]", params: { id: c.id } })}
+              style={({ pressed }) => [styles.childBody, { opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={styles.childText} numberOfLines={1}>
+                {c.reporter_name ?? ""} · {formatTime(c.created_at)}
+              </Text>
+            </Pressable>
+            <Pressable
+              testID={`dup-unlink-${c.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={t("dup.unlink")}
+              onPress={() => void doUnlink(c)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.unlinkBtn, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Unlink size={16} color={colors.danger} strokeWidth={2.4} />
+            </Pressable>
+          </View>
+        ))}
+      </View>
     );
   };
 
@@ -95,7 +174,7 @@ export default function ReportsScreen() {
         <ErrorRetry onRetry={() => void refresh()} />
       ) : (
         <FlatList
-          data={data ?? []}
+          data={grouped}
           keyExtractor={(i) => i.id}
           renderItem={renderRow}
           contentContainerStyle={styles.list}
@@ -208,6 +287,33 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1, gap: 2 },
   rowTitle: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.text },
   rowSub: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
+  rowClustered: { borderColor: colors.primary, borderWidth: 1.5 },
+  dupBadge: { fontFamily: fonts.bold, fontSize: 12, color: colors.primary },
+  childRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginLeft: spacing.xl,
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: "dashed",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+  },
+  childBody: { flex: 1, justifyContent: "center" },
+  childText: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
+  unlinkBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${colors.danger}12`,
+  },
   outboxWrap: { gap: spacing.md, marginBottom: spacing.md },
   outboxTitle: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.warning },
   queuedChip: {

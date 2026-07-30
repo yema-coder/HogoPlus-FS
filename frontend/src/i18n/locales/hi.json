@@ -210,7 +210,18 @@
     "reasonNoBeacon": "बीकन नहीं मिला — केवल GPS",
     "reasonNoBeaconNoGps": "न बीकन, न GPS",
     "shareTimings": "स्पीड रिपोर्ट भेजें",
-    "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!"
+    "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!",
+    "myMonth": "मेरा महीना",
+    "daysPresent": "उपस्थित दिन",
+    "lateDays": "देर के दिन",
+    "prevMonth": "पिछला महीना: {{n}} दिन उपस्थित",
+    "thisIsWrong": "यह गलत है",
+    "disputeTitle": "उपस्थिति की समस्या बताएं",
+    "disputeHint": "क्या हुआ बताएं (वैकल्पिक)",
+    "disputeSent": "टाइम ऑफिस को भेजा गया",
+    "reg_open": "समीक्षा में",
+    "reg_approved": "सुधार हुआ ✓",
+    "reg_rejected": "स्वीकार नहीं"
   },
   "notif": {
     "title": "सूचनाएँ",
@@ -262,7 +273,10 @@
     "noLocation": "स्थान दर्ज नहीं हुआ",
     "faceOk": "चेहरा मिला",
     "faceUnknown": "चेहरा जाँचा नहीं",
-    "possibleDuplicate": "संभावित डुप्लिकेट"
+    "possibleDuplicate": "संभावित डुप्लिकेट",
+    "dispute": "उपस्थिति आपत्ति",
+    "workerSays": "कर्मचारी का कहना",
+    "voiceNote": "आवाज़ संदेश"
   },
   "errors": {
     "network": "इंटरनेट नहीं है। कनेक्शन देखें।",
@@ -324,7 +338,9 @@
     "micDenied": "माइक की अनुमति चाहिए। सेटिंग्स में जाकर दें।",
     "dateHint": "DD/MM/YYYY HH:mm",
     "invalidDate": "सही तारीख़ डालें",
-    "viewDept": "विभाग देखें"
+    "viewDept": "विभाग देखें",
+    "sameAsLast": "पिछली बार जैसा भरें",
+    "copiedChip": "कॉपी"
   },
   "swap": {
     "title": "शिफ्ट बदली",
@@ -576,6 +592,16 @@
       "contractor": "ठेकेदार",
       "official": "ऑफिशियल",
       "other": "अन्य"
-    }
+    },
+    "sameAsLast": "पिछली एंट्री जैसा",
+    "copiedNote": "कॉपी हुआ — जाँच कर सबमिट करें",
+    "confirmPlate": "वही गाड़ी? {{plate}}"
+  },
+  "dup": {
+    "reports": "{{count}} रिपोर्टें",
+    "grouped": "इसी समस्या की पहले की रिपोर्ट के साथ समूहित",
+    "unlink": "अलग है — अलग करें",
+    "unlinked": "अलग किया गया",
+    "viewOriginal": "पहली रिपोर्ट देखें"
   }
 }
