@@ -1107,3 +1107,41 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   compose up -d --build; alembic upgrade head (0015); gates: AI CONFIG
   key_source=openai-dedicated + fresh "Uploaded DB backup" + 401 route smoke. NO webdash
   rebuild, NO flag flips (dup rules server defaults; caps env defaults 20/30).
+
+## v1.0.22 — punch-out NUDGE + swap FOR UPDATE + outbox idempotency (2026-07-30 fork, owner-approved order) ✅
+- NUDGE (owner conditions honored: nudge-not-autopunch, no automatic punishment):
+  tasks._punchout_reminder_async now two-stage: (1) reminder >15min after shift end, once per
+  attendance-day (redis guard per emp+att.date), only while end<12h old (stale rows skip straight
+  to flag); (2) >punchout_flag_after_hours (config env, default 2) → flagged_reason='no_punch_out'
+  (verification_level NEVER touched, punch_out NEVER written) + punchout_flagged transparency
+  notification (notify.py template ×3) + audit attendance.no_punch_out_flagged. Sweep now covers
+  date IN (today,yesterday) with end_dt from att.date → overnight B-shift rows dated yesterday
+  finally get reminded/flagged (old today-only query silently missed them).
+- Queue integration: /attendance/flagged where = or_(level=='flagged', reason=='no_punch_out');
+  regularize + approve + reject gates extended to accept no_punch_out rows (tests caught all 3
+  409s); punch-out endpoint self-clears the flag (reason='no_punch_out' AND approved_by IS NULL).
+  Frontend: history.tsx dispute button also on no_punch_out rows; approvals.tsx reason chip
+  att.reasonNoPunchOut ×3; alerts.tsx + usePushSetup.ts route type=='punchout_reminder' →
+  /attendance/punch (push data already carried type).
+- SWAP RACE: session.get(..., with_for_update=True) in respond/decide/cancel. Real-concurrency
+  tests (asyncio.gather, live PG): concurrent decide → [200,409], assignments applied ONCE
+  (2 rows not 4); concurrent respond → single transition.
+- OUTBOX IDEMPOTENCY: migration 0016 client_uuid (String(64) unique nullable) on incidents +
+  form_submissions (vehicles had it since 0013); pre-check-return-same-row in POST /incidents +
+  /forms/{id}/submit (same shape, _out/_sub_out); schemas + endpoints.ts types; capture.tsx
+  payload client_uuid inc-<ts>-<rand>; FormRenderer form-<ts>-<rand> (declared BEFORE try so the
+  offline enqueue path reuses it); outbox.ts form replay passes client_uuid through. Attendance
+  punch-in needs none (natural 409 dedup); videos are direct-path (uuid still sent).
+- TESTS: tests/test_next_batch.py (8) — suite 284 passed ×2 runs. Test isolation lesson:
+  conftest flushes redis PER TEST, so sweep runs in one test re-notify other tests' open rows →
+  _isolate_sweep parks (punch-out) others' open rows and _restore_sweep un-parks them in finally;
+  form idempotency test uses ENGINEERING job_card + w_eng to keep w_prod3's PRODUCTION last-mine
+  pristine for test_p1_batch.
+- testing_agent (iteration after 24): backend live E2E 5/5 + frontend 3/3 touchpoints PASS,
+  0 bugs. Note: real TO phone +918308829567 NOT in sandbox DEMO_OTP_WHITELIST — agents must use
+  demo TO D113 +919000000113 (is_demo bucket must match the worker: D001).
+- app.json 1.0.22/10022; frontend/.env restored to api.hogoplus.in. Docs: ADDENDUM sections in
+  AUTOPSY_v1.0.21.md + FIELD_PROTOCOL_v1.0.21.md (gates now 0016/1.0.22 if pulled after; Phase 11
+  nudge steps 34-36). Deploy delta: git pull + rebuild + alembic upgrade head (0016) — no new
+  keys/flags; PUNCHOUT_FLAG_AFTER_HOURS optional env.
+- Backlog per owner: Wave-2 "expected today" trucks + SOS stay PARKED. Awaiting A1-D4 verdicts.

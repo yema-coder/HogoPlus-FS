@@ -195,3 +195,32 @@ name + phone model (fix rides the next build; not a rollout blocker).
 
 **Report back:** gate number + step number + what you saw for anything red. One line per
 failure is enough.
+
+---
+
+## ADDENDUM — if your build was cut AFTER the v1.0.22 batch landed (2026-07-30)
+
+The repo moved to **v1.0.22** right after the v1.0.21 docs were written (owner-approved
+next batch: punch-out nudge, swap FOR UPDATE, outbox idempotency — all additive).
+If `git pull` / the build happened after that:
+- Step 1: expect `versionName='1.0.22'`, versionCode ≥ 10022.
+- Step 6: expect `alembic current` → **0016** (0016 adds only `client_uuid` columns on
+  incidents/form_submissions — additive, applies in <1 s).
+- Everything else in the protocol is unchanged. All 33 steps and gates apply as written.
+
+**PHASE 11 — punch-out nudge (v1.0.22 only, needs one shift boundary; NOT a gate)**
+
+**34.** Pick a worker who punched in but does NOT punch out at shift end. ~15–30 min
+after their shift end (sweep runs every 15 min), their phone gets
+"पंच आउट करायला विसरलात?".
+→ EXPECT tapping the notification lands directly on the punch screen; one tap punches out.
+
+**35.** For a worker who ignores the nudge: ~2 h after shift end (env-tunable
+`PUNCHOUT_FLAG_AFTER_HOURS`, default 2) the day appears in the Time Office flagged
+queue with reason "No punch-out after shift", and the worker gets the transparency
+notification ("sent to Time Office — nothing is decided automatically").
+→ EXPECT: NO punch-out time was invented anywhere; the punch-in verification level is
+unchanged; the worker's history row shows "✋ This is wrong" (dispute) on that day.
+
+**36.** Let a third worker punch out LATE (after the flag).
+→ EXPECT the flag clears itself; the row leaves the Time Office queue without any action.

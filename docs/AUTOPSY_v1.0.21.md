@@ -221,3 +221,21 @@ object whose LastModified doesn't match a prod log line was a sandbox overwrite.
 3. Duplicate rules are heuristics; the unlink button is the safety valve.
 4. Keyboard follow-ups (P2) ride this build — spot-check is folded into the protocol.
 5. Prod `app_versions` row: bump to 1.0.21 only AFTER the protocol passes.
+
+---
+
+## ADDENDUM — v1.0.22 batch (landed 2026-07-30, owner-approved, rides the same build if pulled after)
+
+| Feature | Behavior | Tests |
+|---|---|---|
+| Shift-end punch-out NUDGE | Reminder 15 min after shift end (deep-links to punch screen); still nothing 2 h later → day flagged `no_punch_out` into the existing Time Office queue + transparency notification to the worker. NEVER auto-writes a punch-out; punch-in verification untouched; late punch-out self-clears the flag; flagged day is disputable via "This is wrong". Overnight (B) shifts dated yesterday are covered. | tests/test_next_batch.py (4) |
+| Shift-swap race fix | `SELECT … FOR UPDATE` on respond/decide/cancel — two truly concurrent decides: exactly one 200, one 409, assignments applied exactly once (proven against live PG). | tests/test_next_batch.py (2, real concurrency) |
+| Outbox idempotency | `client_uuid` on incidents + form submissions (vehicles already had it): outbox replays and retap-retries return the SAME row. Migration 0016 (additive). App generates the uuid once per report/submission. | tests/test_next_batch.py (2) |
+
+- Deploy delta on top of §2: nothing extra — same `git pull` + rebuild + `alembic upgrade head`
+  (now → **0016**). No new keys, no flag flips (`PUNCHOUT_FLAG_AFTER_HOURS` optional, default 2).
+- Suite: **284 passed** (was 276). testing_agent E2E: backend 5/5 + all 3 frontend touchpoints PASS, 0 bugs.
+- DR guard from §3 (BACKUP_UPLOAD_ENABLED) ships in the same delta.
+- Old app (1.0.20/21) + this backend: fully compatible. New app + old backend: the app still
+  works — client_uuid is simply ignored by pydantic on an old backend (no dedup), nudge is
+  server-side only.
