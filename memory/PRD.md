@@ -988,3 +988,23 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - NOTE: sandbox local test Postgres/Redis sidecars (127.0.0.1:5432/6379) went DOWN mid-session
   (pod-level; no binaries in container) — pytest suite CANNOT run until sidecars return.
   Preview backend uses NEON directly (backend/.env) and is healthy.
+
+## v1.0.20 batch (fork session)
+- Built: (1) registration approval evidence — migration 0014 (employees.reg_lat/lng/address/
+  zone/inside_geofence/device/app_version/face_count + incidents.severity_reason_mr), register
+  stores context from app (acquireGps+reverseGeocode+expo-device), enriched
+  /admin/employees/pending + /dashboard/pending-registrations + /admin/employees/{id}/history;
+  mobile approvals evidence card + MapPreview (OSM tile, no key) + duplicate-name warnings
+  (difflib >=0.82); webdash Approvals pending-registrations card. (2) Bilingual AI assessment:
+  reason_mr from classifier, Marathi-first in app detail, webdash feed/modal, notifications,
+  nightly PDF. (3) Keyboard audit doc (all 17 surfaces already RNKC — no code gaps).
+  (4) UX simplification + feature proposals docs AWAITING USER APPROVAL (no code).
+- app.json 1.0.20/10020. Webdash rebuilt into backend/webdash_dist.
+- TESTING CONSTRAINT: local test PG/Redis sidecars still DOWN; Neon now READ-ONLY (RDS
+  migration executed by user — sandbox preview backend must NOT be restarted until its
+  DATABASE_URL points somewhere writable AND alembic 0014 applied; current running process
+  still has pre-0014 models so it stays healthy). Verified: imports, tsc (new files clean),
+  eslint, webdash build, expo bundle smoke, §C artifacts. tests/test_registration_evidence.py
+  written but NOT RUN — run when test DB returns.
+- USER DEPLOY STEPS (EC2): git pull; docker compose up -d --build backend;
+  docker exec hogoplus-backend alembic upgrade head (0014); APK build v1.0.20 via Publish.
