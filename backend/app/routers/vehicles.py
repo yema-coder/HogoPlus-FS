@@ -122,6 +122,36 @@ async def create_vehicle_log(
     return {"log": _out(row), "duplicate": False}
 
 
+@router.get("/vehicles/last-mine")
+async def last_vehicle_mine(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Same-as-last quick entry (v1.0.21): the guard's latest log. The PLATE is
+    returned for EXPLICIT confirmation only — the client never auto-fills it
+    (a stale plate is a wrong log)."""
+    row = (
+        await session.execute(
+            select(VehicleLog)
+            .where(VehicleLog.logged_by == employee.id, VehicleLog.is_demo == employee.is_demo)
+            .order_by(VehicleLog.logged_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return {"log": None}
+    return {
+        "log": {
+            "plate": row.plate,
+            "vehicle_type": row.vehicle_type,
+            "direction": row.direction,
+            "driver_name": row.driver_name,
+            "purpose": row.purpose,
+            "logged_at": row.logged_at.isoformat(),
+        }
+    }
+
+
 @router.get("/vehicles/logs")
 async def list_vehicle_logs(
     day: str | None = None,

@@ -12,6 +12,7 @@ Restores into the target database (default: the one in DATABASE_URL), then re-ru
 """
 import argparse
 import gzip
+import os
 import subprocess
 import sys
 import tempfile
@@ -94,10 +95,25 @@ def main() -> None:
     # Strip role-specific statements the target may not have (e.g. Neon lacks the
     # sandbox 'hogo' role) — equivalent of pg_restore --no-owner for plain dumps.
     text_dump = raw.decode()
+    # Data-only python fallback dumps (see tasks._python_sql_dump_async) carry no
+    # schema: build it with alembic FIRST, then skip the dump's alembic_version
+    # INSERT (upgrade head already stamped the current revision).
+    data_only = "CREATE TABLE" not in text_dump
+    if data_only:
+        print("  data-only dump detected — running alembic upgrade head first")
+        # alembic must build the schema in the TARGET db (drills use --target,
+        # which differs from the DATABASE_URL db)
+        target_url = f"postgresql+asyncpg://{user}:{pw}@{host}:{port}/{dbname}"
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=str(Path(__file__).resolve().parent.parent), check=True,
+            env={**os.environ, "DATABASE_URL": target_url},
+        )
     filtered = "\n".join(
         line for line in text_dump.splitlines()
         if not (line.startswith("ALTER ") and " OWNER TO " in line)
         and not line.startswith(("GRANT ", "REVOKE "))
+        and not (data_only and line.startswith('INSERT INTO "alembic_version"'))
     )
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as tmp:
         tmp.write(filtered)

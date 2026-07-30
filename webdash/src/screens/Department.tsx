@@ -70,6 +70,17 @@ function IncidentModal({ inc, onClose }: { inc: any; onClose: () => void }) {
             </span>
           </div>
         ) : null}
+        {inc.severity_reason_mr || inc.severity_reason ? (
+          <div className="loc-block" data-testid="modal-ai-assessment">
+            <div className="loc-label">🤖 {t("aiAssessment")}</div>
+            {inc.severity_reason_mr ? (
+              <div style={{ fontWeight: 600 }} data-testid="modal-ai-mr">{inc.severity_reason_mr}</div>
+            ) : null}
+            {inc.severity_reason ? (
+              <div style={{ fontSize: 13, color: "var(--muted)" }} data-testid="modal-ai-en">{inc.severity_reason}</div>
+            ) : null}
+          </div>
+        ) : null}
         {detected ? (
           <div className="plate-card" data-testid="modal-plate-card">
             <div className="loc-label">🚗 {t("detectedPlate")}</div>
@@ -216,6 +227,14 @@ export default function Department() {
               <div style={{ flex: 1 }}>
                 <div className="t">{i.category}{i.detected_plate ? <> · <b style={{ color: "var(--primary, #1a6b3c)" }}>🚗 {i.detected_plate}</b></> : null}</div>
                 <div className="m">{new Date(i.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · {i.status}</div>
+                {i.severity_reason_mr || i.severity_reason ? (
+                  <div className="m" style={{ marginTop: 2 }} data-testid={`feed-ai-${i.id}`}>
+                    🤖 {i.severity_reason_mr || i.severity_reason}
+                    {i.severity_reason_mr && i.severity_reason ? (
+                      <span style={{ opacity: 0.7 }}> · {i.severity_reason}</span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
               <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>
             </div>

@@ -210,7 +210,18 @@
     "reasonNoBeacon": "बीकन आढळला नाही — फक्त GPS",
     "reasonNoBeaconNoGps": "बीकन नाही व GPS नाही",
     "shareTimings": "स्पीड रिपोर्ट पाठवा",
-    "timingsShared": "रिपोर्ट पाठवली — धन्यवाद!"
+    "timingsShared": "रिपोर्ट पाठवली — धन्यवाद!",
+    "myMonth": "माझा महिना",
+    "daysPresent": "हजर दिवस",
+    "lateDays": "उशिराचे दिवस",
+    "prevMonth": "मागील महिना: {{n}} दिवस हजर",
+    "thisIsWrong": "हे चुकीचे आहे",
+    "disputeTitle": "हजेरीची समस्या सांगा",
+    "disputeHint": "काय झाले ते सांगा (ऐच्छिक)",
+    "disputeSent": "टाइम ऑफिसला पाठवले",
+    "reg_open": "तपासात आहे",
+    "reg_approved": "दुरुस्त झाले ✓",
+    "reg_rejected": "मान्य नाही"
   },
   "notif": {
     "title": "सूचना",
@@ -256,7 +267,16 @@
     "assignRole": "भूमिका",
     "empId": "कर्मचारी ID",
     "approveTitle": "{{name}} ला मंजुरी द्या",
-    "newJoinee": "नवीन कर्मचारी"
+    "newJoinee": "नवीन कर्मचारी",
+    "insideFactory": "कारखान्याच्या आत",
+    "outsideFactory": "कारखान्याच्या बाहेर",
+    "noLocation": "स्थान नोंदले नाही",
+    "faceOk": "चेहरा आढळला",
+    "faceUnknown": "चेहरा तपासला नाही",
+    "possibleDuplicate": "संभाव्य डुप्लिकेट",
+    "dispute": "हजेरी आक्षेप",
+    "workerSays": "कामगार म्हणतो",
+    "voiceNote": "आवाज संदेश"
   },
   "errors": {
     "network": "इंटरनेट नाही. कनेक्शन तपासा.",
@@ -318,7 +338,9 @@
     "micDenied": "माइकची परवानगी हवी. सेटिंग्जमध्ये जाऊन द्या.",
     "dateHint": "DD/MM/YYYY HH:mm",
     "invalidDate": "योग्य तारीख टाका",
-    "viewDept": "विभाग पहा"
+    "viewDept": "विभाग पहा",
+    "sameAsLast": "मागच्या वेळेप्रमाणे भरा",
+    "copiedChip": "कॉपी"
   },
   "swap": {
     "title": "शिफ्ट बदली",
@@ -432,7 +454,15 @@
     "q4": "शिफ्ट अदलाबदल कशी होते?"
   },
   "voice": {
-    "checkHint": "ऐकलेलं बरोबर आहे का? पाठवण्यापूर्वी भरलेली माहिती तपासा."
+    "checkHint": "ऐकलेलं बरोबर आहे का? पाठवण्यापूर्वी भरलेली माहिती तपासा.",
+    "speakFirst": "तुमची तक्रार बोला",
+    "transcribing": "ऐकत आहोत, लिहीत आहोत…",
+    "typeOptional": "किंवा इथे टाइप करा (ऐच्छिक)",
+    "willTranscribeLater": "आवाज सेव्ह झाला — पाठवल्यानंतर लिहिला जाईल.",
+    "nothingHeard": "काही ऐकू आले नाही. पुन्हा बोला किंवा टाइप करा.",
+    "ttsUnavailable": "आत्ता ऐकवता येत नाही.",
+    "ttsOffline": "इंटरनेट नाही — हा आवाज अजून सेव्ह नाही.",
+    "listen": "ऐका"
   },
   "face": {
     "title": "चेहरा पडताळणी सेट करा",
@@ -502,6 +532,13 @@
     "phoneInvalid": "वैध +91 मोबाइल नंबर टाका",
     "empty": "शोधण्यासाठी किमान 2 अक्षरे लिहा",
     "noResults": "कर्मचारी सापडले नाहीत",
+    "history": "इतिहास",
+    "hist_registered": "नोंदणी झाली",
+    "hist_register": "नोंदणी झाली",
+    "hist_approved": "मंजूर केले",
+    "hist_rejected": "नाकारले",
+    "hist_updated": "बदल केला",
+    "hist_created": "जोडले",
     "phoneTaken": "हा फोन नंबर आधीच वापरात आहे",
     "idTaken": "हा कर्मचारी ID आधीच घेतला आहे",
     "notAllowed": "तुम्हाला हा बदल करण्याची परवानगी नाही",
@@ -555,6 +592,16 @@
       "contractor": "ठेकेदार",
       "official": "कार्यालयीन",
       "other": "इतर"
-    }
+    },
+    "sameAsLast": "मागील नोंदीप्रमाणे",
+    "copiedNote": "कॉपी झाले — तपासून सबमिट करा",
+    "confirmPlate": "तीच गाडी? {{plate}}"
+  },
+  "dup": {
+    "reports": "{{count}} तक्रारी",
+    "grouped": "याच समस्येच्या आधीच्या तक्रारीसोबत गटबद्ध",
+    "unlink": "वेगळे आहे — वेगळे करा",
+    "unlinked": "वेगळे केले",
+    "viewOriginal": "पहिली तक्रार पहा"
   }
 }

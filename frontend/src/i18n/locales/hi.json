@@ -210,7 +210,18 @@
     "reasonNoBeacon": "बीकन नहीं मिला — केवल GPS",
     "reasonNoBeaconNoGps": "न बीकन, न GPS",
     "shareTimings": "स्पीड रिपोर्ट भेजें",
-    "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!"
+    "timingsShared": "रिपोर्ट भेजी गई — धन्यवाद!",
+    "myMonth": "मेरा महीना",
+    "daysPresent": "उपस्थित दिन",
+    "lateDays": "देर के दिन",
+    "prevMonth": "पिछला महीना: {{n}} दिन उपस्थित",
+    "thisIsWrong": "यह गलत है",
+    "disputeTitle": "उपस्थिति की समस्या बताएं",
+    "disputeHint": "क्या हुआ बताएं (वैकल्पिक)",
+    "disputeSent": "टाइम ऑफिस को भेजा गया",
+    "reg_open": "समीक्षा में",
+    "reg_approved": "सुधार हुआ ✓",
+    "reg_rejected": "स्वीकार नहीं"
   },
   "notif": {
     "title": "सूचनाएँ",
@@ -256,7 +267,16 @@
     "assignRole": "भूमिका",
     "empId": "कर्मचारी ID",
     "approveTitle": "{{name}} को मंज़ूरी दें",
-    "newJoinee": "नया कर्मचारी"
+    "newJoinee": "नया कर्मचारी",
+    "insideFactory": "फ़ैक्टरी के अंदर",
+    "outsideFactory": "फ़ैक्टरी के बाहर",
+    "noLocation": "स्थान दर्ज नहीं हुआ",
+    "faceOk": "चेहरा मिला",
+    "faceUnknown": "चेहरा जाँचा नहीं",
+    "possibleDuplicate": "संभावित डुप्लिकेट",
+    "dispute": "उपस्थिति आपत्ति",
+    "workerSays": "कर्मचारी का कहना",
+    "voiceNote": "आवाज़ संदेश"
   },
   "errors": {
     "network": "इंटरनेट नहीं है। कनेक्शन देखें।",
@@ -318,7 +338,9 @@
     "micDenied": "माइक की अनुमति चाहिए। सेटिंग्स में जाकर दें।",
     "dateHint": "DD/MM/YYYY HH:mm",
     "invalidDate": "सही तारीख़ डालें",
-    "viewDept": "विभाग देखें"
+    "viewDept": "विभाग देखें",
+    "sameAsLast": "पिछली बार जैसा भरें",
+    "copiedChip": "कॉपी"
   },
   "swap": {
     "title": "शिफ्ट बदली",
@@ -432,7 +454,15 @@
     "q4": "शिफ्ट बदली कैसे होती है?"
   },
   "voice": {
-    "checkHint": "जो सुना वह सही है क्या? भेजने से पहले भरे गए फ़ील्ड जाँच लें।"
+    "checkHint": "जो सुना वह सही है क्या? भेजने से पहले भरे गए फ़ील्ड जाँच लें।",
+    "speakFirst": "अपनी शिकायत बोलें",
+    "transcribing": "सुन रहे हैं, लिख रहे हैं…",
+    "typeOptional": "या यहाँ टाइप करें (वैकल्पिक)",
+    "willTranscribeLater": "आवाज़ सेव हुई — भेजने के बाद लिख दी जाएगी।",
+    "nothingHeard": "कुछ सुनाई नहीं दिया। फिर बोलें या टाइप करें।",
+    "ttsUnavailable": "अभी सुनाया नहीं जा सकता।",
+    "ttsOffline": "इंटरनेट नहीं है — यह ऑडियो अभी सेव नहीं है।",
+    "listen": "सुनें"
   },
   "face": {
     "title": "चेहरा सत्यापन सेट करें",
@@ -502,6 +532,13 @@
     "phoneInvalid": "मान्य +91 मोबाइल नंबर दर्ज करें",
     "empty": "खोजने के लिए कम से कम 2 अक्षर लिखें",
     "noResults": "कोई कर्मचारी नहीं मिला",
+    "history": "इतिहास",
+    "hist_registered": "पंजीकृत",
+    "hist_register": "पंजीकृत",
+    "hist_approved": "मंज़ूरी दी",
+    "hist_rejected": "अस्वीकृत किया",
+    "hist_updated": "बदलाव किया",
+    "hist_created": "जोड़ा",
     "phoneTaken": "यह फ़ोन नंबर पहले से उपयोग में है",
     "idTaken": "यह कर्मचारी ID पहले से लिया गया है",
     "notAllowed": "आपको यह बदलाव करने की अनुमति नहीं है",
@@ -555,6 +592,16 @@
       "contractor": "ठेकेदार",
       "official": "ऑफिशियल",
       "other": "अन्य"
-    }
+    },
+    "sameAsLast": "पिछली एंट्री जैसा",
+    "copiedNote": "कॉपी हुआ — जाँच कर सबमिट करें",
+    "confirmPlate": "वही गाड़ी? {{plate}}"
+  },
+  "dup": {
+    "reports": "{{count}} रिपोर्टें",
+    "grouped": "इसी समस्या की पहले की रिपोर्ट के साथ समूहित",
+    "unlink": "अलग है — अलग करें",
+    "unlinked": "अलग किया गया",
+    "viewOriginal": "पहली रिपोर्ट देखें"
   }
 }

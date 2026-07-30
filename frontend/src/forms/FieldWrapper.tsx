@@ -16,10 +16,12 @@ interface Props {
   /** confidence 0-1 when the value was auto-filled by AI (true = filled, unknown confidence) */
   aiFilled?: number | true;
   aiLoading?: boolean;
+  /** v1.0.21 same-as-last: value copied from my previous submission */
+  copied?: boolean;
 }
 
 /** Trilingual label + AI badge + inline error, wrapping any field input. */
-export function FieldWrapper({ field, error, children, onLayout, aiFilled, aiLoading }: Props) {
+export function FieldWrapper({ field, error, children, onLayout, aiFilled, aiLoading, copied }: Props) {
   const { t } = useTranslation();
   return (
     <View style={styles.wrap} onLayout={onLayout} testID={`field-${field.key}`}>
@@ -34,6 +36,10 @@ export function FieldWrapper({ field, error, children, onLayout, aiFilled, aiLoa
             <Text style={styles.aiFilledText}>
               {typeof aiFilled === "number" ? `AI ${Math.round(aiFilled * 100)}%` : "AI"}
             </Text>
+          </View>
+        ) : copied ? (
+          <View style={styles.copiedChip} testID={`copied-${field.key}`}>
+            <Text style={styles.copiedText}>⏮ {t("forms.copiedChip")}</Text>
           </View>
         ) : field.ai_hook ? (
           <View style={styles.aiBadge} testID={`ai-badge-${field.key}`}>
@@ -85,6 +91,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   aiFilledText: { fontFamily: fonts.bold, fontSize: 11, color: colors.success },
+  copiedChip: {
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  copiedText: { fontFamily: fonts.bold, fontSize: 11, color: colors.primary },
   aiLoadingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   aiLoadingText: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.accent },
   aiHint: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },

@@ -8,6 +8,8 @@ import type {
   FlaggedAttendance,
   FormDefinitionItem,
   GaugeResult,
+  OnboardingHistoryRow,
+  PendingRegistration,
   Incident,
   IncidentDetail,
   NotificationList,
@@ -36,7 +38,16 @@ export const verifyOtp = (phone: string, otp: string) =>
   api<VerifyOtpResponse>("/auth/verify-otp", { method: "POST", body: { phone, otp }, auth: false });
 
 export const registerEmployee = (
-  body: { phone: string; full_name: string; selfie_key: string },
+  body: {
+    phone: string;
+    full_name: string;
+    selfie_key: string;
+    lat?: number;
+    lng?: number;
+    address?: string;
+    device?: string;
+    app_version?: string;
+  },
   registrationToken: string,
 ) =>
   api<TokenPair & { employee: EmployeeProfile }>("/auth/register", {
@@ -152,7 +163,9 @@ export const approveSubmission = (id: string) =>
 export const rejectSubmission = (id: string, reason: string) =>
   api<SubmissionItem>(`/submissions/${id}/reject`, { method: "POST", body: { reason } });
 
-export const pendingEmployees = () => api<EmployeeProfile[]>("/admin/employees/pending");
+export const pendingEmployees = () => api<PendingRegistration[]>("/admin/employees/pending");
+export const employeeHistory = (id: string) =>
+  api<OnboardingHistoryRow[]>(`/admin/employees/${id}/history`);
 
 export const approveEmployee = (
   id: string,
@@ -214,6 +227,87 @@ export const aiVoiceFill = (audioKey: string, formDefinitionId: string) =>
     method: "POST",
     body: { audio_key: audioKey, form_definition_id: formDefinitionId },
   });
+
+export const aiVoiceDescribe = (audioKey: string) =>
+  api<{ transcript: string; description: string; language: string }>("/ai/voice-describe", {
+    method: "POST",
+    body: { audio_key: audioKey },
+  });
+
+// ---------------- v1.0.21 P1: My Month / regularization / same-as-last / duplicates ----------------
+
+export interface MonthSummaryCounts {
+  month: string;
+  days_present: number;
+  days_flagged_pending: number;
+  days_flagged_resolved: number;
+  days_late: number;
+  days_complete: number;
+}
+
+export const attendanceMonthSummary = (month?: string, employeeId?: string) => {
+  const params = new URLSearchParams();
+  if (month) params.set("month", month);
+  if (employeeId) params.set("employee_id", employeeId);
+  const q = params.toString();
+  return api<{ employee_id: string; current: MonthSummaryCounts; previous: MonthSummaryCounts }>(
+    `/attendance/month-summary${q ? `?${q}` : ""}`,
+  );
+};
+
+export const regularizeAttendance = (
+  attendanceId: string,
+  body: { text_note?: string | null; voice_note_key?: string | null },
+) =>
+  api<{ id: string; status: string }>(`/attendance/${attendanceId}/regularize`, {
+    method: "POST",
+    body,
+  });
+
+export interface RegularizationItem {
+  id: string;
+  status: "open" | "approved" | "rejected";
+  created_at: string;
+  text_note: string | null;
+  voice_note_url: string | null;
+  review_note: string | null;
+  reviewed_at: string | null;
+  employee_name: string;
+  emp_id: string | null;
+  department_code: string | null;
+  attendance: import("@/src/api/types").AttendanceRecord & {
+    selfie_url: string | null;
+    reference_selfie_url: string | null;
+  };
+}
+
+export const listRegularizations = (status = "open") =>
+  api<RegularizationItem[]>(`/attendance/regularizations?status=${status}`);
+
+export const decideRegularization = (id: string, action: "approve" | "reject", note?: string) =>
+  api<{ id: string; status: string }>(`/attendance/regularizations/${id}/decide`, {
+    method: "POST",
+    body: { action, note: note ?? null },
+  });
+
+export const unlinkDuplicate = (incidentId: string) =>
+  api<Incident>(`/incidents/${incidentId}/unlink-duplicate`, { method: "POST" });
+
+export interface LastVehicleLog {
+  plate: string;
+  vehicle_type: string;
+  direction: "in" | "out";
+  driver_name: string | null;
+  purpose: string | null;
+  logged_at: string;
+}
+
+export const lastVehicleLog = () => api<{ log: LastVehicleLog | null }>("/vehicles/last-mine");
+
+export const lastFormValues = (definitionId: string) =>
+  api<{ data_json: Record<string, unknown> | null; created_at: string | null }>(
+    `/forms/${definitionId}/last-mine`,
+  );
 
 export const aiChat = (message: string, conversationId?: string | null) =>
   api<ChatResult>("/ai/chat", {

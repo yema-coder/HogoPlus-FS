@@ -56,6 +56,7 @@ export const fonts = {
 } as const;
 
 export const type = {
+  xs: 12,
   sm: 14,
   base: 16,
   lg: 20,

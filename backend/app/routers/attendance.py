@@ -10,9 +10,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit import write_audit
 from app.database import get_session
-from app.models import Attendance, BleBeacon, Department, Employee, FactorySettings
+from app.models import (
+    Attendance,
+    AttendanceRegularization,
+    BleBeacon,
+    Department,
+    Employee,
+    FactorySettings,
+)
 from app.notify import dispatcher, template
-from app.schemas import BeaconAttachIn, BleDiagIn, PunchInIn
+from app.schemas import BeaconAttachIn, BleDiagIn, PunchInIn, RegularizeDecideIn, RegularizeIn
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
 from app.storage import get_storage
@@ -354,7 +361,315 @@ async def my_attendance(
             .order_by(Attendance.date.desc())
         )
     ).scalars().all()
-    return [_out(a) for a in rows]
+    # attach each punch's latest regularization request (worker sees the status)
+    regs: dict[uuid.UUID, AttendanceRegularization] = {}
+    if rows:
+        reg_rows = (
+            await session.execute(
+                select(AttendanceRegularization)
+                .where(AttendanceRegularization.attendance_id.in_([a.id for a in rows]))
+                .order_by(AttendanceRegularization.created_at)
+            )
+        ).scalars().all()
+        regs = {r.attendance_id: r for r in reg_rows}  # newest wins
+    return [
+        {
+            **_out(a),
+            "regularization": (
+                {"id": str(regs[a.id].id), "status": regs[a.id].status}
+                if a.id in regs
+                else None
+            ),
+        }
+        for a in rows
+    ]
+
+
+# ---------------- "My Month" + regularization (v1.0.21) ----------------
+
+async def _month_counts(session: AsyncSession, employee_id: uuid.UUID, year: int, mon: int) -> dict:
+    """THE single source of truth for monthly attendance counts. The worker's
+    "My Month" card and the Time Office view both read THIS function — the two
+    can never disagree. days_flagged_pending uses the exact same filter as the
+    TO flagged queue (verification_level='flagged' AND approved_by IS NULL)."""
+    start = datetime(year, mon, 1).date()
+    end = datetime(year + (mon == 12), (mon % 12) + 1, 1).date()
+    rows = (
+        await session.execute(
+            select(Attendance).where(
+                Attendance.employee_id == employee_id,
+                Attendance.date >= start,
+                Attendance.date < end,
+            )
+        )
+    ).scalars().all()
+    return {
+        "month": f"{year:04d}-{mon:02d}",
+        "days_present": len({a.date for a in rows}),
+        "days_flagged_pending": sum(
+            1 for a in rows if a.verification_level == "flagged" and a.approved_by is None
+        ),
+        "days_flagged_resolved": sum(
+            1 for a in rows if a.verification_level == "flagged" and a.approved_by is not None
+        ),
+        "days_late": sum(1 for a in rows if a.is_late),
+        "days_complete": sum(1 for a in rows if a.punch_out_at is not None),
+    }
+
+
+@router.get("/attendance/month-summary")
+async def month_summary(
+    month: str | None = Query(default=None, description="YYYY-MM"),
+    employee_id: uuid.UUID | None = Query(default=None),
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Read-only "My Month" numbers + previous month for comparison. Workers see
+    only themselves; Time Office / CGM / MD may pass employee_id."""
+    target_id = employee.id
+    if employee_id and employee_id != employee.id:
+        if not await is_dept_manager(session, employee, "TIME_OFFICE"):
+            raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+        target = await session.get(Employee, employee_id)
+        if target is None or target.is_demo != employee.is_demo:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        target_id = target.id
+    if month:
+        try:
+            year, mon = map(int, month.split("-"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    else:
+        today = now_ist().date()
+        year, mon = today.year, today.month
+    prev_year, prev_mon = (year - 1, 12) if mon == 1 else (year, mon - 1)
+    return {
+        "employee_id": str(target_id),
+        "current": await _month_counts(session, target_id, year, mon),
+        "previous": await _month_counts(session, target_id, prev_year, prev_mon),
+    }
+
+
+REG_ALREADY_OPEN = {
+    "code": "reg_already_open",
+    "en": "A request for this punch is already pending.",
+    "hi": "इस पंच के लिए अनुरोध पहले से लंबित है।",
+    "mr": "या पंचसाठी विनंती आधीच प्रलंबित आहे.",
+}
+
+
+@router.post("/attendance/{attendance_id}/regularize")
+async def request_regularization(
+    attendance_id: uuid.UUID,
+    body: RegularizeIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """One-tap "this punch is wrong" on a flagged punch (voice note optional).
+    ONE open request per punch — DB-enforced. Routes to the Time Office queue
+    with the original punch evidence attached."""
+    record = await session.get(Attendance, attendance_id)
+    if record is None or record.employee_id != employee.id:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    if record.verification_level != "flagged":
+        raise HTTPException(status_code=409, detail="Only flagged punches can be disputed")
+    if record.approved_by is not None:
+        raise HTTPException(status_code=409, detail="This punch is already resolved")
+    existing = (
+        await session.execute(
+            select(AttendanceRegularization).where(
+                AttendanceRegularization.attendance_id == attendance_id,
+                AttendanceRegularization.status == "open",
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=REG_ALREADY_OPEN)
+    reg = AttendanceRegularization(
+        attendance_id=attendance_id,
+        employee_id=employee.id,
+        text_note=(body.text_note or "").strip() or None,
+        voice_note_key=body.voice_note_key,
+        status="open",
+        is_demo=employee.is_demo,
+    )
+    session.add(reg)
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()  # double-tap race — partial unique index caught it
+        raise HTTPException(status_code=409, detail=REG_ALREADY_OPEN)
+    await write_audit(
+        session, employee.id, "attendance.regularization_requested",
+        "attendance_regularization", str(reg.id),
+        {"attendance_id": str(attendance_id), "date": record.date.isoformat()},
+    )
+    # notify the Time Office deciders (dept manager + TO Managers, same demo class)
+    recipients: set[uuid.UUID] = set()
+    to_dept = (
+        await session.execute(select(Department).where(Department.code == "TIME_OFFICE"))
+    ).scalar_one_or_none()
+    if to_dept and to_dept.manager_employee_id:
+        recipients.add(to_dept.manager_employee_id)
+    to_managers = (
+        await session.execute(
+            select(Employee).where(
+                Employee.role_code == "Manager",
+                Employee.department_code == "TIME_OFFICE",
+                Employee.is_demo == employee.is_demo,
+            )
+        )
+    ).scalars().all()
+    recipients.update(m.id for m in to_managers)
+    title, nbody = template(
+        "regularization_requested", f"{employee.full_name} — {record.date.isoformat()}"
+    )
+    for rid in recipients:
+        await dispatcher.notify(
+            session, rid, "regularization_requested", title, nbody,
+            "attendance_regularization", str(reg.id),
+        )
+    await session.commit()
+    return {"id": str(reg.id), "status": "open", "attendance_id": str(attendance_id)}
+
+
+@router.get("/attendance/regularizations/mine")
+async def my_regularizations(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    rows = (
+        await session.execute(
+            select(AttendanceRegularization, Attendance)
+            .join(Attendance, AttendanceRegularization.attendance_id == Attendance.id)
+            .where(AttendanceRegularization.employee_id == employee.id)
+            .order_by(AttendanceRegularization.created_at.desc())
+            .limit(50)
+        )
+    ).all()
+    return [
+        {
+            "id": str(r.id),
+            "attendance_id": str(r.attendance_id),
+            "date": a.date.isoformat(),
+            "status": r.status,
+            "text_note": r.text_note,
+            "review_note": r.review_note,
+            "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r, a in rows
+    ]
+
+
+@router.get("/attendance/regularizations")
+async def list_regularizations(
+    status: str = Query(default="open"),
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Time Office queue: each request carries the ORIGINAL punch evidence
+    (selfie, GPS, zone, flag reason) alongside the worker's note."""
+    if not await is_dept_manager(session, employee, "TIME_OFFICE"):
+        raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+    if status not in ("open", "approved", "rejected"):
+        raise HTTPException(status_code=422, detail="Invalid status filter")
+    rows = (
+        await session.execute(
+            select(AttendanceRegularization, Attendance, Employee)
+            .join(Attendance, AttendanceRegularization.attendance_id == Attendance.id)
+            .join(Employee, AttendanceRegularization.employee_id == Employee.id)
+            .where(
+                AttendanceRegularization.status == status,
+                AttendanceRegularization.is_demo == employee.is_demo,
+            )
+            .order_by(AttendanceRegularization.created_at.desc())
+            .limit(100)
+        )
+    ).all()
+    storage = get_storage()
+    return [
+        {
+            "id": str(r.id),
+            "status": r.status,
+            "created_at": r.created_at.isoformat(),
+            "text_note": r.text_note,
+            "voice_note_url": f"/api/files/{r.voice_note_key}" if r.voice_note_key else None,
+            "review_note": r.review_note,
+            "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
+            "employee_name": w.full_name,
+            "emp_id": w.emp_id,
+            "department_code": w.department_code,
+            # original punch evidence — the TO decides with full context
+            "attendance": {
+                **_out(a),
+                "selfie_url": storage.url_for(a.selfie_key) if a.selfie_key else None,
+                "reference_selfie_url": (
+                    storage.url_for(w.reference_selfie_key) if w.reference_selfie_key else None
+                ),
+            },
+        }
+        for r, a, w in rows
+    ]
+
+
+@router.post("/attendance/regularizations/{reg_id}/decide")
+async def decide_regularization(
+    reg_id: uuid.UUID,
+    body: RegularizeDecideIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Approve/reject a dispute. The underlying punch is resolved with EXACTLY
+    the same state changes as the standalone approve/reject endpoints (one
+    lifecycle, one source of truth); audited with the reviewer's name."""
+    if not await is_dept_manager(session, employee, "TIME_OFFICE"):
+        raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+    reg = await session.get(AttendanceRegularization, reg_id)
+    if reg is None or reg.is_demo != employee.is_demo:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if reg.status != "open":
+        raise HTTPException(status_code=409, detail="Request already decided")
+    record = await session.get(Attendance, reg.attendance_id)
+    cleared_reference = False
+    if record is not None and record.verification_level == "flagged" and record.approved_by is None:
+        record.approved_by = employee.id
+        if body.action == "reject":
+            # parity with POST /attendance/{id}/reject
+            record.face_verified = False
+            if record.flagged_reason == "reference_bootstrap":
+                worker = await session.get(Employee, record.employee_id)
+                if worker and worker.reference_selfie_key == record.selfie_key:
+                    worker.reference_selfie_key = None
+                    worker.reference_selfie_set_at = None
+                    cleared_reference = True
+    reg.status = "approved" if body.action == "approve" else "rejected"
+    reg.reviewed_by = employee.id
+    reg.reviewed_at = now_ist()
+    reg.review_note = (body.note or "").strip() or None
+    await write_audit(
+        session, employee.id, f"attendance.regularization_{reg.status}",
+        "attendance_regularization", str(reg.id),
+        {
+            "attendance_id": str(reg.attendance_id),
+            "reviewer_name": employee.full_name,
+            "note": reg.review_note,
+            "cleared_reference": cleared_reference,
+        },
+    )
+    date_str = record.date.isoformat() if record else ""
+    nbody = (
+        {"en": f"Approved ✓ — {date_str}", "hi": f"स्वीकृत ✓ — {date_str}", "mr": f"मंजूर ✓ — {date_str}"}
+        if body.action == "approve"
+        else {"en": f"Rejected ✗ — {date_str}", "hi": f"अस्वीकृत ✗ — {date_str}", "mr": f"नामंजूर ✗ — {date_str}"}
+    )
+    title, _ = template("regularization_decided")
+    await dispatcher.notify(
+        session, reg.employee_id, "regularization_decided", title, nbody,
+        "attendance_regularization", str(reg.id),
+    )
+    await session.commit()
+    return {"id": str(reg.id), "status": reg.status, "reviewed_by": str(employee.id)}
 
 
 @router.get("/attendance/flagged")

@@ -149,7 +149,7 @@ export default function PunchResultScreen() {
             onPress={() => {
               void (async () => {
                 try {
-                  const raw = await storage.getItem("hogo.lastPunchTimings");
+                  const raw = await storage.getItem<string>("hogo.lastPunchTimings", "");
                   await sendBleDiag({
                     kind: "punch_timing_card",
                     timings: raw ? JSON.parse(raw) : null,

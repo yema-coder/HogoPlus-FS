@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -12,6 +14,8 @@ import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors } from "@/src/theme/tokens";
+import { reverseGeocode } from "@/src/utils/geocode";
+import { acquireGps } from "@/src/utils/gps";
 
 export default function RegisterSelfie() {
   const router = useRouter();
@@ -30,17 +34,37 @@ export default function RegisterSelfie() {
     }
     setBusy(true);
     try {
+      // v1.0.20: gather registration evidence in parallel with the upload —
+      // best-effort only, registration must never block on it
+      const contextPromise = (async () => {
+        const ctx: { lat?: number; lng?: number; address?: string; device?: string; app_version?: string } = {};
+        try {
+          ctx.device = [Device.manufacturer, Device.modelName].filter(Boolean).join(" ") || undefined;
+          ctx.app_version = Constants.expoConfig?.version ?? undefined;
+          const gps = await acquireGps(6000);
+          if (gps.fix) {
+            ctx.lat = gps.fix.lat;
+            ctx.lng = gps.fix.lng;
+            ctx.address = (await reverseGeocode(gps.fix.lat, gps.fix.lng)) ?? undefined;
+          }
+        } catch {
+          // evidence is optional
+        }
+        return ctx;
+      })();
       const compressed = await ImageManipulator.manipulateAsync(
         uri,
         [{ resize: { width: 720 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
       );
       const uploaded = await uploadFile(compressed.uri, "selfie.jpg", registrationToken);
+      const ctx = await contextPromise;
       const res = await registerEmployee(
         {
           phone: pendingPhone,
           full_name: name,
           selfie_key: uploaded.key,
+          ...ctx,
         },
         registrationToken,
       );

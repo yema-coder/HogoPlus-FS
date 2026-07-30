@@ -210,7 +210,18 @@
     "reasonNoBeacon": "Beacon not detected — GPS only",
     "reasonNoBeaconNoGps": "No beacon & no GPS",
     "shareTimings": "Share speed report",
-    "timingsShared": "Report sent — thank you!"
+    "timingsShared": "Report sent — thank you!",
+    "myMonth": "My Month",
+    "daysPresent": "Days present",
+    "lateDays": "Late days",
+    "prevMonth": "Last month: {{n}} days present",
+    "thisIsWrong": "This is wrong",
+    "disputeTitle": "Report attendance problem",
+    "disputeHint": "Tell us what happened (optional)",
+    "disputeSent": "Sent to Time Office",
+    "reg_open": "Under review",
+    "reg_approved": "Corrected ✓",
+    "reg_rejected": "Not accepted"
   },
   "notif": {
     "title": "Alerts",
@@ -256,7 +267,16 @@
     "assignRole": "Role",
     "empId": "Employee ID",
     "approveTitle": "Approve {{name}}",
-    "newJoinee": "New joinee"
+    "newJoinee": "New joinee",
+    "insideFactory": "Inside factory",
+    "outsideFactory": "Outside factory",
+    "noLocation": "No location captured",
+    "faceOk": "Face detected",
+    "faceUnknown": "Face not checked",
+    "possibleDuplicate": "Possible duplicate",
+    "dispute": "Attendance dispute",
+    "workerSays": "Worker says",
+    "voiceNote": "Voice note"
   },
   "errors": {
     "network": "No internet. Check your connection.",
@@ -318,7 +338,9 @@
     "micDenied": "Microphone permission needed. Allow it in Settings.",
     "dateHint": "DD/MM/YYYY HH:mm",
     "invalidDate": "Enter a valid date",
-    "viewDept": "View department"
+    "viewDept": "View department",
+    "sameAsLast": "Fill like last time",
+    "copiedChip": "copied"
   },
   "swap": {
     "title": "Swap shift",
@@ -432,7 +454,15 @@
     "q4": "How does shift swap work?"
   },
   "voice": {
-    "checkHint": "Did we hear you right? Please check the filled fields before submitting."
+    "checkHint": "Did we hear you right? Please check the filled fields before submitting.",
+    "speakFirst": "Speak your report",
+    "transcribing": "Listening and writing…",
+    "typeOptional": "Or type here (optional)",
+    "willTranscribeLater": "Voice saved — it will be written after sending.",
+    "nothingHeard": "Could not hear anything. Speak again or type.",
+    "ttsUnavailable": "Cannot play audio right now.",
+    "ttsOffline": "No internet — this audio is not saved yet.",
+    "listen": "Listen"
   },
   "face": {
     "title": "Set up face verification",
@@ -502,6 +532,13 @@
     "phoneInvalid": "Enter a valid +91 mobile number",
     "empty": "Type at least 2 letters to search",
     "noResults": "No employees found",
+    "history": "History",
+    "hist_registered": "Registered",
+    "hist_register": "Registered",
+    "hist_approved": "Approved by",
+    "hist_rejected": "Rejected by",
+    "hist_updated": "Updated by",
+    "hist_created": "Added by",
     "phoneTaken": "This phone number is already in use",
     "idTaken": "This employee ID is already taken",
     "notAllowed": "You are not allowed to make this change",
@@ -555,6 +592,16 @@
       "contractor": "Contractor",
       "official": "Official",
       "other": "Other"
-    }
+    },
+    "sameAsLast": "Same as last entry",
+    "copiedNote": "Copied — check and submit",
+    "confirmPlate": "Same vehicle? {{plate}}"
+  },
+  "dup": {
+    "reports": "{{count}} reports",
+    "grouped": "Grouped with an earlier report of the same issue",
+    "unlink": "Not same — unlink",
+    "unlinked": "Unlinked",
+    "viewOriginal": "View first report"
   }
 }

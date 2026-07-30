@@ -38,6 +38,7 @@ def _out(i: Incident) -> dict:
         "status": i.status,
         "severity": i.severity,
         "severity_reason": i.severity_reason,
+        "severity_reason_mr": i.severity_reason_mr,
         "assigned_manager_id": str(i.assigned_manager_id) if i.assigned_manager_id else None,
         "escalated_to": str(i.escalated_to) if i.escalated_to else None,
         "escalated_at": i.escalated_at.isoformat() if i.escalated_at else None,
@@ -55,6 +56,7 @@ def _out(i: Incident) -> dict:
         "plate_confidence": i.plate_confidence,
         "plate_source": i.plate_source,
         "plate_reason": i.plate_reason,
+        "duplicate_of": str(i.duplicate_of) if i.duplicate_of else None,
         "created_at": i.created_at.isoformat() if i.created_at else None,
     }
 
@@ -186,8 +188,13 @@ async def apply_incident_routing(
                          "severity": severity, "confirmed_by": confirmed_by},
         )
     )
+    # bilingual AI assessment in the notification body — Marathi first (v1.0.20)
+    assess = "\n".join(
+        x for x in (incident.severity_reason_mr, incident.severity_reason) if x
+    )
+    body_txt = f"{category} — {dept.name_en}" + (f"\n{assess}" if assess else "")
     if assigned:
-        title, notif_body = template("incident_assigned", f"{category} — {dept.name_en}")
+        title, notif_body = template("incident_assigned", body_txt)
         await dispatcher.notify(session, assigned, "incident_assigned", title, notif_body, "incident", str(incident.id))
     if severity == "critical":
         tops = (
@@ -197,7 +204,7 @@ async def apply_incident_routing(
                 )
             )
         ).scalars().all()
-        title, notif_body = template("incident_critical", f"{category} — {dept.name_en}")
+        title, notif_body = template("incident_critical", body_txt)
         for e in tops:
             if e.role and e.role.rank <= 2 and e.id != assigned:
                 await dispatcher.notify(session, e.id, "incident_critical", title, notif_body, "incident", str(incident.id))
@@ -418,7 +425,9 @@ async def list_incidents(
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    query = select(Incident).where(Incident.is_demo == employee.is_demo)
+    query = select(Incident, Employee.full_name).join(
+        Employee, Incident.reported_by == Employee.id
+    ).where(Incident.is_demo == employee.is_demo)
     rank = employee.role.rank
     if rank <= 2:
         if department_code:
@@ -435,8 +444,41 @@ async def list_incidents(
         await session.execute(
             query.order_by(Incident.created_at.desc()).limit(min(max(limit, 1), 200)).offset(max(offset, 0))
         )
-    ).scalars().all()
-    return [_out(i) for i in rows]
+    ).all()
+    return [{**_out(i), "reporter_name": name} for i, name in rows]
+
+
+@router.post("/incidents/{incident_id}/unlink-duplicate")
+async def unlink_duplicate(
+    incident_id: uuid.UUID,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """One-tap unlink for a wrongly clustered incident (manager action, audited).
+    Clustering is display-only, so unlinking only detaches the card grouping —
+    both records were always intact."""
+    inc = await session.get(Incident, incident_id)
+    if inc is None or inc.is_demo != employee.is_demo:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    rank = employee.role.rank
+    if rank > 3 or (rank == 3 and employee.department_code != inc.department_code):
+        raise HTTPException(status_code=403, detail="Managers only")
+    if inc.duplicate_of is None:
+        raise HTTPException(status_code=409, detail="Incident is not clustered")
+    root_id = inc.duplicate_of
+    inc.duplicate_of = None
+    session.add(
+        IncidentTimeline(
+            incident_id=inc.id, actor_id=employee.id, event="duplicate_unlinked",
+            detail_json={"was_duplicate_of": str(root_id)},
+        )
+    )
+    await write_audit(
+        session, employee.id, "incident.duplicate_unlinked", "incident", str(inc.id),
+        {"was_duplicate_of": str(root_id), "reviewer_name": employee.full_name},
+    )
+    await session.commit()
+    return _out(inc)
 
 
 @router.post("/incidents/{incident_id}/status")

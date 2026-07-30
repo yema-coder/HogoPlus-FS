@@ -1,15 +1,24 @@
 import dayjs from "dayjs";
 import { CalendarX2, ChevronLeft, ChevronRight } from "lucide-react-native";
 import React, { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { myAttendance } from "@/src/api/endpoints";
+import { uploadFile } from "@/src/api/client";
+import {
+  attendanceMonthSummary,
+  myAttendance,
+  regularizeAttendance,
+  type MonthSummaryCounts,
+} from "@/src/api/endpoints";
 import type { AttendanceRecord } from "@/src/api/types";
+import { BigButton } from "@/src/components/BigButton";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { showToast } from "@/src/components/Toast";
+import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatTime } from "@/src/utils/format";
@@ -28,6 +37,43 @@ export default function AttendanceHistory() {
     `att-${key}`,
     () => myAttendance(key),
   );
+  // v1.0.21 "My Month" — same numbers the Time Office sees (shared endpoint)
+  const summary = useCachedFetch<{ current: MonthSummaryCounts; previous: MonthSummaryCounts }>(
+    `att-sum-${key}`,
+    () => attendanceMonthSummary(key),
+  );
+
+  // v1.0.21 regularization: one-tap "this is wrong" on flagged punches
+  const [disputeTarget, setDisputeTarget] = useState<AttendanceRecord | null>(null);
+  const [disputeText, setDisputeText] = useState("");
+  const [disputeVoice, setDisputeVoice] = useState<string | undefined>(undefined);
+  const [sending, setSending] = useState(false);
+
+  const sendDispute = async () => {
+    if (!disputeTarget || sending) return;
+    setSending(true);
+    try {
+      let voiceKey: string | null = null;
+      if (disputeVoice) {
+        const up = await uploadFile(disputeVoice, "voice_note.m4a").catch(() => null);
+        voiceKey = up?.key ?? null;
+      }
+      await regularizeAttendance(disputeTarget.id, {
+        text_note: disputeText.trim() || null,
+        voice_note_key: voiceKey,
+      });
+      showToast(t("att.disputeSent"), "success");
+      setDisputeTarget(null);
+      setDisputeText("");
+      setDisputeVoice(undefined);
+      void refresh();
+      void summary.refresh();
+    } catch {
+      showToast(t("common.error"), "error");
+    } finally {
+      setSending(false);
+    }
+  };
 
   const isCurrent = key === dayjs().format("YYYY-MM");
 
@@ -68,6 +114,35 @@ export default function AttendanceHistory() {
               </View>
             ) : null}
           </View>
+          {item.regularization ? (
+            <View
+              style={[
+                styles.regStatus,
+                item.regularization.status === "approved" && { backgroundColor: `${colors.success}18` },
+                item.regularization.status === "rejected" && { backgroundColor: `${colors.danger}18` },
+              ]}
+              testID={`reg-status-${item.date}`}
+            >
+              <Text
+                style={[
+                  styles.regStatusText,
+                  item.regularization.status === "approved" && { color: colors.success },
+                  item.regularization.status === "rejected" && { color: colors.danger },
+                ]}
+              >
+                {t(`att.reg_${item.regularization.status}`)}
+              </Text>
+            </View>
+          ) : item.verification_level === "flagged" && !item.approved_by ? (
+            <Pressable
+              testID={`dispute-button-${item.date}`}
+              accessibilityRole="button"
+              onPress={() => setDisputeTarget(item)}
+              style={({ pressed }) => [styles.disputeBtn, { opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={styles.disputeBtnText}>✋ {t("att.thisIsWrong")}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     );
@@ -105,9 +180,82 @@ export default function AttendanceHistory() {
           contentContainerStyle={styles.list}
           refreshing={loading}
           onRefresh={() => void refresh()}
+          ListHeaderComponent={
+            summary.data ? (
+              <View style={styles.summaryCard} testID="my-month-card">
+                <Text style={styles.summaryTitle}>📅 {t("att.myMonth")}</Text>
+                <View style={styles.summaryRow}>
+                  <View style={styles.summaryCell}>
+                    <Text style={styles.summaryNum}>{summary.data.current.days_present}</Text>
+                    <Text style={styles.summaryLabel}>{t("att.daysPresent")}</Text>
+                  </View>
+                  <View style={styles.summaryCell}>
+                    <Text style={[styles.summaryNum, summary.data.current.days_flagged_pending > 0 && { color: colors.warning }]}>
+                      {summary.data.current.days_flagged_pending}
+                    </Text>
+                    <Text style={styles.summaryLabel}>{t("att.flagged")}</Text>
+                  </View>
+                  <View style={styles.summaryCell}>
+                    <Text style={styles.summaryNum}>{summary.data.current.days_late}</Text>
+                    <Text style={styles.summaryLabel}>{t("att.lateDays")}</Text>
+                  </View>
+                </View>
+                <Text style={styles.summaryPrev}>
+                  {t("att.prevMonth", { n: summary.data.previous.days_present })}
+                </Text>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={<EmptyState icon={CalendarX2} title={t("att.noRecords")} />}
         />
       )}
+      <Modal
+        visible={disputeTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDisputeTarget(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard} testID="dispute-modal">
+            <Text style={styles.modalTitle}>✋ {t("att.disputeTitle")}</Text>
+            {disputeTarget ? (
+              <Text style={styles.modalMeta}>
+                {dayjs(disputeTarget.date).format("DD/MM/YYYY")} ·{" "}
+                {formatTime(disputeTarget.punch_in_at)}
+              </Text>
+            ) : null}
+            <VoiceFieldInput value={disputeVoice} onChange={setDisputeVoice} testID="dispute-voice" />
+            <TextInput
+              testID="dispute-text-input"
+              style={styles.modalInput}
+              value={disputeText}
+              onChangeText={setDisputeText}
+              placeholder={t("att.disputeHint")}
+              placeholderTextColor={colors.muted}
+              multiline
+              maxLength={500}
+            />
+            <View style={{ flexDirection: "row", gap: spacing.md }}>
+              <View style={{ flex: 1 }}>
+                <BigButton
+                  testID="dispute-cancel"
+                  label={t("common.cancel")}
+                  variant="outline"
+                  onPress={() => setDisputeTarget(null)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <BigButton
+                  testID="dispute-send"
+                  label={t("common.submit")}
+                  loading={sending}
+                  onPress={() => void sendDispute()}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -161,4 +309,72 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chipText: { fontFamily: fonts.semiBold, fontSize: 12, color: "#FFFFFF" },
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  summaryTitle: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  summaryRow: { flexDirection: "row", gap: spacing.md },
+  summaryCell: {
+    flex: 1,
+    alignItems: "center",
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.md,
+    gap: 2,
+  },
+  summaryNum: { fontFamily: fonts.bold, fontSize: type.xl, color: colors.primary },
+  summaryLabel: { fontFamily: fonts.medium, fontSize: 12, color: colors.text, textAlign: "center" },
+  summaryPrev: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  regStatus: {
+    alignSelf: "flex-start",
+    backgroundColor: `${colors.warning}18`,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginTop: spacing.xs,
+  },
+  regStatusText: { fontFamily: fonts.bold, fontSize: 12, color: colors.warning },
+  disputeBtn: {
+    alignSelf: "flex-start",
+    borderWidth: 1.5,
+    borderColor: colors.warning,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    marginTop: spacing.xs,
+    minHeight: 32,
+    justifyContent: "center",
+  },
+  disputeBtnText: { fontFamily: fonts.bold, fontSize: 13, color: colors.warning },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: sizes.screenPadding,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  modalTitle: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  modalMeta: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    minHeight: 72,
+    fontFamily: fonts.regular,
+    fontSize: type.base,
+    color: colors.text,
+    textAlignVertical: "top",
+  },
 });

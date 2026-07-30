@@ -86,6 +86,9 @@ def run_backup_sync() -> dict:
     if settings.file_storage_mode != "s3":
         logger.info("FILE_STORAGE_MODE=local — skipping DB backup upload")
         return {"skipped": True, "reason": "local storage mode"}
+    if not settings.backup_upload_enabled:
+        logger.info("BACKUP_UPLOAD_ENABLED=0 — skipping DB backup upload (sandbox guard)")
+        return {"skipped": True, "reason": "backup upload disabled"}
 
     from app.shift_logic import now_ist
 
@@ -399,14 +402,27 @@ async def _classify_incident_async(incident_id: str) -> dict:
                         inc.photo_key, incident_id, e,
                     )
 
-            transcript = ""
+            transcript, voice_lang = "", "mr"
             if inc.voice_note_key:
                 try:
                     audio_bytes = get_storage().get(inc.voice_note_key)
                     ext = inc.voice_note_key.rsplit(".", 1)[-1] if "." in inc.voice_note_key else "m4a"
-                    transcript, _lang = await ai_core.transcribe_audio(audio_bytes, ext)
+                    transcript, voice_lang = await ai_core.transcribe_audio(audio_bytes, ext)
                 except Exception as e:
                     logger.warning("Voice transcript failed for %s: %s", incident_id, e)
+
+            # Voice-first reporting (v1.0.21): a spoken report with no typed
+            # description gets a WRITTEN description from the transcript — this
+            # covers offline-queued incidents that reach the server without
+            # on-device transcription. A typed description is never overwritten.
+            if transcript.strip() and not (inc.description or "").strip():
+                inc.description = await ai_core.describe_from_transcript(transcript, voice_lang)
+                session.add(
+                    IncidentTimeline(
+                        incident_id=inc.id, actor_id=None, event="voice_transcribed",
+                        detail_json={"transcript": transcript[:500], "language": voice_lang},
+                    )
+                )
 
             depts = (
                 await session.execute(select(Department).where(Department.is_active.is_(True)))
@@ -421,7 +437,10 @@ async def _classify_incident_async(incident_id: str) -> dict:
                 '"electrical"|"water_leakage"|"security"|"other", '
                 '"department_code": which department this incident is ABOUT (from the list), '
                 '"severity": "normal"|"high"|"critical", '
-                '"confidence": 0.0-1.0, "reason": one short English sentence}.\n'
+                '"confidence": 0.0-1.0, "reason": one short English sentence, '
+                '"reason_mr": the same assessment in ONE short natural Marathi sentence '
+                "as a factory supervisor would say it aloud on the shop floor — plain "
+                "everyday Marathi, NOT a literal word-for-word translation}.\n"
                 "critical = immediate danger to life, fire, major machine failure stopping production; "
                 "high = significant risk or damage needing urgent action; normal = routine issue."
             )
@@ -451,20 +470,88 @@ async def _classify_incident_async(incident_id: str) -> dict:
             except (TypeError, ValueError):
                 confidence = 0.5
             reason = str(result.get("reason") or "")[:300]
+            reason_mr = str(result.get("reason_mr") or "")[:300]
 
             inc.ai_suggested_category = category
             inc.ai_suggested_department = dept_code
             inc.ai_suggested_severity = severity
             inc.ai_confidence = confidence
+            inc.severity_reason_mr = reason_mr or None
             inc.ai_suggested_at = now_ist()
             inc.severity_reason = reason
             session.add(
                 IncidentTimeline(
                     incident_id=inc.id, actor_id=None, event="ai_suggestion",
                     detail_json={"category": category, "department_code": dept_code,
-                                 "severity": severity, "confidence": confidence, "reason": reason},
+                                 "severity": severity, "confidence": confidence,
+                                 "reason": reason, "reason_mr": reason_mr},
                 )
             )
+
+            # ---- v1.0.21 duplicate clustering (DISPLAY-ONLY, rules-based) ----
+            # Same zone + same category within a tunable window → group cards.
+            # Both records stay intact; managers can unlink in one tap.
+            if inc.duplicate_of is None:
+                try:
+                    from sqlalchemy import String as SAString
+                    from sqlalchemy import func as sa_func
+
+                    from app.models import FactorySettings
+
+                    s = (
+                        await session.execute(select(FactorySettings).limit(1))
+                    ).scalar_one_or_none()
+                    window_min = s.dup_window_minutes if s else 30
+                    same_zone = s.dup_same_zone if s else True
+                    same_cat = s.dup_same_category if s else True
+                    zone_ok = not same_zone or bool(inc.ble_zone)
+                    if zone_ok:
+                        cand_q = (
+                            select(Incident)
+                            .where(
+                                Incident.id != inc.id,
+                                Incident.is_demo == inc.is_demo,
+                                Incident.duplicate_of.is_(None),  # roots only — no chains
+                                Incident.status != "resolved",
+                                Incident.created_at >= inc.created_at - timedelta(minutes=window_min),
+                                Incident.created_at <= inc.created_at,
+                            )
+                            .order_by(Incident.created_at.asc())
+                            .limit(1)
+                        )
+                        if same_zone:
+                            cand_q = cand_q.where(Incident.ble_zone == inc.ble_zone)
+                        if same_cat:
+                            # category is a PG enum, ai_suggested_category a varchar
+                            cand_q = cand_q.where(
+                                sa_func.coalesce(
+                                    Incident.ai_suggested_category,
+                                    Incident.category.cast(SAString()),
+                                )
+                                == category
+                            )
+                        root = (await session.execute(cand_q)).scalar_one_or_none()
+                        if root is not None:
+                            inc.duplicate_of = root.id
+                            session.add(
+                                IncidentTimeline(
+                                    incident_id=inc.id, actor_id=None, event="duplicate_linked",
+                                    detail_json={
+                                        "root_id": str(root.id),
+                                        "rule": {
+                                            "window_minutes": window_min,
+                                            "same_zone": same_zone,
+                                            "same_category": same_cat,
+                                            "zone": inc.ble_zone,
+                                            "category": category,
+                                        },
+                                    },
+                                )
+                            )
+                            logger.info("Incident %s clustered under %s", inc.id, root.id)
+                except Exception as e:
+                    logger.warning("Duplicate clustering skipped for %s: %s", incident_id, e)
+
             await session.commit()
 
             r = _fresh_redis()
@@ -968,7 +1055,8 @@ async def _report_data(session, target_date) -> dict:
             "opened": opened,
             "resolved": resolved,
             "critical": [
-                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone}
+                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone,
+                 "assessment_mr": c.severity_reason_mr, "assessment_en": c.severity_reason}
                 for c in critical_rows
             ],
         },
@@ -990,7 +1078,8 @@ def _localize_report(data: dict, lang: str) -> dict:
             "opened": data["incidents"]["opened"],
             "resolved": data["incidents"]["resolved"],
             "critical": [
-                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone")}
+                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone"),
+                 "assessment_mr": c.get("assessment_mr"), "assessment_en": c.get("assessment_en")}
                 for c in data["incidents"]["critical"]
             ],
         },

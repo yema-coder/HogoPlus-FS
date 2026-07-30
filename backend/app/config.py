@@ -31,6 +31,8 @@ _EMPTY_USES_DEFAULT = {
     "escalation_hours": 48,
     "ai_cache_ttl": 86400,
     "backup_keep_last": 14,
+    "voice_describe_daily_cap": 20,
+    "tts_daily_cap": 30,
 }
 
 
@@ -83,10 +85,20 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_bucket: str = "hogoplus-fs"
     file_storage_mode: str = "local"  # local | s3
+    # DR safety (2026-07-30 finding): sandbox and prod share the R2 bucket and the
+    # same 4-hourly cron → identical backups/YYYY-MM-DD/HHMM.sql.gz keys, so a
+    # sandbox dump can OVERWRITE a production backup. Sandbox .env sets this to 0;
+    # production leaves it unset (default ON).
+    backup_upload_enabled: bool = True
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_region: str = "ap-south-1"
     emergent_llm_key: str = ""
+    # Production AI runs on the FACTORY'S OWN OpenAI account (dedicated billing,
+    # isolated from the Emergent universal key). When set, ALL LLM/STT/TTS calls
+    # use it; the Emergent key is only the sandbox fallback.
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"  # text/vision/chat model on the OpenAI account
     smsgatewayhub_api_key: str = ""
     smsgatewayhub_sender_id: str = ""
     smsgatewayhub_dlt_template_id: str = ""
@@ -95,6 +107,9 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_cache_dir: str = str(ROOT_DIR / ".fastembed_cache")
     ai_cache_ttl: int = 86400
+    # v1.0.21 voice features — per-user daily cost caps (cached TTS hits are free)
+    voice_describe_daily_cap: int = 20
+    tts_daily_cap: int = 30
     backup_keep_last: int = 14
     # SECURITY (Bug 1): the fixed demo OTP is accepted ONLY when this is explicitly
     # read as true from the environment — default is OFF.

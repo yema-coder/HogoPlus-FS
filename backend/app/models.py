@@ -8,12 +8,14 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     Time,
     UniqueConstraint,
     func,
+    text,
 )
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -105,6 +107,15 @@ class Employee(TimestampMixin, Base):
     )
     selfie_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reference_selfie_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # registration evidence (v1.0.20): captured once at self-registration
+    reg_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reg_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reg_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    reg_zone: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reg_inside_geofence: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    reg_device: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reg_app_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reg_face_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reference_selfie_set_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -248,6 +259,7 @@ class Incident(TimestampMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution_photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    severity_reason_mr: Mapped[str | None] = mapped_column(String(300), nullable=True)
     ai_suggested_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     ai_suggested_department: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ai_suggested_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -263,6 +275,12 @@ class Incident(TimestampMixin, Base):
     # capture time (MAC or "ibeacon:<uuid>:<major>:<minor>") + resolved zone label.
     ble_beacon_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     ble_zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # v1.0.21 duplicate clustering (DISPLAY-ONLY): points to the cluster root
+    # incident. Both records survive intact — reporters keep their own status,
+    # credit and notifications; only manager CARDS are grouped.
+    duplicate_of: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=True, index=True
+    )
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
@@ -314,6 +332,37 @@ class Attendance(TimestampMixin, Base):
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
 
+class AttendanceRegularization(TimestampMixin, Base):
+    """v1.0.21: one-tap "this punch is wrong" dispute on a flagged punch.
+    ONE open request per punch (partial unique index — no spam); the TO decides
+    with the original punch evidence alongside; decision is audited with the
+    reviewer's name and notifies the worker."""
+
+    __tablename__ = "attendance_regularizations"
+    __table_args__ = (
+        Index(
+            "uq_att_reg_open", "attendance_id",
+            unique=True, postgresql_where=text("status = 'open'"),
+        ),
+    )
+    id: Mapped[uuid.UUID] = uuid_pk()
+    attendance_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attendance.id"), nullable=False, index=True
+    )
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    text_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    voice_note_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)  # open|approved|rejected
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
+
+
 class FactorySettings(TimestampMixin, Base):
     __tablename__ = "settings"
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -324,6 +373,17 @@ class FactorySettings(TimestampMixin, Base):
     # location identity; GPS/geofence become secondary evidence and never decide
     # the punch outcome. OFF = launch BEACON-WINS ladder, byte-identical.
     beacon_first_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # v1.0.21 duplicate-incident clustering rules — tunable WITHOUT a deploy
+    # (PATCH /api/admin/settings). Display-only grouping; records never merge.
+    dup_window_minutes: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30", nullable=False
+    )
+    dup_same_zone: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    dup_same_category: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     # Wave-1 dept upgrade flags (all default OFF; demo bubble bypasses them)
     home_config_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False

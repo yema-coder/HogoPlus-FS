@@ -166,6 +166,22 @@ async def _startup():
         settings.otp_max_per_window, settings.otp_window_minutes,
         settings.otp_resend_cooldown_seconds,
     )
+    # AI cost isolation: production must run on the factory's own OpenAI account.
+    from app import ai_core as _ai_core
+
+    _key, _provider, _model = _ai_core.llm_route()
+    logger.info(
+        "AI CONFIG: llm=%s/%s stt=whisper-1 tts=%s key_source=%s",
+        _provider, _model, _ai_core.TTS_MODEL,
+        "openai-dedicated" if settings.openai_api_key
+        else ("emergent-universal-FALLBACK" if settings.emergent_llm_key else "MISSING"),
+    )
+    if not settings.openai_api_key:
+        logger.warning(
+            "OPENAI_API_KEY is not set — AI is running on the Emergent universal key "
+            "(sandbox fallback). Set OPENAI_API_KEY in production secrets for "
+            "dedicated billing and cost isolation."
+        )
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     app.state.db_seeded = None
     # Redis write probe: a read-only Upstash token must fail loudly at boot.

@@ -13,10 +13,11 @@ from sqlalchemy.types import Integer as SAInteger
 from app.audit import write_audit
 from app.config import settings
 from app.database import get_session
-from app.models import AppVersion, Department, Employee, OtpAttempt, ShiftAssignment
+from app.models import AppVersion, Department, Employee, FactorySettings, OtpAttempt, ShiftAssignment
 from app.notify import dispatcher, template
 from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
+from app.routers.attendance import _haversine_m
 from app.schemas import (
     ChangePasswordIn,
     FaceEnrollIn,
@@ -186,6 +187,7 @@ async def register(
 
     # DetectFaces gate: garbage references must never enter the system.
     # Infra failures never block registration (fail open).
+    face_count: int | None = None
     if settings.aws_access_key_id and not os.environ.get("TESTING"):
         from starlette.concurrency import run_in_threadpool
 
@@ -210,10 +212,21 @@ async def register(
 
     max_num = (
         await session.execute(
-            select(func.max(cast(Employee.emp_id, SAInteger))).where(Employee.emp_id.op("~")(r"^\d+$"))
+            # 4-digit pool only — legacy garbage ids (300312 etc) must not drive this
+            select(func.max(cast(Employee.emp_id, SAInteger))).where(Employee.emp_id.op("~")(r"^\d{1,4}$"))
         )
     ).scalar() or 0
     emp_id = f"{max_num + 1:04d}"
+
+    # v1.0.20: was the phone inside the factory geofence at registration time?
+    reg_inside: bool | None = None
+    if body.lat is not None and body.lng is not None:
+        fs = (await session.execute(select(FactorySettings))).scalars().first()
+        if fs and fs.factory_lat is not None and fs.factory_lng is not None:
+            reg_inside = (
+                _haversine_m(body.lat, body.lng, fs.factory_lat, fs.factory_lng)
+                <= (fs.radius_meters or 500)
+            )
 
     employee = Employee(
         emp_id=emp_id,
@@ -227,6 +240,14 @@ async def register(
         onboarding_status="pending_approval",
         selfie_url=f"/api/files/{body.selfie_key}",
         is_active=True,
+        reg_lat=body.lat,
+        reg_lng=body.lng,
+        reg_address=body.address,
+        reg_zone=body.zone,
+        reg_inside_geofence=reg_inside,
+        reg_device=body.device,
+        reg_app_version=body.app_version,
+        reg_face_count=face_count,
     )
     session.add(employee)
     await session.flush()

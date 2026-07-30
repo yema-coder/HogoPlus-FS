@@ -457,3 +457,12 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   live_v1019_api.py added under backend/tests (live spot-check script).
 - Flags to flip for real users when user says go: PATCH /api/admin/settings
   {home_config_enabled, vehicle_log_enabled, notif_batching_enabled}.
+
+## v1.0.21 P0 — voice-first + TTS (iteration_23 ALL PASS)
+- New: POST /ai/voice-describe (Whisper→LLM desc, cap 20/day/user), POST /ai/tts (sha256 server
+  cache + on-device mp3 cache, cap 30/day/user, cached hits free), server-side desc fill for
+  offline voice incidents, SpeakerButton on alerts/AI cards/pending, voice-first capture layout.
+- pytest 249 passed (+14 tests/test_voice_tts.py); live smoke scripts/live_voice_smoke.py;
+  testing agent iteration_23 all pass incl. fake-camera capture flow.
+- Harness note: page.type(delay=100) on otp-input worked this time; JWT-injection fallback still valid.
+- frontend/.env EXPO_PUBLIC_API_URL → preview URL (restore api.hogoplus.in before builds).

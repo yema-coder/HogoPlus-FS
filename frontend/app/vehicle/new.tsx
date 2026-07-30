@@ -8,7 +8,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { aiAnpr, createVehicleLog } from "@/src/api/endpoints";
+import { aiAnpr, createVehicleLog, lastVehicleLog, type LastVehicleLog } from "@/src/api/endpoints";
 import { startZoneSession, type ZoneSession } from "@/src/ble/zoneSession";
 import { BigButton } from "@/src/components/BigButton";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
@@ -17,6 +17,7 @@ import { showToast } from "@/src/components/Toast";
 import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, radius, shadow, sizes, spacing, type } from "@/src/theme/tokens";
+import { timeAgo } from "@/src/utils/format";
 
 const TYPES = [
   { key: "truck", emoji: "🚛" },
@@ -49,6 +50,29 @@ export default function VehicleNewScreen() {
   const [scanning, setScanning] = useState(false);
   const [zone, setZone] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // v1.0.21 same-as-last: copies everything EXCEPT the plate (record identity)
+  const [lastLog, setLastLog] = useState<LastVehicleLog | null>(null);
+  const [copiedNote, setCopiedNote] = useState(false);
+
+  useEffect(() => {
+    void lastVehicleLog()
+      .then((r) => setLastLog(r.log))
+      .catch(() => undefined); // offline — quick-entry simply not offered
+  }, []);
+
+  const applySameAsLast = () => {
+    if (!lastLog) return;
+    setDirection(lastLog.direction);
+    setVehicleType(lastLog.vehicle_type);
+    setDriverName(lastLog.driver_name ?? "");
+    if (lastLog.purpose) {
+      const key = PURPOSES.find((p) => t(`veh.purpose.${p}`, { lng: "en" }) === lastLog.purpose);
+      setPurpose(key ?? "other");
+    }
+    // NEVER the plate — it must be re-entered or explicitly confirmed below
+    setCopiedNote(true);
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
 
   // gate zone auto-tag: pre-warm the BLE scan the moment the screen opens
   const sessionRef = useRef<ZoneSession | null>(null);
@@ -56,7 +80,7 @@ export default function VehicleNewScreen() {
     const session = startZoneSession();
     sessionRef.current = session;
     void session.waitForHit(6000).then((hit) => {
-      if (hit?.zone) setZone(hit.zone);
+      if (hit) setZone(session.getZone());
     });
     return () => session.stop();
   }, []);
@@ -142,6 +166,24 @@ export default function VehicleNewScreen() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
+        {lastLog ? (
+          <Pressable
+            testID="vehicle-same-as-last"
+            accessibilityRole="button"
+            onPress={applySameAsLast}
+            style={({ pressed }) => [styles.sameAsLastPill, { opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={styles.sameAsLastText}>
+              ⏮ {t("veh.sameAsLast")} · {timeAgo(lastLog.logged_at)}
+            </Text>
+          </Pressable>
+        ) : null}
+        {copiedNote ? (
+          <Text style={styles.copiedNote} testID="vehicle-copied-note">
+            ✓ {t("veh.copiedNote")}
+          </Text>
+        ) : null}
+
         {/* IN / OUT — giant glove-friendly toggle */}
         <View style={styles.dirRow}>
           <Pressable
@@ -196,6 +238,22 @@ export default function VehicleNewScreen() {
           maxLength={15}
         />
         {anprUsed ? <Text style={styles.anprChip}>✓ {t("veh.anprOk")}</Text> : null}
+        {lastLog && !plate ? (
+          <Pressable
+            testID="vehicle-confirm-last-plate"
+            accessibilityRole="button"
+            onPress={() => {
+              // EXPLICIT confirmation of the previous plate — never auto-filled
+              setPlate(lastLog.plate);
+              setAnprUsed(false);
+            }}
+            style={({ pressed }) => [styles.lastPlateChip, { opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={styles.lastPlateText}>
+              {t("veh.confirmPlate", { plate: lastLog.plate })}
+            </Text>
+          </Pressable>
+        ) : null}
 
         {/* Vehicle type — icon pick-list */}
         <Text style={styles.sectionTitle}>{t("veh.typeTitle")}</Text>
@@ -278,6 +336,36 @@ export default function VehicleNewScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  sameAsLastPill: {
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignSelf: "flex-start",
+    marginBottom: spacing.sm,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  sameAsLastText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.primary },
+  copiedNote: {
+    fontFamily: fonts.semiBold,
+    fontSize: type.sm,
+    color: colors.success,
+    marginBottom: spacing.sm,
+  },
+  lastPlateChip: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: "dashed",
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignSelf: "flex-start",
+    marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  lastPlateText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.primary },
   scroll: { padding: sizes.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
   dirRow: { flexDirection: "row", gap: spacing.md },
   dirBtn: {

@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +11,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, uploadFile } from "@/src/api/client";
-import { aiGaugeRead, submitForm } from "@/src/api/endpoints";
+import { aiGaugeRead, lastFormValues, submitForm } from "@/src/api/endpoints";
 import type { FormDefinitionItem, FormFieldDef } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
@@ -18,6 +19,7 @@ import { FieldWrapper } from "@/src/forms/FieldWrapper";
 import { VoiceFillButton } from "@/src/forms/VoiceFillButton";
 import { clearDraft, isLocalUri, loadDraft, saveDraft } from "@/src/forms/draft";
 import { reverseGeocode } from "@/src/utils/geocode";
+import { timeAgo } from "@/src/utils/format";
 import { AnprTextInput } from "@/src/forms/fields/AnprTextInput";
 import { DateTimeFieldInput } from "@/src/forms/fields/DateTimeFieldInput";
 import { GpsFieldInput, type GpsValue } from "@/src/forms/fields/GpsFieldInput";
@@ -29,7 +31,7 @@ import { ToggleFieldInput } from "@/src/forms/fields/ToggleFieldInput";
 import { VoiceFieldInput } from "@/src/forms/fields/VoiceFieldInput";
 import { tri } from "@/src/i18n";
 import { useOutboxStore, type OutboxFile } from "@/src/offline/outbox";
-import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
+import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
 interface Props {
   definition: FormDefinitionItem;
@@ -51,6 +53,19 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [aiFilled, setAiFilled] = useState<Record<string, number | true>>({});
   const [aiLoading, setAiLoading] = useState<Record<string, boolean>>({});
+  // v1.0.21 same-as-last: my previous submission offered as a one-tap prefill
+  const [copied, setCopied] = useState<Record<string, true>>({});
+  const [lastVals, setLastVals] = useState<{ data: Record<string, unknown>; at: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    void lastFormValues(definition.id)
+      .then((r) => {
+        if (r.data_json && r.created_at) setLastVals({ data: r.data_json, at: r.created_at });
+      })
+      .catch(() => undefined); // offline / none — pill simply doesn't show
+  }, [definition.id]);
   const scrollRef = useRef<ScrollView>(null);
   const positions = useRef<Record<string, number>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +110,33 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
       delete next[key];
       return next;
     });
+    // …and the "copied from last time" marker
+    setCopied((prev) => {
+      if (prev[key] === undefined) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /** Copy every SIMPLE value from my previous submission — never photos,
+   * voice notes or GPS (evidence must be fresh). Copied fields are marked so
+   * the worker notices them before submitting. */
+  const COPYABLE = new Set(["text", "number", "select", "toggle", "datetime", "date", "time"]);
+  const applySameAsLast = () => {
+    if (!lastVals) return;
+    const next = { ...values };
+    const marks: Record<string, true> = {};
+    for (const f of fields) {
+      if (!COPYABLE.has(f.type) || f.ai_hook === "anpr") continue; // plates re-entered, always
+      const v = lastVals.data[f.key];
+      if (v === undefined || v === null || v === "") continue;
+      next[f.key] = v;
+      marks[f.key] = true;
+    }
+    setValues(next);
+    setCopied(marks);
+    setLastVals(null); // pill disappears once applied
   };
 
   const applyAiValue = (key: string, v: unknown, confidence?: number) => {
@@ -377,6 +419,18 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
+        {lastVals ? (
+          <Pressable
+            testID="same-as-last-pill"
+            accessibilityRole="button"
+            onPress={applySameAsLast}
+            style={({ pressed }) => [styles.sameAsLastPill, { opacity: pressed ? 0.8 : 1 }]}
+          >
+            <Text style={styles.sameAsLastText}>
+              ⏮ {t("forms.sameAsLast")} · {timeAgo(lastVals.at)}
+            </Text>
+          </Pressable>
+        ) : null}
         {fields.map((f) => (
           <FieldWrapper
             key={f.key}
@@ -384,6 +438,7 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
             error={errors[f.key]}
             aiFilled={aiFilled[f.key]}
             aiLoading={aiLoading[f.key]}
+            copied={copied[f.key]}
             onLayout={(e) => {
               positions.current[f.key] = e.nativeEvent.layout.y;
             }}
@@ -420,6 +475,17 @@ export function FormRenderer({ definition, onSubmitted }: Props) {
 
 const styles = StyleSheet.create({
   scroll: { padding: sizes.screenPadding, paddingBottom: spacing.xxl },
+  sameAsLastPill: {
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    alignSelf: "flex-start",
+    marginBottom: spacing.md,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  sameAsLastText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.primary },
   voiceHint: {
     fontFamily: fonts.semiBold,
     fontSize: type.sm,

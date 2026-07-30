@@ -12,6 +12,7 @@ import {
   MapPinOff,
   Play,
   Settings,
+  Sparkles,
   Video as VideoIcon,
   X,
 } from "lucide-react-native";
@@ -32,8 +33,8 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
-import { ApiError, uploadFile } from "@/src/api/client";
-import { createIncident, listDepartments } from "@/src/api/endpoints";
+import { ApiError, localizedDetail, uploadFile } from "@/src/api/client";
+import { aiVoiceDescribe, createIncident, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
@@ -124,6 +125,10 @@ function IncidentCaptureInner() {
   };
   const [desc, setDesc] = useState("");
   const [voiceUri, setVoiceUri] = useState<string | undefined>(undefined);
+  // v1.0.21 voice-first: record → upload → Whisper STT → AI writes the description
+  const [transcribing, setTranscribing] = useState(false);
+  const [aiWrote, setAiWrote] = useState(false);
+  const voiceKeyRef = useRef<string | null>(null);
   const [deptModal, setDeptModal] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -259,6 +264,40 @@ function IncidentCaptureInner() {
     return burnInSafe(watermarkRef, shot.uri, shot.width, shot.height);
   };
 
+  /** Voice-first: transcribe as soon as a note is recorded. NEVER a dead end —
+   * any failure keeps the note attached (the server writes the description
+   * after submit) and typing stays available throughout. */
+  const transcribeVoice = async (uri: string) => {
+    if (!online) {
+      showToast(t("voice.willTranscribeLater"), "info");
+      return;
+    }
+    setTranscribing(true);
+    try {
+      const up = await uploadFile(uri, "voice_note.m4a");
+      voiceKeyRef.current = up.key;
+      const res = await aiVoiceDescribe(up.key);
+      if (res.description) {
+        setDesc(res.description);
+        setAiWrote(true);
+      } else {
+        showToast(t("voice.nothingHeard"), "info");
+      }
+    } catch (e) {
+      const msg = localizedDetail(e, i18n.language || "en");
+      const isCap = e instanceof ApiError && e.status === 429;
+      showToast(msg ?? t("voice.willTranscribeLater"), isCap ? "error" : "info");
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
+  const onVoiceChange = (uri: string | undefined) => {
+    setVoiceUri(uri);
+    voiceKeyRef.current = null;
+    if (uri) void transcribeVoice(uri);
+  };
+
   const submit = async () => {
     if ((!shot && !videoUri) || submitting) return;
     setSubmitting(true);
@@ -272,6 +311,8 @@ function IncidentCaptureInner() {
       severity: "normal",
       ...beaconPayload(bleHitRef.current),
     };
+    // voice note already uploaded during transcription — reuse the key
+    if (voiceKeyRef.current) payload.voice_note_key = voiceKeyRef.current;
 
     // ---- video path (network required; no outbox for videos) ----
     if (videoUri) {
@@ -287,7 +328,7 @@ function IncidentCaptureInner() {
         // size check best-effort; server enforces the 40MB cap anyway
       }
       try {
-        if (voiceUri) {
+        if (voiceUri && !voiceKeyRef.current) {
           const audio = await uploadFile(voiceUri, "voice_note.m4a").catch(() => null);
           if (audio) payload.voice_note_key = audio.key;
         }
@@ -328,9 +369,10 @@ function IncidentCaptureInner() {
       photoUri: finalUri,
       photoName: "incident.jpg",
       photoField: "photo_key",
-      files: voiceUri
-        ? [{ field: "voice_note_key", uri: voiceUri, name: "voice_note.m4a", kind: "audio" }]
-        : undefined,
+      files:
+        voiceUri && !voiceKeyRef.current
+          ? [{ field: "voice_note_key", uri: voiceUri, name: "voice_note.m4a", kind: "audio" }]
+          : undefined,
     });
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     router.replace({ pathname: "/incident/success", params: { oid } });
@@ -636,18 +678,37 @@ function IncidentCaptureInner() {
             <ChevronDown size={22} color={colors.muted} strokeWidth={2.4} />
           </Pressable>
 
+          {/* v1.0.21 voice-first: speaking is the PRIMARY input; typing is optional */}
+          <View style={styles.voiceHeadRow}>
+            <Text style={styles.voiceHeadText}>🎙 {t("voice.speakFirst")}</Text>
+            {aiWrote ? (
+              <View style={styles.aiChip} testID="voice-ai-chip">
+                <Sparkles size={14} color={colors.primary} strokeWidth={2.4} />
+                <Text style={styles.aiChipText}>AI</Text>
+              </View>
+            ) : null}
+          </View>
+          <VoiceFieldInput value={voiceUri} onChange={onVoiceChange} testID="incident-voice-note" />
+          {transcribing ? (
+            <View style={styles.transcribingRow} testID="voice-transcribing">
+              <EyeLoader size={16} />
+              <Text style={styles.transcribingText}>{t("voice.transcribing")}</Text>
+            </View>
+          ) : null}
+
           <TextInput
             testID="incident-desc-input"
             style={styles.descInput}
             value={desc}
-            onChangeText={setDesc}
-            placeholder={t("incident.descriptionHint")}
+            onChangeText={(v) => {
+              setDesc(v);
+              setAiWrote(false); // manual edit clears the AI chip — never locks
+            }}
+            placeholder={t("voice.typeOptional")}
             placeholderTextColor={colors.muted}
             multiline
             maxLength={500}
           />
-
-          <VoiceFieldInput value={voiceUri} onChange={setVoiceUri} testID="incident-voice-note" />
 
           <View style={styles.actions}>
             <BigButton
@@ -964,6 +1025,30 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   actions: { flexDirection: "row", gap: spacing.md, marginTop: spacing.xs },
+  voiceHeadRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
+  },
+  voiceHeadText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  aiChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+  },
+  aiChipText: { fontFamily: fonts.bold, fontSize: 12, color: colors.primary },
+  transcribingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 24,
+  },
+  transcribingText: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.primary },
   modalBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",

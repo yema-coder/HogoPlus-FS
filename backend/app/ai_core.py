@@ -18,9 +18,27 @@ from app.shift_logic import now_ist
 
 logger = logging.getLogger("hogo.ai")
 
-VISION_PROVIDER, VISION_MODEL = "gemini", "gemini-2.5-flash"
-TEXT_PROVIDER, TEXT_MODEL = "gemini", "gemini-2.5-flash"
-CHAT_PROVIDER, CHAT_MODEL = "gemini", "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
+
+
+def llm_route() -> tuple[str, str, str]:
+    """(api_key, provider, model) for ALL text/vision/chat LLM calls.
+
+    Production: the factory's own OpenAI account (OPENAI_API_KEY) — dedicated
+    billing and per-feature cost visibility, fully isolated from the Emergent
+    universal key. Fallback (sandbox/dev only): Emergent key + Gemini."""
+    if settings.openai_api_key:
+        return settings.openai_api_key, "openai", settings.openai_model
+    return settings.emergent_llm_key, "gemini", GEMINI_MODEL
+
+
+def speech_key() -> str:
+    """Whisper STT + TTS key: the factory's OpenAI account first, Emergent fallback."""
+    return settings.openai_api_key or settings.emergent_llm_key
+
+
+def active_model() -> str:
+    return llm_route()[2]
 
 
 class AiError(Exception):
@@ -49,13 +67,14 @@ async def vision_json(prompt: str, image_bytes: bytes) -> dict:
     """Temperature-0 vision extraction returning parsed JSON."""
     from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"vision-{uuid.uuid4().hex[:12]}",
             system_message="You are a precise visual extraction engine. Respond ONLY with valid JSON, no prose.",
         )
-        .with_model(VISION_PROVIDER, VISION_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0)
     )
     msg = UserMessage(
@@ -70,13 +89,14 @@ async def text_json(system: str, prompt: str) -> dict:
     """Temperature-0 text task returning parsed JSON."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"text-{uuid.uuid4().hex[:12]}",
             system_message=system,
         )
-        .with_model(TEXT_PROVIDER, TEXT_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0)
     )
     raw = await chat.send_message(UserMessage(text=prompt))
@@ -87,13 +107,14 @@ async def chat_answer(system: str, prompt: str) -> str:
     """Grounded RAG answer — plain text."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"chat-{uuid.uuid4().hex[:12]}",
             system_message=system,
         )
-        .with_model(CHAT_PROVIDER, CHAT_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0.2)
     )
     return (await chat.send_message(UserMessage(text=prompt))).strip()
@@ -106,7 +127,7 @@ async def transcribe_audio(audio_bytes: bytes, ext: str) -> tuple[str, str]:
     """Whisper STT with auto language detection → (transcript, lang_code mr/hi/en)."""
     from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
 
-    stt = OpenAISpeechToText(api_key=settings.emergent_llm_key)
+    stt = OpenAISpeechToText(api_key=speech_key())
     suffix = f".{ext}" if not ext.startswith(".") else ext
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(audio_bytes)
@@ -129,6 +150,58 @@ async def transcribe_audio(audio_bytes: bytes, ext: str) -> tuple[str, str]:
     if lang not in ("mr", "hi", "en"):
         lang = "hi"
     return transcript, lang
+
+
+# ---------------- Voice-first + Read-aloud (v1.0.21) ----------------
+
+TTS_MODEL, TTS_VOICE = "tts-1", "alloy"
+
+
+async def synthesize_speech(text: str) -> bytes:
+    """OpenAI TTS via Universal Key → mp3 bytes (voices are multilingual —
+    Marathi/Hindi Devanagari text is spoken natively)."""
+    from emergentintegrations.llm.openai.text_to_speech import OpenAITextToSpeech
+
+    tts = OpenAITextToSpeech(api_key=speech_key())
+    return await tts.generate_speech(
+        text=text, model=TTS_MODEL, voice=TTS_VOICE, response_format="mp3"
+    )
+
+
+async def describe_from_transcript(transcript: str, lang: str) -> str:
+    """LLM rewrites a spoken factory report into a short WRITTEN incident
+    description in the SPEAKER'S language. Never fails — falls back to the
+    raw transcript so a voice report is never lost."""
+    lang_name = {"mr": "Marathi", "hi": "Hindi", "en": "English"}.get(lang, "Marathi")
+    try:
+        result = await text_json(
+            "You turn spoken factory-floor incident reports into short written "
+            "descriptions. Respond ONLY with valid JSON.",
+            f'Spoken report ({lang_name}): "{transcript}"\n\n'
+            f"Write a clear 1-3 sentence incident description in {lang_name}, keeping "
+            "every fact (machine names, places, numbers) and removing filler words. "
+            'Respond {"description": string}.',
+        )
+        desc = str(result.get("description") or "").strip()
+        return desc[:500] if desc else transcript[:500]
+    except Exception as e:
+        logger.warning("describe_from_transcript failed, using raw transcript: %s", e)
+        return transcript[:500]
+
+
+def _user_cap_key(kind: str, employee_id) -> str:
+    return f"ai:usercap:{kind}:{now_ist().date().isoformat()}:{employee_id}"
+
+
+async def user_daily_count(kind: str, employee_id) -> int:
+    return int(await redis_client.get(_user_cap_key(kind, employee_id)) or 0)
+
+
+async def incr_user_daily(kind: str, employee_id) -> None:
+    key = _user_cap_key(kind, employee_id)
+    n = await redis_client.incr(key)
+    if n == 1:
+        await redis_client.expire(key, 2 * 86400)
 
 
 # ---------------- Redis cache + usage counters ----------------

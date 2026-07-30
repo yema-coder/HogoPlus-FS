@@ -4,6 +4,7 @@ Design contract: every endpoint returns {value(s), confidence, model} and NEVER
 blocks a user-facing submit — AI enriches, humans confirm. Identical calls are
 cached 24h by (endpoint, photo_key).
 """
+import hashlib
 import logging
 import re
 import uuid
@@ -15,9 +16,11 @@ from starlette.concurrency import run_in_threadpool
 
 from app import ai_core
 from app.aws import RekognitionUnavailable, detect_text
+from app.config import settings
 from app.database import get_session
 from app.models import ChatMessage, Employee, FormDefinition, SopChunk, SopDoc
-from app.schemas import AnprIn, ChatIn, GaugeReadIn, VoiceFillIn
+from app.redis_client import redis_client
+from app.schemas import AnprIn, ChatIn, GaugeReadIn, TtsIn, VoiceDescribeIn, VoiceFillIn
 from app.security import get_approved_employee
 from app.storage import get_storage
 
@@ -94,7 +97,7 @@ async def anpr(
         "confidence": round(confidence, 3) if valid else 0.0,
         "valid": valid,
         "source": source if valid else None,
-        "model": ai_core.VISION_MODEL,
+        "model": ai_core.active_model(),
     }
     if valid:
         await ai_core.cache_set("anpr", body.photo_key, payload)
@@ -131,7 +134,7 @@ async def gauge_read(
             "value": value,
             "unit": unit,
             "confidence": round(confidence, 3),
-            "model": ai_core.VISION_MODEL,
+            "model": ai_core.active_model(),
         }
         if value is not None:
             await ai_core.cache_set("gauge_read", body.photo_key, payload)
@@ -219,8 +222,89 @@ async def voice_fill(
         "transcript": transcript,
         "language": language,
         "fields": fields,
-        "model": ai_core.TEXT_MODEL,
+        "model": ai_core.active_model(),
     }
+
+
+# ---------------- Voice-first reporting + Read-aloud TTS (v1.0.21) ----------------
+
+VOICE_CAP_DETAIL = {
+    "code": "voice_cap_reached",
+    "en": "Daily voice limit reached — please type your report instead.",
+    "hi": "आज की वॉयस सीमा पूरी हुई — कृपया अपनी रिपोर्ट टाइप करें।",
+    "mr": "आजची व्हॉइस मर्यादा संपली — कृपया तुमची तक्रार टाइप करा.",
+}
+TTS_CAP_DETAIL = {
+    "code": "tts_cap_reached",
+    "en": "Daily listening limit reached. Already-played audio still works.",
+    "hi": "आज की सुनने की सीमा पूरी हुई। पहले सुना ऑडियो अभी भी चलेगा।",
+    "mr": "आजची ऐकण्याची मर्यादा संपली. आधी ऐकलेला आवाज अजूनही चालेल.",
+}
+TTS_KEY_TTL = 30 * 86400  # text-hash → audio-key mapping kept a month, refreshed on access
+
+
+@router.post("/voice-describe")
+async def voice_describe(
+    body: VoiceDescribeIn,
+    employee: Employee = Depends(get_approved_employee),
+):
+    """Voice-first reporting: Whisper STT → LLM writes a short incident
+    description in the speaker's language. Typing always remains the fallback —
+    the client treats ANY error here as 'keep the voice note attached, the
+    server transcribes after submit'. Never a dead end."""
+    if (
+        await ai_core.user_daily_count("voice_describe", employee.id)
+        >= settings.voice_describe_daily_cap
+    ):
+        raise HTTPException(status_code=429, detail=VOICE_CAP_DETAIL)
+    audio = await run_in_threadpool(_get_bytes, body.audio_key)
+    ext = body.audio_key.rsplit(".", 1)[-1] if "." in body.audio_key else "m4a"
+    try:
+        transcript, language = await ai_core.transcribe_audio(audio, ext)
+    except Exception as e:
+        logger.warning("voice-describe STT failed: %s", e)
+        raise HTTPException(status_code=502, detail="Transcription failed")
+    await ai_core.incr_user_daily("voice_describe", employee.id)
+    await ai_core.incr_usage("voice_describe", employee.is_demo)
+    description = ""
+    if transcript.strip():
+        description = await ai_core.describe_from_transcript(transcript, language)
+    return {
+        "transcript": transcript,
+        "description": description,
+        "language": language,
+        "model": ai_core.active_model(),
+    }
+
+
+@router.post("/tts")
+async def tts(
+    body: TtsIn,
+    employee: Employee = Depends(get_approved_employee),
+):
+    """Read-aloud: generated audio is keyed by sha256(text) — the same sentence
+    is never synthesized twice (cost), and cache hits don't consume the cap."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Empty text")
+    text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    map_key = f"tts:key:{text_hash}"
+    cached_key = await redis_client.get(map_key)
+    if cached_key:
+        await redis_client.expire(map_key, TTS_KEY_TTL)
+        return {"key": cached_key, "url": f"/api/files/{cached_key}", "cached": True}
+    if await ai_core.user_daily_count("tts", employee.id) >= settings.tts_daily_cap:
+        raise HTTPException(status_code=429, detail=TTS_CAP_DETAIL)
+    try:
+        audio = await ai_core.synthesize_speech(text)
+    except Exception as e:
+        logger.warning("TTS generation failed: %s", e)
+        raise HTTPException(status_code=502, detail="Speech generation failed")
+    key = await get_storage().save(audio, "mp3")
+    await redis_client.set(map_key, key, ex=TTS_KEY_TTL)
+    await ai_core.incr_user_daily("tts", employee.id)
+    await ai_core.incr_usage("tts", employee.is_demo)
+    return {"key": key, "url": f"/api/files/{key}", "cached": False}
 
 
 @router.post("/chat")
@@ -321,5 +405,5 @@ async def sop_chat(
         "conversation_id": str(conversation_id),
         "answer": answer,
         "citations": citations,
-        "model": ai_core.CHAT_MODEL,
+        "model": ai_core.active_model(),
     }

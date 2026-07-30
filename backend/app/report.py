@@ -173,6 +173,17 @@ def generate_report_pdf(data: dict, lang: str) -> bytes:
             zone = f" — 📍 {c['zone']}" if c.get("zone") else ""
             pdf.cell(0, 7, f"• {c['category']} — {c['dept']}{zone}")
             pdf.ln(7)
+            # bilingual AI assessment — Marathi first, English second (v1.0.20)
+            if c.get("assessment_mr") or c.get("assessment_en"):
+                pdf.set_font("NotoDeva", "", 9)
+                pdf.set_text_color(120, 116, 105)
+                if c.get("assessment_mr"):
+                    pdf.multi_cell(0, 5.5, f"    {c['assessment_mr']}")
+                if c.get("assessment_en"):
+                    pdf.multi_cell(0, 5.5, f"    {c['assessment_en']}")
+                pdf.set_font("NotoDeva", "", 10)
+                pdf.set_text_color(40, 37, 29)
+                pdf.ln(1)
     else:
         pdf.cell(0, 7, t["none"])
         pdf.ln(7)

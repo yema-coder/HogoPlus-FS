@@ -51,6 +51,14 @@ class RegisterIn(BaseModel):
     phone: str = Field(pattern=PHONE_REGEX)
     full_name: str = Field(min_length=2, max_length=200)
     selfie_key: str = Field(min_length=1)
+    # v1.0.20 registration evidence for the approver — all optional (registration
+    # must never block on missing permissions/sensors)
+    lat: float | None = None
+    lng: float | None = None
+    address: str | None = Field(default=None, max_length=300)
+    zone: str | None = Field(default=None, max_length=120)
+    device: str | None = Field(default=None, max_length=120)
+    app_version: str | None = Field(default=None, max_length=20)
 
 
 class ApproveRegistrationIn(BaseModel):
@@ -229,6 +237,19 @@ class SettingsPatchIn(BaseModel):
     home_config_enabled: bool | None = None
     vehicle_log_enabled: bool | None = None
     notif_batching_enabled: bool | None = None
+    dup_window_minutes: int | None = Field(default=None, ge=1, le=1440)
+    dup_same_zone: bool | None = None
+    dup_same_category: bool | None = None
+
+
+class RegularizeIn(BaseModel):
+    text_note: str | None = Field(default=None, max_length=500)
+    voice_note_key: str | None = Field(default=None, max_length=500)
+
+
+class RegularizeDecideIn(BaseModel):
+    action: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=500)
 
 
 class EmployeePatchIn(BaseModel):
@@ -335,6 +356,14 @@ class GaugeReadIn(BaseModel):
 class VoiceFillIn(BaseModel):
     audio_key: str = Field(min_length=1, max_length=500)
     form_definition_id: uuid.UUID
+
+
+class VoiceDescribeIn(BaseModel):
+    audio_key: str = Field(min_length=1, max_length=500)
+
+
+class TtsIn(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
 
 
 class ChatIn(BaseModel):

@@ -10,6 +10,7 @@ import type { NotificationItem, NotificationList } from "@/src/api/types";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
 import { useAuthStore } from "@/src/stores/authStore";
@@ -65,27 +66,30 @@ export default function AlertsScreen() {
   const renderRow = ({ item }: { item: NotificationItem }) => {
     const isRead = item.is_read || readIds.has(item.id);
     return (
-      <Pressable
-        testID={`notification-row-${item.id}`}
-        accessibilityRole="button"
-        onPress={() => open(item)}
-        style={({ pressed }) => [
-          styles.row,
-          !isRead && styles.rowUnread,
-          { opacity: pressed ? 0.85 : 1 },
-        ]}
-      >
-        {!isRead ? <View style={styles.dot} testID={`notification-unread-dot-${item.id}`} /> : <View style={styles.dotSpace} />}
-        <View style={styles.body}>
-          <Text style={[styles.title, !isRead && styles.titleUnread]} numberOfLines={1}>
-            {tri(item as unknown as Record<string, unknown>, "title")}
-          </Text>
-          <Text style={styles.text} numberOfLines={2}>
-            {tri(item as unknown as Record<string, unknown>, "body")}
-          </Text>
-          <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
-        </View>
-      </Pressable>
+      // speaker is a SIBLING of the row pressable (nested <button> is invalid on web)
+      <View style={[styles.row, !isRead && styles.rowUnread]}>
+        <Pressable
+          testID={`notification-row-${item.id}`}
+          accessibilityRole="button"
+          onPress={() => open(item)}
+          style={({ pressed }) => [styles.rowPress, { opacity: pressed ? 0.85 : 1 }]}
+        >
+          {!isRead ? <View style={styles.dot} testID={`notification-unread-dot-${item.id}`} /> : <View style={styles.dotSpace} />}
+          <View style={styles.body}>
+            <Text style={[styles.title, !isRead && styles.titleUnread]} numberOfLines={1}>
+              {tri(item as unknown as Record<string, unknown>, "title")}
+            </Text>
+            <Text style={styles.text} numberOfLines={2}>
+              {tri(item as unknown as Record<string, unknown>, "body")}
+            </Text>
+            <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
+          </View>
+        </Pressable>
+        <SpeakerButton
+          text={`${tri(item as unknown as Record<string, unknown>, "title")}. ${tri(item as unknown as Record<string, unknown>, "body")}`}
+          testID={`notification-tts-${item.id}`}
+        />
+      </View>
     );
   };
 
@@ -120,7 +124,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.lg,
+    alignItems: "center",
   },
+  rowPress: { flex: 1, flexDirection: "row", gap: spacing.sm },
   rowUnread: { borderColor: colors.primary, borderWidth: 2 },
   dot: {
     width: 10,

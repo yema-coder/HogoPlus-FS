@@ -988,3 +988,122 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - NOTE: sandbox local test Postgres/Redis sidecars (127.0.0.1:5432/6379) went DOWN mid-session
   (pod-level; no binaries in container) — pytest suite CANNOT run until sidecars return.
   Preview backend uses NEON directly (backend/.env) and is healthy.
+
+## v1.0.20 batch (fork session)
+- Built: (1) registration approval evidence — migration 0014 (employees.reg_lat/lng/address/
+  zone/inside_geofence/device/app_version/face_count + incidents.severity_reason_mr), register
+  stores context from app (acquireGps+reverseGeocode+expo-device), enriched
+  /admin/employees/pending + /dashboard/pending-registrations + /admin/employees/{id}/history;
+  mobile approvals evidence card + MapPreview (OSM tile, no key) + duplicate-name warnings
+  (difflib >=0.82); webdash Approvals pending-registrations card. (2) Bilingual AI assessment:
+  reason_mr from classifier, Marathi-first in app detail, webdash feed/modal, notifications,
+  nightly PDF. (3) Keyboard audit doc (all 17 surfaces already RNKC — no code gaps).
+  (4) UX simplification + feature proposals docs AWAITING USER APPROVAL (no code).
+- app.json 1.0.20/10020. Webdash rebuilt into backend/webdash_dist.
+- TESTING CONSTRAINT: local test PG/Redis sidecars still DOWN; Neon now READ-ONLY (RDS
+  migration executed by user — sandbox preview backend must NOT be restarted until its
+  DATABASE_URL points somewhere writable AND alembic 0014 applied; current running process
+  still has pre-0014 models so it stays healthy). Verified: imports, tsc (new files clean),
+  eslint, webdash build, expo bundle smoke, §C artifacts. tests/test_registration_evidence.py
+  written but NOT RUN — run when test DB returns.
+- USER DEPLOY STEPS (EC2): git pull; docker compose up -d --build backend;
+  docker exec hogoplus-backend alembic upgrade head (0014); APK build v1.0.20 via Publish.
+
+## v1.0.21 P0 — Voice-first reporting + Read-aloud TTS (2026-06 fork) ✅ CHECKPOINT 1
+- BACKEND: POST /api/ai/voice-describe {audio_key} → Whisper STT → LLM writes 1-3 sentence
+  description in SPEAKER's language (ai_core.describe_from_transcript; LLM failure falls back to
+  raw transcript — never a dead end). Per-user daily cap settings.voice_describe_daily_cap=20
+  (redis ai:usercap:voice_describe:{date}:{emp_id}) → trilingual 429 voice_cap_reached.
+- POST /api/ai/tts {text ≤600} → OpenAI tts-1/alloy via emergentintegrations → mp3 to storage;
+  server cache redis tts:key:{sha256(text)} → key (TTL 30d, refreshed) — same text NEVER
+  synthesized twice; cached hits bypass cap. Cap settings.tts_daily_cap=30 → trilingual 429.
+- tasks._classify_impl: transcript now also FILLS inc.description when empty (offline-queued voice
+  reports) + timeline event voice_transcribed {transcript, language}. Typed desc never overwritten.
+- MOBILE: capture.tsx voice-first layout (🎙 speakFirst header + VoiceFieldInput ABOVE the desc
+  input, typing optional); onVoiceChange → upload + /ai/voice-describe → desc filled + AI chip
+  (manual edit clears); voiceKeyRef reuses the uploaded key at submit (no double upload); offline/
+  failure → toast willTranscribeLater, note still queues via outbox. SpeakerButton component
+  (Volume2 icon 44px, loading EyeLoader, playing = stop square; expo-audio player) + ttsCache.ts
+  (AsyncStorage hogo.tts.map hash→local mp3 in cacheDirectory/tts — OFFLINE playback of anything
+  played before; 200-entry LRU-ish trim). Placements: every Alerts row (sibling of row pressable —
+  nested <button> web fix), incident detail AI assessment card (mr for mr/hi users, en for en),
+  success screen AI suggestion card, registration pending screen. i18n voice.* +8 keys ×3 (495 parity).
+- TESTS: tests/test_voice_tts.py (14: caps trilingual/per-user, cache-bypasses-cap, STT 502, LLM
+  fallback, 404/401/422, offline description fill + typed-desc-not-overwritten). Suite 249 passed
+  (1 pre-existing order-dependent flake test_attach_beacon_iter20 passes standalone/rerun).
+- LIVE EVIDENCE: scripts/live_voice_smoke.py — gTTS Marathi + 10dB machine noise → REAL Whisper
+  transcript (semantically complete, 47% exact-word due to orthographic variants पम्प/पंप etc.) →
+  REAL Gemini description "पम्प नम्बर 2 जवळ पाणी गळत आहे आणि मोटरमधून जळका वास येत आहे."; REAL TTS
+  4.2s mp3 + cached=true second call. testing_agent iteration_23 ALL PASS (incl. fake-camera
+  voice-first layout + submit regression + EN sweep).
+- Fixed 3 pre-existing tsc errors: type.xs token added (12), vehicle/new.tsx zone chip used
+  non-existent hit.zone (real bug → session.getZone()), result.tsx storage.getItem 2-arg. tsc CLEAN.
+- ENV: frontend/.env EXPO_PUBLIC_API_URL switched to preview URL for sandbox testing —
+  RESTORE to https://api.hogoplus.in before any build (release builds pin prod anyway).
+- P1 (My Month, Regularization, Same-as-last, Duplicate clustering) NOT started — next checkpoint.
+
+## v1.0.21 — Dedicated OPENAI_API_KEY for production AI (owner mandate) ✅
+- config.py: openai_api_key (env OPENAI_API_KEY) + openai_model (env OPENAI_MODEL, default
+  gpt-4o-mini). ai_core.llm_route() = single choke point: key set → (user key, "openai",
+  openai_model) DIRECT to OpenAI via litellm (emergentintegrations proxies ONLY sk-emergent-*
+  keys); unset → Emergent key + gemini-2.5-flash (sandbox fallback). speech_key() for
+  Whisper/TTS same precedence. active_model() replaces VISION/TEXT/CHAT_MODEL consts in routers.
+- ALL AI paths funnel through 5 ai_core fns (verified by grep audit): vision_json (anpr, gauge,
+  incident classify w/ image, plate fallback), text_json (voice-fill, classify text,
+  describe_from_transcript), chat_answer (Sahayak, Factory Pulse), transcribe_audio (Whisper),
+  synthesize_speech (TTS). Embeddings = local fastembed (no key). Rekognition = AWS keys.
+- main.py startup: "AI CONFIG: llm=<prov>/<model> stt=whisper-1 tts=tts-1 key_source=..." +
+  WARNING when running on the Emergent fallback. App-level daily caps unchanged (second net).
+- Tests: tests/test_ai_key_routing.py (9: route precedence, model configurable, fake-LlmChat/STT/
+  TTS capture proving each path passes the dedicated key). Suite 265 passed.
+- NOT live-verified with a real OpenAI key (owner hasn't provided one; verification = set
+  OPENAI_API_KEY in Deployment Secrets → boot log shows key_source=openai-dedicated).
+
+## ENV NOTE (2026-07-30): pod RECYCLED mid-session again — recovered via sandbox_recover.sh BUT:
+- supervisord_hogo.conf pointed at PG15 binaries while PGDG now installs PG16 → sed the conf to 16.
+- restore_latest.py FIXED: data-only python dumps (no CREATE TABLE) now trigger alembic upgrade
+  head first + skip the dump's alembic_version INSERT (was crashing exit 3 on fresh DBs).
+- ffmpeg reinstall needed for live audio smokes (apt-get install -y ffmpeg).
+- DB restored from backups/2026-07-31/0030.sql.gz → 447 employees, schema 0014.
+
+## v1.0.21 P1 — My Month + Regularization + Same-as-last + Duplicate clustering ✅ CHECKPOINT 2
+- BACKEND: migration 0015 (incidents.duplicate_of + ix, settings.dup_window_minutes=30/
+  dup_same_zone/dup_same_category, table attendance_regularizations with partial unique
+  uq_att_reg_open = ONE open request per punch). Endpoints: GET /attendance/mine +
+  /attendance/month-summary (IST windows, C-shift prev-day attribution, 15-min grace);
+  POST /attendance/{id}/regularize (text and/or voice note) + regularizations/mine +
+  regularizations (manager queue) + regularizations/{id}/decide (notify worker);
+  GET /vehicles/last-mine + GET /forms/{id}/last-mine (server-side same-as-last);
+  duplicate clustering in tasks.py on incident create (zone+category+window, tunable in
+  settings, display-only, never blocks) + POST /incidents/{id}/unlink-duplicate.
+- MOBILE: attendance/history.tsx "📅 My Month" card + "This is wrong" dispute flow with
+  reg status chips (Under review/Corrected ✓/Not accepted); approvals.tsx dispute queue
+  (Worker says + voice playback); vehicle/new.tsx "⏮ Same as last entry" chip with
+  confirmPlate; FormRenderer/FieldWrapper "Fill like last time" + per-field ghost values;
+  incident/[id].tsx dup banner (View first report / Not same — unlink). i18n ×3 parity.
+- TESTS: tests/test_p1_batch.py (501 lines); suite 276 passed live PG+Redis; testing_agent
+  iteration_24 ALL PASS 0 bugs. tsc + eslint clean.
+
+## v1.0.21 BUILD PREP + DR hardening (2026-07-30 fork session)
+- ⚠ DR FINDING: sandbox celery ran the same 4h backup cron into the SAME R2 bucket —
+  identical backups/YYYY-MM-DD/HHMM.sql.gz keys, later upload OVERWRITES prod backup.
+  Proof: sandbox worker log uploaded backups/2026-07-15/2030 + 2026-07-16/0030. FIX:
+  settings.backup_upload_enabled (env BACKUP_UPLOAD_ENABLED, default ON for prod) guard
+  in run_backup_sync; sandbox backend/.env=0 (verified skip). EC2 audit ground truth:
+  docker compose logs api | grep "Uploaded DB backup".
+- TIMED DRILL re-run: backups/2026-07-31/0030.sql.gz (106,954 B gz, 2.3h old, PROD-origin:
+  sandbox worker was down at upload time; contains emp 3003201 Somnath Vasant Thorat
+  registered 2026-07-30 pending_approval) → hogoplus_drill in 2.7s wall (R2 download +
+  recreate + pgvector + alembic 0001→0015 + data). Counts: employees 447, audit 493,
+  notifications 40, attendance 18, incidents 17, form_submissions 14, vehicle_logs 7;
+  24 public tables; alembic 0015 — migration 0015 proven clean on a REAL prod snapshot.
+  Scratch DB dropped after recording.
+- BUILD PREP: frontend/.env EXPO_PUBLIC_API_URL (+BACKEND_URL) restored to
+  https://api.hogoplus.in; app.json 1.0.21/10021; release pin in client.ts unchanged.
+- DOCS: docs/AUTOPSY_v1.0.21.md (deploy order EC2-first, artifact greps, drill numbers,
+  per-feature failure modes) + docs/FIELD_PROTOCOL_v1.0.21.md (33 numbered steps, gates
+  0-8 go/no-go, keyboard spot-check phase 9, rollout phase 10 = app-version bump LAST).
+- Deploy delta EC2: git pull; OPENAI_API_KEY into /opt/hogoplus/.env BEFORE rebuild;
+  compose up -d --build; alembic upgrade head (0015); gates: AI CONFIG
+  key_source=openai-dedicated + fresh "Uploaded DB backup" + 401 route smoke. NO webdash
+  rebuild, NO flag flips (dup rules server defaults; caps env defaults 20/30).

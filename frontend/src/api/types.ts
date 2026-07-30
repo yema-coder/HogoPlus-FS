@@ -31,6 +31,28 @@ export interface EmployeeProfile {
   has_face_reference?: boolean;
 }
 
+/** v1.0.20: pending registration enriched with the evidence an approver needs. */
+export interface PendingRegistration extends EmployeeProfile {
+  suggested_emp_id: string;
+  created_at: string | null;
+  reg_lat: number | null;
+  reg_lng: number | null;
+  reg_address: string | null;
+  reg_zone: string | null;
+  reg_inside_geofence: boolean | null;
+  reg_device: string | null;
+  reg_app_version: string | null;
+  reg_face_count: number | null;
+  duplicate_hints: { emp_id: string; full_name: string; phone: string | null; similarity: number }[];
+}
+
+export interface OnboardingHistoryRow {
+  action: string;
+  at: string;
+  by: string | null;
+  detail: Record<string, unknown>;
+}
+
 export interface EscalationTarget {
   id: string;
   emp_id: string;
@@ -82,6 +104,10 @@ export type IncidentStatus = "submitted" | "seen" | "in_progress" | "resolved" |
 export interface Incident {
   id: string;
   reported_by: string;
+  /** present on list endpoints (v1.0.21) — for "2 reports: …" duplicate cards */
+  reporter_name?: string;
+  /** v1.0.21 duplicate clustering: id of the cluster-root incident (display-only) */
+  duplicate_of?: string | null;
   department_code: string;
   category: IncidentCategory;
   photo_key: string | null;
@@ -97,6 +123,7 @@ export interface Incident {
   status: IncidentStatus;
   severity: string;
   severity_reason: string | null;
+  severity_reason_mr: string | null;
   assigned_manager_id: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
@@ -148,6 +175,8 @@ export interface AttendanceRecord {
   face_match_score: number | null;
   face_verified: boolean | null;
   approved_by: string | null;
+  /** v1.0.21: latest "this is wrong" dispute on this punch (worker view) */
+  regularization?: { id: string; status: "open" | "approved" | "rejected" } | null;
 }
 
 export interface ShiftDay {

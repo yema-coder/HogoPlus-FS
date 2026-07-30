@@ -74,6 +74,9 @@ async def get_settings(
         "home_config_enabled": s.home_config_enabled,
         "vehicle_log_enabled": s.vehicle_log_enabled,
         "notif_batching_enabled": s.notif_batching_enabled,
+        "dup_window_minutes": s.dup_window_minutes,
+        "dup_same_zone": s.dup_same_zone,
+        "dup_same_category": s.dup_same_category,
     }
 
 
@@ -90,6 +93,7 @@ async def patch_settings(
     for field in (
         "factory_lat", "factory_lng", "radius_meters", "beacon_first_mode",
         "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
+        "dup_window_minutes", "dup_same_zone", "dup_same_category",
     ):
         val = getattr(body, field)
         if val is not None:
@@ -103,6 +107,9 @@ async def patch_settings(
         "home_config_enabled": s.home_config_enabled,
         "vehicle_log_enabled": s.vehicle_log_enabled,
         "notif_batching_enabled": s.notif_batching_enabled,
+        "dup_window_minutes": s.dup_window_minutes,
+        "dup_same_zone": s.dup_same_zone,
+        "dup_same_category": s.dup_same_category,
     }
 
 
@@ -301,6 +308,64 @@ async def reject_employee(
     return employee_profile(emp)
 
 
+async def enrich_pending_registrations(session: AsyncSession, rows: list[Employee]) -> list[dict]:
+    """v1.0.20: full evidence for the approver — when/where the person registered,
+    device context, face check, plus duplicate warnings. Shared by the mobile
+    pending endpoint and the webdash dashboard view."""
+    from difflib import SequenceMatcher
+
+    from sqlalchemy import Integer as SAInteger, cast, func
+
+    max_num = (
+        await session.execute(
+            # only the normal 4-digit id pool — a few legacy rows carry garbage
+            # 6-7 digit emp_ids (e.g. 3003200) and must never drive suggestions
+            select(func.max(cast(Employee.emp_id, SAInteger))).where(
+                Employee.emp_id.op("~")(r"^\d{1,4}$")
+            )
+        )
+    ).scalar() or 0
+    suggested = f"{max_num + 1:04d}"
+
+    existing = (
+        await session.execute(
+            select(Employee.emp_id, Employee.full_name, Employee.phone).where(
+                Employee.onboarding_status == "approved",
+                Employee.is_active.is_(True),
+            )
+        )
+    ).all()
+    out = []
+    for e in rows:
+        name_l = (e.full_name or "").strip().lower()
+        hints = []
+        for emp_id, full_name, phone in existing:
+            ratio = SequenceMatcher(None, name_l, (full_name or "").strip().lower()).ratio()
+            if ratio >= 0.82:
+                hints.append(
+                    {"emp_id": emp_id, "full_name": full_name, "phone": phone,
+                     "similarity": round(ratio, 2)}
+                )
+        hints.sort(key=lambda h: -h["similarity"])
+        out.append(
+            {
+                **employee_profile(e),
+                "suggested_emp_id": suggested,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+                "reg_lat": e.reg_lat,
+                "reg_lng": e.reg_lng,
+                "reg_address": e.reg_address,
+                "reg_zone": e.reg_zone,
+                "reg_inside_geofence": e.reg_inside_geofence,
+                "reg_device": e.reg_device,
+                "reg_app_version": e.reg_app_version,
+                "reg_face_count": e.reg_face_count,
+                "duplicate_hints": hints[:3],
+            }
+        )
+    return out
+
+
 @router.get("/employees/pending")
 async def pending_employees(
     actor: Employee = Depends(get_approved_employee),
@@ -316,20 +381,49 @@ async def pending_employees(
     if actor.role.rank == 3 and not await is_dept_manager(session, actor, "TIME_OFFICE"):
         query = query.where(Employee.department_code == actor.department_code)
     rows = (await session.execute(query.order_by(Employee.created_at.desc()))).scalars().all()
-    # suggest the next free numeric emp_id for the Time Office approval form
-    from sqlalchemy import Integer as SAInteger, cast, func
+    return await enrich_pending_registrations(session, rows)
 
-    max_num = (
+
+@router.get("/employees/{employee_id}/history")
+async def employee_onboarding_history(
+    employee_id: uuid.UUID,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Who registered / approved / rejected this employee and when (audit trail)."""
+    allowed = await is_dept_manager(session, actor, "TIME_OFFICE") or actor.role.rank <= 3
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    rows = (
         await session.execute(
-            # only the normal 4-digit id pool — a few legacy rows carry garbage
-            # 6-7 digit emp_ids (e.g. 3003200) and must never drive suggestions
-            select(func.max(cast(Employee.emp_id, SAInteger))).where(
-                Employee.emp_id.op("~")(r"^\d{1,4}$")
+            select(AuditEvent)
+            .where(
+                AuditEvent.entity_type == "employee",
+                AuditEvent.entity_id == str(employee_id),
+                AuditEvent.action.in_(
+                    ("employee.registered", "employee.register", "employee.approved",
+                     "employee.rejected", "employee.updated", "employee.created")
+                ),
             )
+            .order_by(AuditEvent.created_at.asc())
         )
-    ).scalar() or 0
-    suggested = f"{max_num + 1:04d}"
-    return [{**employee_profile(e), "suggested_emp_id": suggested} for e in rows]
+    ).scalars().all()
+    actor_ids = {r.actor_id for r in rows if r.actor_id}
+    names: dict = {}
+    if actor_ids:
+        for emp in (
+            await session.execute(select(Employee).where(Employee.id.in_(actor_ids)))
+        ).scalars():
+            names[emp.id] = emp.full_name
+    return [
+        {
+            "action": r.action,
+            "at": r.created_at.isoformat(),
+            "by": names.get(r.actor_id),
+            "detail": r.detail_json or {},
+        }
+        for r in rows
+    ]
 
 
 @router.get("/employees")
