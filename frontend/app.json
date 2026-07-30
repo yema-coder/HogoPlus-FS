@@ -2,7 +2,7 @@
   "expo": {
     "name": "HogoPlus-FS",
     "slug": "frontend",
-    "version": "1.0.20",
+    "version": "1.0.21",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hogoplus",
@@ -26,7 +26,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hogoplus.fs",
-      "versionCode": 10020,
+      "versionCode": 10021,
       "permissions": [
         "POST_NOTIFICATIONS"
       ]

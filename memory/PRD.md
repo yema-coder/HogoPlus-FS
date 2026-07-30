@@ -1065,3 +1065,45 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   head first + skip the dump's alembic_version INSERT (was crashing exit 3 on fresh DBs).
 - ffmpeg reinstall needed for live audio smokes (apt-get install -y ffmpeg).
 - DB restored from backups/2026-07-31/0030.sql.gz → 447 employees, schema 0014.
+
+## v1.0.21 P1 — My Month + Regularization + Same-as-last + Duplicate clustering ✅ CHECKPOINT 2
+- BACKEND: migration 0015 (incidents.duplicate_of + ix, settings.dup_window_minutes=30/
+  dup_same_zone/dup_same_category, table attendance_regularizations with partial unique
+  uq_att_reg_open = ONE open request per punch). Endpoints: GET /attendance/mine +
+  /attendance/month-summary (IST windows, C-shift prev-day attribution, 15-min grace);
+  POST /attendance/{id}/regularize (text and/or voice note) + regularizations/mine +
+  regularizations (manager queue) + regularizations/{id}/decide (notify worker);
+  GET /vehicles/last-mine + GET /forms/{id}/last-mine (server-side same-as-last);
+  duplicate clustering in tasks.py on incident create (zone+category+window, tunable in
+  settings, display-only, never blocks) + POST /incidents/{id}/unlink-duplicate.
+- MOBILE: attendance/history.tsx "📅 My Month" card + "This is wrong" dispute flow with
+  reg status chips (Under review/Corrected ✓/Not accepted); approvals.tsx dispute queue
+  (Worker says + voice playback); vehicle/new.tsx "⏮ Same as last entry" chip with
+  confirmPlate; FormRenderer/FieldWrapper "Fill like last time" + per-field ghost values;
+  incident/[id].tsx dup banner (View first report / Not same — unlink). i18n ×3 parity.
+- TESTS: tests/test_p1_batch.py (501 lines); suite 276 passed live PG+Redis; testing_agent
+  iteration_24 ALL PASS 0 bugs. tsc + eslint clean.
+
+## v1.0.21 BUILD PREP + DR hardening (2026-07-30 fork session)
+- ⚠ DR FINDING: sandbox celery ran the same 4h backup cron into the SAME R2 bucket —
+  identical backups/YYYY-MM-DD/HHMM.sql.gz keys, later upload OVERWRITES prod backup.
+  Proof: sandbox worker log uploaded backups/2026-07-15/2030 + 2026-07-16/0030. FIX:
+  settings.backup_upload_enabled (env BACKUP_UPLOAD_ENABLED, default ON for prod) guard
+  in run_backup_sync; sandbox backend/.env=0 (verified skip). EC2 audit ground truth:
+  docker compose logs api | grep "Uploaded DB backup".
+- TIMED DRILL re-run: backups/2026-07-31/0030.sql.gz (106,954 B gz, 2.3h old, PROD-origin:
+  sandbox worker was down at upload time; contains emp 3003201 Somnath Vasant Thorat
+  registered 2026-07-30 pending_approval) → hogoplus_drill in 2.7s wall (R2 download +
+  recreate + pgvector + alembic 0001→0015 + data). Counts: employees 447, audit 493,
+  notifications 40, attendance 18, incidents 17, form_submissions 14, vehicle_logs 7;
+  24 public tables; alembic 0015 — migration 0015 proven clean on a REAL prod snapshot.
+  Scratch DB dropped after recording.
+- BUILD PREP: frontend/.env EXPO_PUBLIC_API_URL (+BACKEND_URL) restored to
+  https://api.hogoplus.in; app.json 1.0.21/10021; release pin in client.ts unchanged.
+- DOCS: docs/AUTOPSY_v1.0.21.md (deploy order EC2-first, artifact greps, drill numbers,
+  per-feature failure modes) + docs/FIELD_PROTOCOL_v1.0.21.md (33 numbered steps, gates
+  0-8 go/no-go, keyboard spot-check phase 9, rollout phase 10 = app-version bump LAST).
+- Deploy delta EC2: git pull; OPENAI_API_KEY into /opt/hogoplus/.env BEFORE rebuild;
+  compose up -d --build; alembic upgrade head (0015); gates: AI CONFIG
+  key_source=openai-dedicated + fresh "Uploaded DB backup" + 401 route smoke. NO webdash
+  rebuild, NO flag flips (dup rules server defaults; caps env defaults 20/30).

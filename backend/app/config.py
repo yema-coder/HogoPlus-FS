@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     s3_secret_access_key: str = ""
     s3_bucket: str = "hogoplus-fs"
     file_storage_mode: str = "local"  # local | s3
+    # DR safety (2026-07-30 finding): sandbox and prod share the R2 bucket and the
+    # same 4-hourly cron → identical backups/YYYY-MM-DD/HHMM.sql.gz keys, so a
+    # sandbox dump can OVERWRITE a production backup. Sandbox .env sets this to 0;
+    # production leaves it unset (default ON).
+    backup_upload_enabled: bool = True
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_region: str = "ap-south-1"

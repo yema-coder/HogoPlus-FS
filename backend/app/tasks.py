@@ -86,6 +86,9 @@ def run_backup_sync() -> dict:
     if settings.file_storage_mode != "s3":
         logger.info("FILE_STORAGE_MODE=local — skipping DB backup upload")
         return {"skipped": True, "reason": "local storage mode"}
+    if not settings.backup_upload_enabled:
+        logger.info("BACKUP_UPLOAD_ENABLED=0 — skipping DB backup upload (sandbox guard)")
+        return {"skipped": True, "reason": "backup upload disabled"}
 
     from app.shift_logic import now_ist
 
