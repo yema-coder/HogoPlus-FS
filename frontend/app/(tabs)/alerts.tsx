@@ -10,6 +10,7 @@ import type { NotificationItem, NotificationList } from "@/src/api/types";
 import { EmptyState } from "@/src/components/EmptyState";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { tri } from "@/src/i18n";
 import { useAuthStore } from "@/src/stores/authStore";
@@ -85,6 +86,10 @@ export default function AlertsScreen() {
           </Text>
           <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
         </View>
+        <SpeakerButton
+          text={`${tri(item as unknown as Record<string, unknown>, "title")}. ${tri(item as unknown as Record<string, unknown>, "body")}`}
+          testID={`notification-tts-${item.id}`}
+        />
       </Pressable>
     );
   };

@@ -1,0 +1,40 @@
+{
+  "summary": "v1.0.21 P0 (voice-first incident reporting + read-aloud TTS) verified end-to-end. Focused on the 3 items main agent had NOT yet verified: (a) camera-gated voice-first capture detail screen layout, (b) success-screen ai-suggestion-tts, (c) English regression on Alerts speaker buttons. All PASSED. Backend live smoke = 7/7 tests green (TTS generate+cache+redirect, 422 validation, 401 auth, voice-describe 404/401, LIVE Whisper on real 1s silent MP3 returned 200). Frontend: 9/9 alerts rows have notification-tts-* buttons; tapping first button transitions from Volume2 icon -> filled Square (playing state); AI assessment card on incident detail has ai-assessment-tts button that plays; capture detail screen shows the exact voice-first layout ('🎙 Speak your report' header ABOVE incident-voice-note dashed record button ABOVE incident-desc-input with placeholder 'Or type here (optional)'); typing in the description works (AI chip stays hidden as expected); submitting an incident with a typed-only description reaches /incident/success, and ai-suggestion-tts speaker appeared within the polling window (~15s). No raw i18n keys leaked. One MINOR web-only hydration warning: SpeakerButton (Pressable) inside Alerts row (Pressable) renders as a native <button> nested inside another <button> in Expo web, which React logs as a hydration warning. Native mobile is unaffected (Pressable-in-Pressable is legal in RN). Deprecated packages detected: NONE (SpeakerButton uses expo-audio, capture screen uses expo-video — both current). All AI calls used LIVE Emergent LLM key; TTS cost bounded by hash-cache.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "alerts",
+        "issues": [
+          "Web-only React hydration warning: '<button> cannot contain a nested <button>' — SpeakerButton (Pressable renders <button> on web) is nested inside the notification-row Pressable (also <button>). Non-blocking; native mobile is unaffected. Fix on web: render Alerts row as a View with an explicit onPress handler at inner areas (or render SpeakerButton with accessibilityRole='button' but avoid the Pressable-in-Pressable HTML output). Reference: /app/frontend/app/(tabs)/alerts.tsx:69-93 + /app/frontend/src/components/SpeakerButton.tsx:60"
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_live_voice_tts_v1021.py",
+    "/app/test_reports/pytest/iter23_live_v1021.xml"
+  ],
+  "action_items": [
+    "(minor, web-only) Wrap SpeakerButton or the notification-row so we don't emit a native <button> inside a <button> on Expo web — either render the row as a View with onPress via a Pressable that only wraps the body (excluding the SpeakerButton), or downgrade SpeakerButton's outer element to a View + role='button' on web."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/app/routers/ai.py:280-307 tts endpoint — clean: sha256(text) map key, 30d TTL refreshed on read, cap only charged on fresh synth, redirects served by /api/files/{key}. Nothing to flag.",
+    "/app/backend/app/routers/ai.py:246-277 voice-describe — good: 429 BEFORE any work when cap exhausted, describe_from_transcript wraps LLM so STT-only fallback (raw transcript) survives LLM crash (verified in unit test_voice_describe_llm_failure_falls_back_to_transcript).",
+    "/app/frontend/app/incident/capture.tsx:295-299 onVoiceChange clears voiceKeyRef when a new recording replaces the old — good; prevents stale key from being re-attached on submit.",
+    "/app/frontend/app/incident/capture.tsx:699-711 desc TextInput onChangeText clears aiWrote chip on ANY manual edit — matches spec 'manual edit clears chip'.",
+    "/app/frontend/src/components/SpeakerButton.tsx:31-33 useEffect on didJustFinish resets 'playing' — good, but relies on player status; considered listening to playbackFinished separately if expo-audio changes API."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_live_voice_tts_v1021.py (new — 7 live smoke tests)"
+  ],
+  "success_rate": {"backend": "100% (7/7 live smoke)", "frontend": "100% on the 3 targeted flows"},
+  "seed_data_creation": "One demo incident was created by the automated test (worker D009, category=other, typed description 'Test typed description for regression'). It is is_demo=true and will be swept by demo_cleanup_sweep within 60 min. No manual cleanup required.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "For camera-gated screens on the Playwright harness: (1) call `await context.grant_permissions(['camera','microphone','geolocation'], origin=BASE)` and `await context.set_geolocation({...})` BEFORE navigating — the Chromium instance served here already exposes a fake webcam (green solid frame) once camera permission is granted, so no launch flags needed. (2) Auth localStorage keys must be JSON.stringify'd — access/refresh are single-stringified, profile is DOUBLE-stringified. Also set hogo.coach.incidentCamera='1' to skip the coach overlay. (3) The success-screen ai-suggestion-tts appears within 10-20s of submit (background AI classify) — poll for it.",
+  "rca_of_issue": "No bug to RCA — v1.0.21 P0 batch is production-ready. Only observation: on Expo web the SpeakerButton nested inside a notification-row Pressable prints a benign React hydration warning ('<button> cannot contain a nested <button>'). Root cause: react-native-web maps Pressable -> <button role='button'>, and nesting two of them is invalid HTML. Mitigation options for main agent: (a) In alerts.tsx render the row as a View and attach onPress to an inner Pressable that wraps only .body (excluding the SpeakerButton column); (b) override SpeakerButton's outer element via role/tag prop when on web. Non-blocking — clicks still work, and native RN builds do not carry this warning."
+}

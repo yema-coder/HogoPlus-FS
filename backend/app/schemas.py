@@ -345,6 +345,14 @@ class VoiceFillIn(BaseModel):
     form_definition_id: uuid.UUID
 
 
+class VoiceDescribeIn(BaseModel):
+    audio_key: str = Field(min_length=1, max_length=500)
+
+
+class TtsIn(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: uuid.UUID | None = None

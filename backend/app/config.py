@@ -31,6 +31,8 @@ _EMPTY_USES_DEFAULT = {
     "escalation_hours": 48,
     "ai_cache_ttl": 86400,
     "backup_keep_last": 14,
+    "voice_describe_daily_cap": 20,
+    "tts_daily_cap": 30,
 }
 
 
@@ -95,6 +97,9 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     embedding_cache_dir: str = str(ROOT_DIR / ".fastembed_cache")
     ai_cache_ttl: int = 86400
+    # v1.0.21 voice features — per-user daily cost caps (cached TTS hits are free)
+    voice_describe_daily_cap: int = 20
+    tts_daily_cap: int = 30
     backup_keep_last: int = 14
     # SECURITY (Bug 1): the fixed demo OTP is accepted ONLY when this is explicitly
     # read as true from the environment — default is OFF.

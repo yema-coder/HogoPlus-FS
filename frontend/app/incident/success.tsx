@@ -18,6 +18,7 @@ import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
 import { showToast } from "@/src/components/Toast";
+import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { INCIDENT_CATEGORIES, categoryDef } from "@/src/constants/categories";
 import { departmentIcon } from "@/src/constants/departments";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
@@ -203,6 +204,11 @@ export default function IncidentSuccess() {
                   {Math.round(suggestion.ai_confidence * 100)}%
                 </Text>
               ) : null}
+              <SpeakerButton
+                text={`${t(suggestionDef?.tKey ?? "cat.other")}. ${deptName(suggestion.ai_suggested_department)}`}
+                size={40}
+                testID="ai-suggestion-tts"
+              />
             </View>
             <View style={styles.aiRow}>
               <View style={[styles.aiIcon, { backgroundColor: `${suggestionDef?.tint ?? colors.muted}18` }]}>

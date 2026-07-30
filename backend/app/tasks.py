@@ -399,14 +399,27 @@ async def _classify_incident_async(incident_id: str) -> dict:
                         inc.photo_key, incident_id, e,
                     )
 
-            transcript = ""
+            transcript, voice_lang = "", "mr"
             if inc.voice_note_key:
                 try:
                     audio_bytes = get_storage().get(inc.voice_note_key)
                     ext = inc.voice_note_key.rsplit(".", 1)[-1] if "." in inc.voice_note_key else "m4a"
-                    transcript, _lang = await ai_core.transcribe_audio(audio_bytes, ext)
+                    transcript, voice_lang = await ai_core.transcribe_audio(audio_bytes, ext)
                 except Exception as e:
                     logger.warning("Voice transcript failed for %s: %s", incident_id, e)
+
+            # Voice-first reporting (v1.0.21): a spoken report with no typed
+            # description gets a WRITTEN description from the transcript — this
+            # covers offline-queued incidents that reach the server without
+            # on-device transcription. A typed description is never overwritten.
+            if transcript.strip() and not (inc.description or "").strip():
+                inc.description = await ai_core.describe_from_transcript(transcript, voice_lang)
+                session.add(
+                    IncidentTimeline(
+                        incident_id=inc.id, actor_id=None, event="voice_transcribed",
+                        detail_json={"transcript": transcript[:500], "language": voice_lang},
+                    )
+                )
 
             depts = (
                 await session.execute(select(Department).where(Department.is_active.is_(True)))

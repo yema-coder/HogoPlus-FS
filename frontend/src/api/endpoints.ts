@@ -228,6 +228,12 @@ export const aiVoiceFill = (audioKey: string, formDefinitionId: string) =>
     body: { audio_key: audioKey, form_definition_id: formDefinitionId },
   });
 
+export const aiVoiceDescribe = (audioKey: string) =>
+  api<{ transcript: string; description: string; language: string }>("/ai/voice-describe", {
+    method: "POST",
+    body: { audio_key: audioKey },
+  });
+
 export const aiChat = (message: string, conversationId?: string | null) =>
   api<ChatResult>("/ai/chat", {
     method: "POST",

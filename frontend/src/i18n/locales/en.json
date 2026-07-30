@@ -438,7 +438,15 @@
     "q4": "How does shift swap work?"
   },
   "voice": {
-    "checkHint": "Did we hear you right? Please check the filled fields before submitting."
+    "checkHint": "Did we hear you right? Please check the filled fields before submitting.",
+    "speakFirst": "Speak your report",
+    "transcribing": "Listening and writing…",
+    "typeOptional": "Or type here (optional)",
+    "willTranscribeLater": "Voice saved — it will be written after sending.",
+    "nothingHeard": "Could not hear anything. Speak again or type.",
+    "ttsUnavailable": "Cannot play audio right now.",
+    "ttsOffline": "No internet — this audio is not saved yet.",
+    "listen": "Listen"
   },
   "face": {
     "title": "Set up face verification",

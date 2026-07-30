@@ -27,8 +27,10 @@ import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
 import { showToast } from "@/src/components/Toast";
+import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { StatusChip } from "@/src/components/StatusChip";
 import { categoryDef } from "@/src/constants/categories";
+import i18n from "@/src/i18n";
 import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, statusColors, type } from "@/src/theme/tokens";
@@ -280,7 +282,18 @@ export default function IncidentDetailScreen() {
 
           {detail.severity_reason || detail.severity_reason_mr ? (
             <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
-              <Text style={styles.sectionLabel}>{t("severity.aiReason")}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={styles.sectionLabel}>{t("severity.aiReason")}</Text>
+                <SpeakerButton
+                  text={
+                    i18n.language === "en" && detail.severity_reason
+                      ? detail.severity_reason
+                      : (detail.severity_reason_mr ?? detail.severity_reason ?? "")
+                  }
+                  size={40}
+                  testID="ai-assessment-tts"
+                />
+              </View>
               {detail.severity_reason_mr ? (
                 <Text style={styles.desc} testID="ai-assessment-mr">{detail.severity_reason_mr}</Text>
               ) : null}

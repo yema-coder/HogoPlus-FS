@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
 import { showToast } from "@/src/components/Toast";
+import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 
@@ -46,6 +47,11 @@ export default function PendingApproval() {
         <Text style={styles.title}>{t("reg.pendingTitle")}</Text>
         <Text style={styles.name}>{profile?.full_name}</Text>
         <Text style={styles.body}>{t("reg.pendingBody")}</Text>
+        <SpeakerButton
+          text={`${t("reg.pendingTitle")}. ${t("reg.pendingBody")}`}
+          testID="pending-tts"
+          style={{ marginTop: spacing.sm }}
+        />
 
         <View style={styles.actions}>
           <BigButton
