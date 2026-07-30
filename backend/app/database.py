@@ -13,8 +13,9 @@ _engine_kwargs = {
     "pool_recycle": 280,
     # Prompt 18 load rehearsal: 300 concurrent users exhausted 10+20 conns on a
     # ~425ms-RTT Neon pooler (pgbouncer multiplexes these cheaply server-side).
-    "pool_size": 40,
-    "max_overflow": 110,
+    # Env-overridable for the RDS move (DB_POOL_SIZE / DB_MAX_OVERFLOW).
+    "pool_size": settings.db_pool_size,
+    "max_overflow": settings.db_max_overflow,
     "pool_timeout": 45,
 }
 if os.environ.get("TESTING"):

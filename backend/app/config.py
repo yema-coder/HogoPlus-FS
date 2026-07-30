@@ -57,6 +57,12 @@ class Settings(BaseSettings):
         return v
 
     database_url: str
+    # Engine pool sizing (per uvicorn worker). Defaults are the Neon-era values
+    # (high RTT needed big pools behind pgbouncer). On low-RTT RDS set in .env:
+    # DB_POOL_SIZE=10 DB_MAX_OVERFLOW=20 (2 workers x 30 = 60 conns, well under
+    # db.t4g.micro's ~110 max_connections).
+    db_pool_size: int = 40
+    db_max_overflow: int = 110
     redis_url: str
     celery_broker_url: str = "redis://127.0.0.1:6379/1"
     celery_result_backend: str = "redis://127.0.0.1:6379/2"
