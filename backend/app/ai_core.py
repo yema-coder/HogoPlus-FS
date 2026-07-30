@@ -18,9 +18,27 @@ from app.shift_logic import now_ist
 
 logger = logging.getLogger("hogo.ai")
 
-VISION_PROVIDER, VISION_MODEL = "gemini", "gemini-2.5-flash"
-TEXT_PROVIDER, TEXT_MODEL = "gemini", "gemini-2.5-flash"
-CHAT_PROVIDER, CHAT_MODEL = "gemini", "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
+
+
+def llm_route() -> tuple[str, str, str]:
+    """(api_key, provider, model) for ALL text/vision/chat LLM calls.
+
+    Production: the factory's own OpenAI account (OPENAI_API_KEY) — dedicated
+    billing and per-feature cost visibility, fully isolated from the Emergent
+    universal key. Fallback (sandbox/dev only): Emergent key + Gemini."""
+    if settings.openai_api_key:
+        return settings.openai_api_key, "openai", settings.openai_model
+    return settings.emergent_llm_key, "gemini", GEMINI_MODEL
+
+
+def speech_key() -> str:
+    """Whisper STT + TTS key: the factory's OpenAI account first, Emergent fallback."""
+    return settings.openai_api_key or settings.emergent_llm_key
+
+
+def active_model() -> str:
+    return llm_route()[2]
 
 
 class AiError(Exception):
@@ -49,13 +67,14 @@ async def vision_json(prompt: str, image_bytes: bytes) -> dict:
     """Temperature-0 vision extraction returning parsed JSON."""
     from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"vision-{uuid.uuid4().hex[:12]}",
             system_message="You are a precise visual extraction engine. Respond ONLY with valid JSON, no prose.",
         )
-        .with_model(VISION_PROVIDER, VISION_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0)
     )
     msg = UserMessage(
@@ -70,13 +89,14 @@ async def text_json(system: str, prompt: str) -> dict:
     """Temperature-0 text task returning parsed JSON."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"text-{uuid.uuid4().hex[:12]}",
             system_message=system,
         )
-        .with_model(TEXT_PROVIDER, TEXT_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0)
     )
     raw = await chat.send_message(UserMessage(text=prompt))
@@ -87,13 +107,14 @@ async def chat_answer(system: str, prompt: str) -> str:
     """Grounded RAG answer — plain text."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+    api_key, provider, model = llm_route()
     chat = (
         LlmChat(
-            api_key=settings.emergent_llm_key,
+            api_key=api_key,
             session_id=f"chat-{uuid.uuid4().hex[:12]}",
             system_message=system,
         )
-        .with_model(CHAT_PROVIDER, CHAT_MODEL)
+        .with_model(provider, model)
         .with_params(temperature=0.2)
     )
     return (await chat.send_message(UserMessage(text=prompt))).strip()
@@ -106,7 +127,7 @@ async def transcribe_audio(audio_bytes: bytes, ext: str) -> tuple[str, str]:
     """Whisper STT with auto language detection → (transcript, lang_code mr/hi/en)."""
     from emergentintegrations.llm.openai.speech_to_text import OpenAISpeechToText
 
-    stt = OpenAISpeechToText(api_key=settings.emergent_llm_key)
+    stt = OpenAISpeechToText(api_key=speech_key())
     suffix = f".{ext}" if not ext.startswith(".") else ext
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(audio_bytes)
@@ -141,7 +162,7 @@ async def synthesize_speech(text: str) -> bytes:
     Marathi/Hindi Devanagari text is spoken natively)."""
     from emergentintegrations.llm.openai.text_to_speech import OpenAITextToSpeech
 
-    tts = OpenAITextToSpeech(api_key=settings.emergent_llm_key)
+    tts = OpenAITextToSpeech(api_key=speech_key())
     return await tts.generate_speech(
         text=text, model=TTS_MODEL, voice=TTS_VOICE, response_format="mp3"
     )

@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     aws_secret_access_key: str = ""
     aws_region: str = "ap-south-1"
     emergent_llm_key: str = ""
+    # Production AI runs on the FACTORY'S OWN OpenAI account (dedicated billing,
+    # isolated from the Emergent universal key). When set, ALL LLM/STT/TTS calls
+    # use it; the Emergent key is only the sandbox fallback.
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"  # text/vision/chat model on the OpenAI account
     smsgatewayhub_api_key: str = ""
     smsgatewayhub_sender_id: str = ""
     smsgatewayhub_dlt_template_id: str = ""

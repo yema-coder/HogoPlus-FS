@@ -1041,3 +1041,27 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - ENV: frontend/.env EXPO_PUBLIC_API_URL switched to preview URL for sandbox testing —
   RESTORE to https://api.hogoplus.in before any build (release builds pin prod anyway).
 - P1 (My Month, Regularization, Same-as-last, Duplicate clustering) NOT started — next checkpoint.
+
+## v1.0.21 — Dedicated OPENAI_API_KEY for production AI (owner mandate) ✅
+- config.py: openai_api_key (env OPENAI_API_KEY) + openai_model (env OPENAI_MODEL, default
+  gpt-4o-mini). ai_core.llm_route() = single choke point: key set → (user key, "openai",
+  openai_model) DIRECT to OpenAI via litellm (emergentintegrations proxies ONLY sk-emergent-*
+  keys); unset → Emergent key + gemini-2.5-flash (sandbox fallback). speech_key() for
+  Whisper/TTS same precedence. active_model() replaces VISION/TEXT/CHAT_MODEL consts in routers.
+- ALL AI paths funnel through 5 ai_core fns (verified by grep audit): vision_json (anpr, gauge,
+  incident classify w/ image, plate fallback), text_json (voice-fill, classify text,
+  describe_from_transcript), chat_answer (Sahayak, Factory Pulse), transcribe_audio (Whisper),
+  synthesize_speech (TTS). Embeddings = local fastembed (no key). Rekognition = AWS keys.
+- main.py startup: "AI CONFIG: llm=<prov>/<model> stt=whisper-1 tts=tts-1 key_source=..." +
+  WARNING when running on the Emergent fallback. App-level daily caps unchanged (second net).
+- Tests: tests/test_ai_key_routing.py (9: route precedence, model configurable, fake-LlmChat/STT/
+  TTS capture proving each path passes the dedicated key). Suite 265 passed.
+- NOT live-verified with a real OpenAI key (owner hasn't provided one; verification = set
+  OPENAI_API_KEY in Deployment Secrets → boot log shows key_source=openai-dedicated).
+
+## ENV NOTE (2026-07-30): pod RECYCLED mid-session again — recovered via sandbox_recover.sh BUT:
+- supervisord_hogo.conf pointed at PG15 binaries while PGDG now installs PG16 → sed the conf to 16.
+- restore_latest.py FIXED: data-only python dumps (no CREATE TABLE) now trigger alembic upgrade
+  head first + skip the dump's alembic_version INSERT (was crashing exit 3 on fresh DBs).
+- ffmpeg reinstall needed for live audio smokes (apt-get install -y ffmpeg).
+- DB restored from backups/2026-07-31/0030.sql.gz → 447 employees, schema 0014.

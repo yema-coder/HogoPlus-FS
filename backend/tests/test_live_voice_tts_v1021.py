@@ -127,6 +127,18 @@ def test_voice_describe_missing_audio_404(headers):
 def test_voice_describe_live_silence_returns_200(headers):
     """Upload a REAL 1s silent MP3 (ffmpeg lavfi anullsrc) → LIVE Whisper.
     Even silence should return 200 with an empty-ish transcript (per spec)."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    if not Path("/tmp/silence1s.mp3").exists():
+        if not shutil.which("ffmpeg"):
+            pytest.skip("ffmpeg unavailable (pod recycle) — live silence smoke skipped")
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
+             "-t", "1", "-q:a", "9", "/tmp/silence1s.mp3"],
+            capture_output=True, check=True,
+        )
     with open("/tmp/silence1s.mp3", "rb") as f:
         mp3_bytes = f.read()
     files = {"file": ("silence.mp3", mp3_bytes, "audio/mpeg")}

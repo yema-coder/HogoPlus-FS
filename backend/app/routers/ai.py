@@ -97,7 +97,7 @@ async def anpr(
         "confidence": round(confidence, 3) if valid else 0.0,
         "valid": valid,
         "source": source if valid else None,
-        "model": ai_core.VISION_MODEL,
+        "model": ai_core.active_model(),
     }
     if valid:
         await ai_core.cache_set("anpr", body.photo_key, payload)
@@ -134,7 +134,7 @@ async def gauge_read(
             "value": value,
             "unit": unit,
             "confidence": round(confidence, 3),
-            "model": ai_core.VISION_MODEL,
+            "model": ai_core.active_model(),
         }
         if value is not None:
             await ai_core.cache_set("gauge_read", body.photo_key, payload)
@@ -222,7 +222,7 @@ async def voice_fill(
         "transcript": transcript,
         "language": language,
         "fields": fields,
-        "model": ai_core.TEXT_MODEL,
+        "model": ai_core.active_model(),
     }
 
 
@@ -273,7 +273,7 @@ async def voice_describe(
         "transcript": transcript,
         "description": description,
         "language": language,
-        "model": ai_core.TEXT_MODEL,
+        "model": ai_core.active_model(),
     }
 
 
@@ -405,5 +405,5 @@ async def sop_chat(
         "conversation_id": str(conversation_id),
         "answer": answer,
         "citations": citations,
-        "model": ai_core.CHAT_MODEL,
+        "model": ai_core.active_model(),
     }
