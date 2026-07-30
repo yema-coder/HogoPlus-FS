@@ -255,7 +255,8 @@ def _feed_item(i: Incident, reporter_name: str, storage) -> dict:
     return {
         "id": str(i.id), "category": i.category, "department_code": i.department_code,
         "reporter_name": reporter_name, "status": i.status, "severity": i.severity,
-        "severity_reason": i.severity_reason, "detected_plate": i.detected_plate,
+        "severity_reason": i.severity_reason, "severity_reason_mr": i.severity_reason_mr,
+        "detected_plate": i.detected_plate,
         "ble_zone": i.ble_zone,
         "photo_url": storage.url_for(i.photo_key) if i.photo_key else None,
         "video_url": storage.url_for(i.video_key) if i.video_key else None,
@@ -558,6 +559,8 @@ async def department_detail(
         {
             "id": str(i.id), "category": i.category, "status": i.status,
             "severity": i.severity, "created_at": i.created_at.isoformat(),
+            "severity_reason": i.severity_reason,
+            "severity_reason_mr": i.severity_reason_mr,
             "detected_plate": i.detected_plate,
             "ble_zone": i.ble_zone,
             "plate_status": i.plate_status,
@@ -626,6 +629,26 @@ async def department_detail(
         "attendance": attendance, "submissions": submissions, "incidents": incidents,
         "trends": trends,
     }
+
+
+@router.get("/pending-registrations")
+async def pending_registrations(
+    user: Employee = Depends(get_dashboard_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """v1.0.20: full registration evidence for the webdash approvals view —
+    when/where the person registered, selfie, device, face check, duplicates."""
+    from app.routers.admin import enrich_pending_registrations
+
+    query = select(Employee).where(
+        Employee.onboarding_status == "pending_approval",
+        Employee.is_demo == user.is_demo,
+    )
+    dept = _scope(user)
+    if dept is not None and user.department_code != "TIME_OFFICE":
+        query = query.where(Employee.department_code == dept)
+    rows = (await session.execute(query.order_by(Employee.created_at.desc()))).scalars().all()
+    return {"items": await enrich_pending_registrations(session, rows)}
 
 
 @router.get("/approvals-aging")

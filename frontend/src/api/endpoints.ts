@@ -8,6 +8,8 @@ import type {
   FlaggedAttendance,
   FormDefinitionItem,
   GaugeResult,
+  OnboardingHistoryRow,
+  PendingRegistration,
   Incident,
   IncidentDetail,
   NotificationList,
@@ -36,7 +38,16 @@ export const verifyOtp = (phone: string, otp: string) =>
   api<VerifyOtpResponse>("/auth/verify-otp", { method: "POST", body: { phone, otp }, auth: false });
 
 export const registerEmployee = (
-  body: { phone: string; full_name: string; selfie_key: string },
+  body: {
+    phone: string;
+    full_name: string;
+    selfie_key: string;
+    lat?: number;
+    lng?: number;
+    address?: string;
+    device?: string;
+    app_version?: string;
+  },
   registrationToken: string,
 ) =>
   api<TokenPair & { employee: EmployeeProfile }>("/auth/register", {
@@ -152,7 +163,9 @@ export const approveSubmission = (id: string) =>
 export const rejectSubmission = (id: string, reason: string) =>
   api<SubmissionItem>(`/submissions/${id}/reject`, { method: "POST", body: { reason } });
 
-export const pendingEmployees = () => api<EmployeeProfile[]>("/admin/employees/pending");
+export const pendingEmployees = () => api<PendingRegistration[]>("/admin/employees/pending");
+export const employeeHistory = (id: string) =>
+  api<OnboardingHistoryRow[]>(`/admin/employees/${id}/history`);
 
 export const approveEmployee = (
   id: string,

@@ -4,6 +4,17 @@ export type Lang = "en" | "hi" | "mr";
 
 const D: Record<string, [string, string, string]> = {
   // [en, hi, mr]
+  aiAssessment: ["AI assessment", "AI आकलन", "AI मूल्यांकन"],
+  pendingRegs: ["Pending registrations", "लंबित पंजीकरण", "प्रलंबित नोंदणी"],
+  registered: ["Registered", "पंजीकृत", "नोंदणी"],
+  insideFactory: ["Inside factory", "फ़ैक्टरी के अंदर", "कारखान्याच्या आत"],
+  outsideFactory: ["Outside factory", "फ़ैक्टरी के बाहर", "कारखान्याच्या बाहेर"],
+  noLocation: ["No location captured", "स्थान दर्ज नहीं", "स्थान नोंदले नाही"],
+  faceOk: ["Face detected", "चेहरा मिला", "चेहरा आढळला"],
+  faceUnknown: ["Face not checked", "चेहरा जाँचा नहीं", "चेहरा तपासला नाही"],
+  possibleDuplicate: ["Possible duplicate", "संभावित डुप्लिकेट", "संभाव्य डुप्लिकेट"],
+  wantsDept: ["Wants to join", "जुड़ना चाहते हैं", "जॉईन करू इच्छितात"],
+  suggestedId: ["Suggested ID", "सुझाया गया ID", "सुचवलेला ID"],
   brand: ["Hogo Plus", "होगो प्लस", "होगो प्लस"],
   commandCenter: ["Command Center", "कमांड सेंटर", "कमांड सेंटर"],
   nav_overview: ["Departments", "विभाग", "विभाग"],

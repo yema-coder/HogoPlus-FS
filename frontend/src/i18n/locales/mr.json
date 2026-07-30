@@ -256,7 +256,13 @@
     "assignRole": "भूमिका",
     "empId": "कर्मचारी ID",
     "approveTitle": "{{name}} ला मंजुरी द्या",
-    "newJoinee": "नवीन कर्मचारी"
+    "newJoinee": "नवीन कर्मचारी",
+    "insideFactory": "कारखान्याच्या आत",
+    "outsideFactory": "कारखान्याच्या बाहेर",
+    "noLocation": "स्थान नोंदले नाही",
+    "faceOk": "चेहरा आढळला",
+    "faceUnknown": "चेहरा तपासला नाही",
+    "possibleDuplicate": "संभाव्य डुप्लिकेट"
   },
   "errors": {
     "network": "इंटरनेट नाही. कनेक्शन तपासा.",
@@ -502,6 +508,13 @@
     "phoneInvalid": "वैध +91 मोबाइल नंबर टाका",
     "empty": "शोधण्यासाठी किमान 2 अक्षरे लिहा",
     "noResults": "कर्मचारी सापडले नाहीत",
+    "history": "इतिहास",
+    "hist_registered": "नोंदणी झाली",
+    "hist_register": "नोंदणी झाली",
+    "hist_approved": "मंजूर केले",
+    "hist_rejected": "नाकारले",
+    "hist_updated": "बदल केला",
+    "hist_created": "जोडले",
     "phoneTaken": "हा फोन नंबर आधीच वापरात आहे",
     "idTaken": "हा कर्मचारी ID आधीच घेतला आहे",
     "notAllowed": "तुम्हाला हा बदल करण्याची परवानगी नाही",

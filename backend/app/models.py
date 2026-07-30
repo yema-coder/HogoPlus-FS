@@ -105,6 +105,15 @@ class Employee(TimestampMixin, Base):
     )
     selfie_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reference_selfie_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # registration evidence (v1.0.20): captured once at self-registration
+    reg_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reg_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reg_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    reg_zone: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reg_inside_geofence: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    reg_device: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reg_app_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    reg_face_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reference_selfie_set_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -248,6 +257,7 @@ class Incident(TimestampMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolution_photo_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    severity_reason_mr: Mapped[str | None] = mapped_column(String(300), nullable=True)
     ai_suggested_category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     ai_suggested_department: Mapped[str | None] = mapped_column(String(30), nullable=True)
     ai_suggested_severity: Mapped[str | None] = mapped_column(String(20), nullable=True)

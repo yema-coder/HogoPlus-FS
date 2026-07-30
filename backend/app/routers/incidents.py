@@ -38,6 +38,7 @@ def _out(i: Incident) -> dict:
         "status": i.status,
         "severity": i.severity,
         "severity_reason": i.severity_reason,
+        "severity_reason_mr": i.severity_reason_mr,
         "assigned_manager_id": str(i.assigned_manager_id) if i.assigned_manager_id else None,
         "escalated_to": str(i.escalated_to) if i.escalated_to else None,
         "escalated_at": i.escalated_at.isoformat() if i.escalated_at else None,
@@ -186,8 +187,13 @@ async def apply_incident_routing(
                          "severity": severity, "confirmed_by": confirmed_by},
         )
     )
+    # bilingual AI assessment in the notification body — Marathi first (v1.0.20)
+    assess = "\n".join(
+        x for x in (incident.severity_reason_mr, incident.severity_reason) if x
+    )
+    body_txt = f"{category} — {dept.name_en}" + (f"\n{assess}" if assess else "")
     if assigned:
-        title, notif_body = template("incident_assigned", f"{category} — {dept.name_en}")
+        title, notif_body = template("incident_assigned", body_txt)
         await dispatcher.notify(session, assigned, "incident_assigned", title, notif_body, "incident", str(incident.id))
     if severity == "critical":
         tops = (
@@ -197,7 +203,7 @@ async def apply_incident_routing(
                 )
             )
         ).scalars().all()
-        title, notif_body = template("incident_critical", f"{category} — {dept.name_en}")
+        title, notif_body = template("incident_critical", body_txt)
         for e in tops:
             if e.role and e.role.rank <= 2 and e.id != assigned:
                 await dispatcher.notify(session, e.id, "incident_critical", title, notif_body, "incident", str(incident.id))

@@ -36,12 +36,14 @@ import type {
   EmployeeProfile,
   FlaggedAttendance,
   Incident,
+  PendingRegistration,
   SubmissionItem,
   SwapRequest,
 } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { EmptyState } from "@/src/components/EmptyState";
 import { MediaViewerModal } from "@/src/components/MediaCard";
+import { MapPreview } from "@/src/components/MapPreview";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
 import { SkeletonRows } from "@/src/components/Skeleton";
@@ -53,7 +55,7 @@ import { tri } from "@/src/i18n";
 import { useApprovalsStore, type ApprovalCounts } from "@/src/stores/approvalsStore";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { formatTime, isOlderThan24h, timeAgo } from "@/src/utils/format";
+import { formatDateTime, formatTime, isOlderThan24h, timeAgo } from "@/src/utils/format";
 import { storage } from "@/src/utils/storage";
 
 type Segment = "forms" | "regs" | "swaps" | "incidents" | "attendance";
@@ -315,7 +317,8 @@ export default function ApprovalsScreen() {
       );
     }
     if (segment === "regs") {
-      const emp = item as EmployeeProfile;
+      const emp = item as PendingRegistration;
+      const dup = emp.duplicate_hints ?? [];
       return (
         <View style={styles.regCard} testID={`approval-reg-${emp.id}`}>
           <View style={styles.regTop}>
@@ -341,8 +344,73 @@ export default function ApprovalsScreen() {
                   ? t("approvals.wantsToJoin", { dept: deptName(emp.department_code) })
                   : t("approvals.newJoinee")}
               </Text>
+              <Text style={styles.cardMeta}>
+                🆔 {emp.emp_id || emp.suggested_emp_id}
+              </Text>
             </View>
           </View>
+
+          {/* v1.0.20 registration evidence for the approver */}
+          <View style={styles.regEvidence} testID={`reg-evidence-${emp.id}`}>
+            {emp.created_at ? (
+              <Text style={styles.regInfoLine}>
+                🕐 {formatDateTime(emp.created_at)} · {timeAgo(emp.created_at)}
+              </Text>
+            ) : null}
+            {emp.reg_lat != null && emp.reg_lng != null ? (
+              <>
+                <View style={styles.regChipsRow}>
+                  <View
+                    style={[styles.geoChip, emp.reg_inside_geofence ? styles.geoChipIn : styles.geoChipOut]}
+                    testID={`reg-geofence-chip-${emp.id}`}
+                  >
+                    <Text style={emp.reg_inside_geofence ? styles.geoChipTextIn : styles.geoChipTextOut}>
+                      {emp.reg_inside_geofence
+                        ? `✓ ${t("approvals.insideFactory")}`
+                        : `✗ ${t("approvals.outsideFactory")}`}
+                    </Text>
+                  </View>
+                  {emp.reg_zone ? <Text style={styles.regInfoMuted}>📡 {emp.reg_zone}</Text> : null}
+                </View>
+                {emp.reg_address ? (
+                  <Text style={styles.regInfoMuted} numberOfLines={2}>
+                    {emp.reg_address}
+                  </Text>
+                ) : null}
+                <Text style={styles.regCoords}>
+                  {emp.reg_lat.toFixed(5)}, {emp.reg_lng.toFixed(5)}
+                </Text>
+                <MapPreview lat={emp.reg_lat} lng={emp.reg_lng} testID={`reg-map-${emp.id}`} />
+              </>
+            ) : (
+              <Text style={styles.regInfoMuted}>📍 {t("approvals.noLocation")}</Text>
+            )}
+            <View style={styles.regChipsRow}>
+              <Text style={styles.regInfoLine}>
+                {emp.reg_face_count != null && emp.reg_face_count > 0
+                  ? `✅ ${t("approvals.faceOk")}`
+                  : `⚠️ ${t("approvals.faceUnknown")}`}
+              </Text>
+              {emp.reg_device ? (
+                <Text style={styles.regInfoMuted} numberOfLines={1}>
+                  📱 {emp.reg_device}
+                  {emp.reg_app_version ? ` · v${emp.reg_app_version}` : ""}
+                </Text>
+              ) : null}
+            </View>
+            {dup.length > 0 ? (
+              <View style={styles.dupWarn} testID={`reg-dup-warning-${emp.id}`}>
+                <Text style={styles.dupWarnTitle}>⚠️ {t("approvals.possibleDuplicate")}</Text>
+                {dup.map((h) => (
+                  <Text key={h.emp_id} style={styles.dupWarnLine}>
+                    {h.full_name} · {h.emp_id}
+                    {h.phone ? ` · ${h.phone}` : ""}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+          </View>
+
           <View style={styles.actionRow}>
             <BigButton
               testID={`reg-reject-${emp.id}`}
@@ -844,6 +912,33 @@ const styles = StyleSheet.create({
   },
   regSelfieEmpty: { alignItems: "center", justifyContent: "center", backgroundColor: colors.brandTertiary },
   regInitial: { fontFamily: fonts.bold, fontSize: type.xxl, color: colors.primary },
+  // v1.0.20 registration evidence block
+  regEvidence: {
+    gap: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  regInfoLine: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
+  regInfoMuted: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted, flexShrink: 1 },
+  regCoords: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  regChipsRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  geoChip: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3, borderWidth: 1 },
+  geoChipIn: { backgroundColor: "rgba(46,125,50,0.10)", borderColor: colors.success },
+  geoChipOut: { backgroundColor: "rgba(217,64,89,0.10)", borderColor: colors.danger },
+  geoChipTextIn: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.success },
+  geoChipTextOut: { fontFamily: fonts.semiBold, fontSize: 12, color: colors.danger },
+  dupWarn: {
+    backgroundColor: "rgba(217,64,89,0.08)",
+    borderColor: colors.danger,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    gap: 2,
+  },
+  dupWarnTitle: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.danger },
+  dupWarnLine: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.text },
   attSelfie: {
     width: 64,
     height: 64,

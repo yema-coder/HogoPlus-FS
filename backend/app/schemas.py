@@ -51,6 +51,14 @@ class RegisterIn(BaseModel):
     phone: str = Field(pattern=PHONE_REGEX)
     full_name: str = Field(min_length=2, max_length=200)
     selfie_key: str = Field(min_length=1)
+    # v1.0.20 registration evidence for the approver — all optional (registration
+    # must never block on missing permissions/sensors)
+    lat: float | None = None
+    lng: float | None = None
+    address: str | None = Field(default=None, max_length=300)
+    zone: str | None = Field(default=None, max_length=120)
+    device: str | None = Field(default=None, max_length=120)
+    app_version: str | None = Field(default=None, max_length=20)
 
 
 class ApproveRegistrationIn(BaseModel):

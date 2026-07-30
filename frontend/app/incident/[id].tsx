@@ -278,10 +278,20 @@ export default function IncidentDetailScreen() {
             </Text>
           </View>
 
-          {detail.severity_reason ? (
+          {detail.severity_reason || detail.severity_reason_mr ? (
             <View style={[styles.card, detail.severity === "critical" && { borderColor: colors.danger }]}>
               <Text style={styles.sectionLabel}>{t("severity.aiReason")}</Text>
-              <Text style={styles.desc}>{detail.severity_reason}</Text>
+              {detail.severity_reason_mr ? (
+                <Text style={styles.desc} testID="ai-assessment-mr">{detail.severity_reason_mr}</Text>
+              ) : null}
+              {detail.severity_reason ? (
+                <Text
+                  style={[styles.desc, detail.severity_reason_mr ? { opacity: 0.65, fontSize: 13, marginTop: 4 } : null]}
+                  testID="ai-assessment-en"
+                >
+                  {detail.severity_reason}
+                </Text>
+              ) : null}
             </View>
           ) : null}
 

@@ -256,7 +256,13 @@
     "assignRole": "Role",
     "empId": "Employee ID",
     "approveTitle": "Approve {{name}}",
-    "newJoinee": "New joinee"
+    "newJoinee": "New joinee",
+    "insideFactory": "Inside factory",
+    "outsideFactory": "Outside factory",
+    "noLocation": "No location captured",
+    "faceOk": "Face detected",
+    "faceUnknown": "Face not checked",
+    "possibleDuplicate": "Possible duplicate"
   },
   "errors": {
     "network": "No internet. Check your connection.",
@@ -502,6 +508,13 @@
     "phoneInvalid": "Enter a valid +91 mobile number",
     "empty": "Type at least 2 letters to search",
     "noResults": "No employees found",
+    "history": "History",
+    "hist_registered": "Registered",
+    "hist_register": "Registered",
+    "hist_approved": "Approved by",
+    "hist_rejected": "Rejected by",
+    "hist_updated": "Updated by",
+    "hist_created": "Added by",
     "phoneTaken": "This phone number is already in use",
     "idTaken": "This employee ID is already taken",
     "notAllowed": "You are not allowed to make this change",

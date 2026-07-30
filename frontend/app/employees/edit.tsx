@@ -1,17 +1,18 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { BadgeCheck } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "@/src/api/client";
-import { assignDeptManager, patchEmployee } from "@/src/api/endpoints";
-import type { EmployeeProfile } from "@/src/api/types";
+import { assignDeptManager, employeeHistory, patchEmployee } from "@/src/api/endpoints";
+import type { EmployeeProfile, OnboardingHistoryRow } from "@/src/api/types";
 import { EmployeeForm, type EmployeeFormValues } from "@/src/components/EmployeeForm";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
+import { formatDateTime } from "@/src/utils/format";
 
 /** Prompt 17 Part B: edit an employee's access with guardrails — only changed
  * fields are PATCHed; the backend blocks Time Office from touching Manager+
@@ -24,6 +25,7 @@ export default function EditEmployeeScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [assigningHod, setAssigningHod] = useState(false);
   const [hodName, setHodName] = useState<string | null>(null);
+  const [history, setHistory] = useState<OnboardingHistoryRow[]>([]);
 
   const employee = useMemo<EmployeeProfile | null>(() => {
     try {
@@ -32,6 +34,14 @@ export default function EditEmployeeScreen() {
       return null;
     }
   }, [emp]);
+
+  // v1.0.20: onboarding audit trail — who registered / approved / edited, and when
+  useEffect(() => {
+    if (!employee) return;
+    employeeHistory(employee.id)
+      .then(setHistory)
+      .catch(() => setHistory([]));
+  }, [employee]);
 
   // Prompt 21: Time Office / CGM / MD can install a Manager as their department's HOD.
   const makeHod = async () => {
@@ -106,6 +116,19 @@ export default function EditEmployeeScreen() {
           </Text>
         </Pressable>
       ) : null}
+      {history.length > 0 ? (
+        <View style={styles.historyBox} testID="emp-history">
+          <Text style={styles.historyTitle}>{t("emp.history")}</Text>
+          {history.map((h, i) => (
+            <Text key={i} style={styles.historyLine} numberOfLines={1}>
+              {t(`emp.hist_${h.action.replace("employee.", "")}`, {
+                defaultValue: h.action.replace("employee.", ""),
+              })}
+              {h.by ? ` — ${h.by}` : ""} · {formatDateTime(h.at)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
       <EmployeeForm
         mode="edit"
         initial={{
@@ -125,6 +148,18 @@ export default function EditEmployeeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
+  historyBox: {
+    marginHorizontal: sizes.screenPadding,
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    gap: 4,
+  },
+  historyTitle: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.text },
+  historyLine: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
   hodBtn: {
     flexDirection: "row",
     alignItems: "center",

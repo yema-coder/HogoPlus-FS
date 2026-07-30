@@ -421,7 +421,10 @@ async def _classify_incident_async(incident_id: str) -> dict:
                 '"electrical"|"water_leakage"|"security"|"other", '
                 '"department_code": which department this incident is ABOUT (from the list), '
                 '"severity": "normal"|"high"|"critical", '
-                '"confidence": 0.0-1.0, "reason": one short English sentence}.\n'
+                '"confidence": 0.0-1.0, "reason": one short English sentence, '
+                '"reason_mr": the same assessment in ONE short natural Marathi sentence '
+                "as a factory supervisor would say it aloud on the shop floor — plain "
+                "everyday Marathi, NOT a literal word-for-word translation}.\n"
                 "critical = immediate danger to life, fire, major machine failure stopping production; "
                 "high = significant risk or damage needing urgent action; normal = routine issue."
             )
@@ -451,18 +454,21 @@ async def _classify_incident_async(incident_id: str) -> dict:
             except (TypeError, ValueError):
                 confidence = 0.5
             reason = str(result.get("reason") or "")[:300]
+            reason_mr = str(result.get("reason_mr") or "")[:300]
 
             inc.ai_suggested_category = category
             inc.ai_suggested_department = dept_code
             inc.ai_suggested_severity = severity
             inc.ai_confidence = confidence
+            inc.severity_reason_mr = reason_mr or None
             inc.ai_suggested_at = now_ist()
             inc.severity_reason = reason
             session.add(
                 IncidentTimeline(
                     incident_id=inc.id, actor_id=None, event="ai_suggestion",
                     detail_json={"category": category, "department_code": dept_code,
-                                 "severity": severity, "confidence": confidence, "reason": reason},
+                                 "severity": severity, "confidence": confidence,
+                                 "reason": reason, "reason_mr": reason_mr},
                 )
             )
             await session.commit()
@@ -968,7 +974,8 @@ async def _report_data(session, target_date) -> dict:
             "opened": opened,
             "resolved": resolved,
             "critical": [
-                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone}
+                {"category": c.category, "dept_code": c.department_code, "zone": c.ble_zone,
+                 "assessment_mr": c.severity_reason_mr, "assessment_en": c.severity_reason}
                 for c in critical_rows
             ],
         },
@@ -990,7 +997,8 @@ def _localize_report(data: dict, lang: str) -> dict:
             "opened": data["incidents"]["opened"],
             "resolved": data["incidents"]["resolved"],
             "critical": [
-                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone")}
+                {"category": c["category"], "dept": nm(c["dept_code"]), "zone": c.get("zone"),
+                 "assessment_mr": c.get("assessment_mr"), "assessment_en": c.get("assessment_en")}
                 for c in data["incidents"]["critical"]
             ],
         },
