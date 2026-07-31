@@ -105,12 +105,11 @@ done
   `TTS_DAILY_CAP=30` per user per day (server cache hits bypass the TTS cap).
 - No Redis/infra change (caps + TTS cache use the existing Redis).
 
-**AFTER field verification passes (not before):**
-```bash
-# flips the in-app update banner for the 1.0.20 fleet
-curl -X PUT https://api.hogoplus.in/api/admin/app-version -H "Authorization: Bearer <admin>" \
-  -H 'Content-Type: application/json' -d '{"version":"1.0.21", ...}'
-```
+**AFTER field verification passes (not before):** webdash → Admin →
+"📱 App version & updates" card → set the released version + a REAL store/APK URL
+(or leave empty) → Save. CGM/MD-only, audited, no SQL. This is the EXPLICIT FINAL
+LINE of every release runbook — a release is not done until this card is saved.
+(API equivalent: `PUT /api/admin/app-version`.)
 
 ## 3. BACKUP DRILL — the numbers (re-run 2026-07-30, timed)
 

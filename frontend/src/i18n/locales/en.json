@@ -431,7 +431,12 @@
     "aging": "{{count}} over 24 hrs"
   },
   "update": {
-    "banner": "New version {{version}} is available — tap to update"
+    "banner": "New version {{version}} is available — tap to update",
+    "requiredTitle": "Update required",
+    "requiredBody": "Your app version {{current}} is too old. Version {{latest}} is needed to continue.",
+    "updateNow": "Update now",
+    "noLink": "Can't update from your phone? Contact the Time Office to get the new app.",
+    "retry": "I've updated — check again"
   },
   "offline": {
     "banner": "Offline — your work is saved and will be sent when the network returns"

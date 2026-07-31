@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { api, getAccess } from "../api";
+import { api, ApiError, getAccess } from "../api";
+import { isTopMgmt, useAuth } from "../auth";
 import { Loading } from "../components";
 import { useI18n } from "../i18n";
 
@@ -31,6 +32,7 @@ function istTime(iso: string): string {
 
 export default function Vehicles() {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [tab, setTab] = useState<"log" | "inside">("log");
   const [date, setDate] = useState(() =>
     new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
@@ -41,18 +43,45 @@ export default function Vehicles() {
   const [inside, setInside] = useState<VehicleRow[] | null>(null);
   const [summary, setSummary] = useState<{ today_in: number; today_out: number; currently_inside: number } | null>(null);
   const [err, setErr] = useState("");
+  // 2026-07-31 live bug: vehicle_log_enabled OFF → 403 feature_disabled on every
+  // call left the screen stuck on Loading. Distinguish "switched off" from real errors.
+  const [featureOff, setFeatureOff] = useState(false);
+  const [enabling, setEnabling] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  const vehCatch = (e: any) => {
+    if (e instanceof ApiError && e.status === 403 && String(e.message).includes("feature_disabled")) {
+      setFeatureOff(true);
+    } else {
+      setErr(e.message);
+    }
+  };
 
   useEffect(() => {
-    api("/vehicles/summary").then(setSummary).catch((e) => setErr(e.message));
-    api("/vehicles/inside").then(setInside).catch((e) => setErr(e.message));
-  }, []);
+    api("/vehicles/summary").then(setSummary).catch(vehCatch);
+    api("/vehicles/inside").then(setInside).catch(vehCatch);
+  }, [reloadTick]);
 
   useEffect(() => {
     const qs = new URLSearchParams({ day: date });
     if (plate.trim()) qs.set("plate", plate.trim());
     if (gate.trim()) qs.set("gate", gate.trim());
-    api(`/vehicles/logs?${qs}`).then(setRows).catch((e) => setErr(e.message));
-  }, [date, plate, gate]);
+    api(`/vehicles/logs?${qs}`).then(setRows).catch(vehCatch);
+  }, [date, plate, gate, reloadTick]);
+
+  const enableFeature = async () => {
+    setEnabling(true);
+    setErr("");
+    try {
+      await api("/admin/settings", { method: "PATCH", body: JSON.stringify({ vehicle_log_enabled: true }) });
+      setFeatureOff(false);
+      setReloadTick((n) => n + 1);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setEnabling(false);
+    }
+  };
 
   const downloadXlsx = async () => {
     const res = await fetch(`/api/vehicles/export.xlsx?date_from=${date}&date_to=${date}`, {
@@ -69,6 +98,27 @@ export default function Vehicles() {
   };
 
   const data = tab === "log" ? rows : inside;
+
+  if (featureOff) {
+    return (
+      <div data-testid="vehicles-screen">
+        <h1 style={{ marginTop: 0 }}>🚚 {t("veh_title")}</h1>
+        <div className="card" style={{ textAlign: "center", padding: 40, maxWidth: 560 }} data-testid="veh-disabled">
+          <div style={{ fontSize: 40 }}>🚦</div>
+          <h2>{t("veh_disabled_title")}</h2>
+          <p style={{ color: "var(--muted)" }}>{t("veh_disabled_msg")}</p>
+          {isTopMgmt(user) ? (
+            <button className="btn primary" data-testid="veh-enable" disabled={enabling} onClick={enableFeature}>
+              {enabling ? "…" : t("veh_enable_now")}
+            </button>
+          ) : (
+            <p style={{ fontWeight: 600 }}>{t("veh_ask_admin")}</p>
+          )}
+          {err && <div style={{ color: "var(--danger)", marginTop: 10 }}>{err}</div>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="vehicles-screen">

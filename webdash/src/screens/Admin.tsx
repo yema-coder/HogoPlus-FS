@@ -54,6 +54,11 @@ export default function Admin() {
   const [bMsg, setBMsg] = useState("");
   const [bulk, setBulk] = useState({ uuid: "", major: "1", dept: "", csv: "" });
   const [bulkMsg, setBulkMsg] = useState("");
+  // App version & updates (2026-07-31: prod row was stuck at seeded 1.0.7 with a fake
+  // apk_url because the ONLY way to change it was raw SQL — this card is the fix)
+  const [ver, setVer] = useState<any>(null);
+  const [verMsg, setVerMsg] = useState("");
+  const [flagsMsg, setFlagsMsg] = useState("");
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
@@ -62,6 +67,9 @@ export default function Admin() {
 
   useEffect(() => {
     api("/admin/settings").then(setGeo).catch(() => {});
+    api("/app-version")
+      .then((v) => setVer({ ...v, apk_url: v.apk_url ?? "", notes: v.notes ?? "", latest_version: v.latest_version ?? "" }))
+      .catch(() => setVer({ latest_version: "", apk_url: "", notes: "", force_update: false }));
     loadDepts();
     loadNoPhone();
     loadSops();
@@ -69,6 +77,53 @@ export default function Admin() {
   }, []);
 
   if (!isTopMgmt(user)) return <div className="card">{t("accessDeniedMsg")}</div>;
+
+  const saveVer = async () => {
+    setVerMsg("");
+    const v = (ver.latest_version || "").trim();
+    if (!/^\d+\.\d+(\.\d+)?$/.test(v)) {
+      setVerMsg(t("appver_bad_version"));
+      return;
+    }
+    const url = (ver.apk_url || "").trim();
+    if (url && !url.startsWith("https://")) {
+      setVerMsg(t("appver_bad_url"));
+      return;
+    }
+    try {
+      const res = await api("/admin/app-version", {
+        method: "PUT",
+        body: JSON.stringify({
+          latest_version: v,
+          apk_url: url || null,
+          notes: (ver.notes || "").trim() || null,
+          force_update: !!ver.force_update,
+        }),
+      });
+      setVer({ ...res, apk_url: res.apk_url ?? "", notes: res.notes ?? "" });
+      setVerMsg(`✓ ${t("saved")}`);
+    } catch (e: any) {
+      setVerMsg(e.message);
+    }
+  };
+
+  const saveFlags = async () => {
+    setFlagsMsg("");
+    try {
+      const res = await api("/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          vehicle_log_enabled: !!geo.vehicle_log_enabled,
+          home_config_enabled: !!geo.home_config_enabled,
+          notif_batching_enabled: !!geo.notif_batching_enabled,
+        }),
+      });
+      setGeo(res);
+      setFlagsMsg(`✓ ${t("saved")}`);
+    } catch (e: any) {
+      setFlagsMsg(e.message);
+    }
+  };
 
   const saveGeo = async () => {
     setGeoMsg("");
@@ -253,6 +308,64 @@ export default function Admin() {
 
       <div className="grid">
         <div>
+          <div className="card">
+            <h2>📱 {t("appver_title")}</h2>
+            {!ver ? <Empty /> : (
+              <div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div><label style={{ fontSize: 13, color: "var(--muted)" }}>{t("appver_latest")}</label><br />
+                    <input data-testid="appver-version" style={{ width: 110, fontFamily: "monospace" }} placeholder="1.0.22"
+                      value={ver.latest_version} onChange={(e) => setVer({ ...ver, latest_version: e.target.value })} /></div>
+                  <div style={{ flex: 1, minWidth: 240 }}><label style={{ fontSize: 13, color: "var(--muted)" }}>{t("appver_url")}</label><br />
+                    <input data-testid="appver-url" style={{ width: "100%" }} placeholder="https://play.google.com/store/apps/details?id=com.hogoplus.fs"
+                      value={ver.apk_url} onChange={(e) => setVer({ ...ver, apk_url: e.target.value })} /></div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <label style={{ fontSize: 13, color: "var(--muted)" }}>{t("appver_notes")}</label><br />
+                  <input data-testid="appver-notes" style={{ width: "100%" }}
+                    value={ver.notes} onChange={(e) => setVer({ ...ver, notes: e.target.value })} />
+                </div>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                    <input data-testid="appver-force" type="checkbox" checked={!!ver.force_update}
+                      onChange={(e) => setVer({ ...ver, force_update: e.target.checked })} />
+                    {t("appver_force")}
+                  </label>
+                  <button className="btn primary" data-testid="appver-save" onClick={saveVer}>{t("save")}</button>
+                  {verMsg && <span style={{ fontSize: 13, color: verMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }} data-testid="appver-msg">{verMsg}</span>}
+                </div>
+                {!!ver.force_update && (
+                  <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 0 }}>⚠️ {t("appver_force_warn")}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>🚩 {t("flags_title")}</h2>
+            {!geo ? <Empty /> : (
+              <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input data-testid="flag-vehicle-log" type="checkbox" checked={!!geo.vehicle_log_enabled}
+                    onChange={(e) => setGeo({ ...geo, vehicle_log_enabled: e.target.checked })} />
+                  {t("flag_vehicle")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input data-testid="flag-home-config" type="checkbox" checked={!!geo.home_config_enabled}
+                    onChange={(e) => setGeo({ ...geo, home_config_enabled: e.target.checked })} />
+                  {t("flag_homecfg")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                  <input data-testid="flag-notif-batching" type="checkbox" checked={!!geo.notif_batching_enabled}
+                    onChange={(e) => setGeo({ ...geo, notif_batching_enabled: e.target.checked })} />
+                  {t("flag_notif")}
+                </label>
+                <button className="btn primary" data-testid="flags-save" onClick={saveFlags}>{t("save")}</button>
+                {flagsMsg && <span style={{ fontSize: 13, color: flagsMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{flagsMsg}</span>}
+              </div>
+            )}
+          </div>
+
           <div className="card">
             <h2>📍 {t("geofence")}</h2>
             {!geo ? <Empty /> : (

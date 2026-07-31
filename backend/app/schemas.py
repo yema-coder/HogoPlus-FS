@@ -383,10 +383,25 @@ class PurgeDemoIn(BaseModel):
 
 
 class AppVersionIn(BaseModel):
-    latest_version: str = Field(min_length=1, max_length=20)
+    # "1.0.22" style — rejects garbage that would silently break the update banner
+    latest_version: str = Field(min_length=1, max_length=20, pattern=r"^\d+\.\d+(\.\d+)?$")
     apk_url: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
     force_update: bool = False
+
+    @field_validator("apk_url")
+    @classmethod
+    def _apk_url_sane(cls, v: str | None) -> str | None:
+        """2026-07-31 lesson: a placeholder example.com apk_url shipped to production
+        and made the update banner a dead link. Empty → NULL; https only; no placeholders."""
+        if v is None or not v.strip():
+            return None
+        v = v.strip()
+        if not v.startswith("https://"):
+            raise ValueError("apk_url must start with https:// (or be empty)")
+        if "example.com" in v:
+            raise ValueError("placeholder URLs are not allowed")
+        return v
 
 
 class BeaconAttachIn(BaseModel):
