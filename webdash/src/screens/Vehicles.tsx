@@ -30,13 +30,16 @@ function istTime(iso: string): string {
   });
 }
 
+const istToday = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
 export default function Vehicles() {
   const { t } = useI18n();
   const { user } = useAuth();
   const [tab, setTab] = useState<"log" | "inside">("log");
-  const [date, setDate] = useState(() =>
-    new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
-  );
+  const [date, setDate] = useState(istToday);
+  // Time Office monthly gate audit: export defaults to THIS MONTH so far
+  const [expFrom, setExpFrom] = useState(() => istToday().slice(0, 8) + "01");
+  const [expTo, setExpTo] = useState(istToday);
   const [plate, setPlate] = useState("");
   const [gate, setGate] = useState("");
   const [rows, setRows] = useState<VehicleRow[] | null>(null);
@@ -84,7 +87,7 @@ export default function Vehicles() {
   };
 
   const downloadXlsx = async () => {
-    const res = await fetch(`/api/vehicles/export.xlsx?date_from=${date}&date_to=${date}`, {
+    const res = await fetch(`/api/vehicles/export.xlsx?date_from=${expFrom}&date_to=${expTo}`, {
       headers: { Authorization: `Bearer ${getAccess()}` },
     });
     if (!res.ok) { setErr(`Export failed (${res.status})`); return; }
@@ -92,7 +95,7 @@ export default function Vehicles() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `vehicle_register_${date}.xlsx`;
+    a.download = `vehicle_register_${expFrom}_to_${expTo}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -134,9 +137,14 @@ export default function Vehicles() {
             </span>
           </div>
         )}
-        <button className="btn primary" data-testid="veh-export" onClick={downloadXlsx}>
-          ⬇︎ XLSX
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={t("veh_export_range")}>
+          <input type="date" data-testid="veh-export-from" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} />
+          <span style={{ color: "var(--muted)" }}>→</span>
+          <input type="date" data-testid="veh-export-to" value={expTo} onChange={(e) => setExpTo(e.target.value)} />
+          <button className="btn primary" data-testid="veh-export" onClick={downloadXlsx}>
+            ⬇︎ XLSX
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 10, margin: "14px 0", flexWrap: "wrap" }}>
@@ -230,3 +238,4 @@ export default function Vehicles() {
     </div>
   );
 }
+

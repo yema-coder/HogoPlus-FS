@@ -1185,3 +1185,69 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   multiple edits to the SAME file.
 - User action still required on PROD: flip vehicle_log_enabled (new Vehicles-screen button
   or Admin flags card after deploying this) — sandbox flip does NOT affect prod.
+
+## v1.0.22c — range export + flag audit one-screen truth + runbook rule (2026-07-31)
+- EXPORT: /vehicles/export.xlsx already ranged server-side; webdash now has From→To date
+  inputs defaulting to THIS MONTH (istToday().slice(0,8)+"01" → today), day register view
+  untouched. Test test_export_xlsx_date_range (backdated row 40d, month vs 60d ranges,
+  openpyxl parse). Filename vehicle_register_<from>_to_<to>.xlsx.
+- FLAG AUDIT (prod snapshot 2026-07-31 1007 IST): vehicle_log_enabled OFF (user flipping),
+  home_config_enabled OFF (DARK — real users on legacy home), notif_batching_enabled OFF
+  (DARK), beacon_first_mode OFF (INTENTIONAL policy), dup rules 30/zone/category = active
+  defaults. Admin "Feature flags" card now = one-screen truth: ON/OFF badges for all 4
+  flags + dup rules editor (PATCH /admin/settings already accepted all keys — zero backend
+  change). Env-level flags need EC2 grep (DEMO_OTP_ENABLED, OPENAI_API_KEY, BACKUP_UPLOAD).
+- RUNBOOK RULE (permanent): every release runbook ends with TWO explicit lines — (a) Admin
+  → Feature flags: verify/flip flags the release ships (new features ship OFF), (b) Admin →
+  App version card: bump version. Written into FIELD_PROTOCOL step 33 + AUTOPSY final step.
+  FUTURE AGENTS: every deploy-order output MUST end with the flag-flip + app-version lines.
+- ⚠ FILE-WRITE RACE (2nd + 3rd occurrence): batched parallel search_replace on the SAME file
+  (webdash Vehicles.tsx) silently lost one edit and later duplicated a tail fragment
+  (esbuild syntax error). RULE: never batch multiple edits to one file in parallel; verify
+  with grep -c after editing; rebuild webdash only after source greps pass.
+- Suite 287 passed. Webdash rebuilt (index-CvwOg17G.js). Screenshots: export range defaults
+  + flags card with badges verified in browser as real CGM.
+
+## v1.0.22d — flag visibility hardening + force-update distribution guard (2026-08-01)
+- USER DIRECTIVE: development PAUSED for field verification of 1.0.17→1.0.22 batch. Only
+  no-field-risk work allowed until user reports the 36-gate protocol results + A1-D4 verdicts.
+- backend/scripts/flag_audit.py: read-only one-screen truth (DB flags + app_versions + env
+  toggles as loaded + credential presence). Run on EC2: docker compose exec -T api python
+  scripts/flag_audit.py. Doc: /app/docs/FLAG_AUDIT.md.
+- RUNBOOK RULE now THREE lines (permanent, user-mandated): every deploy runbook ends with
+  (a) run scripts/flag_audit.py, (b) Admin → Feature flags verify/flip, (c) Admin → App
+  version bump. FUTURE AGENTS MUST end every deploy order with all three.
+- Webdash FlagsOffBanner (App.tsx Layout): non-dismissible red strip on EVERY page when
+  vehicle_log_enabled or home_config_enabled is OFF (feature-gating flags only;
+  notif_batching/beacon_first excluded — OFF is a valid state, banner fatigue). Re-checks
+  each route change. Top-mgmt gets in-banner link to /admin; others "ask CGM/MD".
+- Admin App-version card: appver_force_warn rewritten to name the exact distribution trap
+  (Play internal testing list; ≥1.0.22 block screen; ≤1.0.17 ignores force, banner only) +
+  window.confirm guard on save when force ON and apk_url empty/play.google.com.
+- Fixed pre-existing duplicate `department:` key in webdash i18n.tsx (tsc TS1117 was being
+  MASKED by piping tsc through tail — pipe eats exit code; run tsc bare).
+- FORCE-UPDATE TRUTH (verified from git e6b6775): 1.0.17 fails OPEN everywhere Play IMMEDIATE
+  is unavailable → nobody on 1.0.17 is locked out today. Hard-block risk exists only on
+  builds ≥1.0.22 for off-Play-list phones, exit = apk_url. Advice to user: force OFF until
+  distribution covers everyone, or apk_url = direct APK download.
+- PROD home-screen prerequisites verified from prod snapshot: home_configs seeded+active for
+  SECURITY(dept-wide), TIME_OFFICE(dept-wide), CGM, MD; both depts active with managers.
+  Flipping home_config_enabled + vehicle_log_enabled is SUFFICIENT — nothing else needed.
+- Webdash rebuilt; tsc clean (bare run); banner + warn + confirm verified in browser as CGM 0001.
+- PENDING (proposal sent, NO CODE): in-app "how to use" guidance for semi-literate users —
+  user asked for honest video-capability answer + ranked options (user-recorded MP4 pipeline
+  vs coach-marks vs TTS help screens vs first-run tour). Await verdict.
+
+## VIDEO-HELP VERDICT (2026-08-01, user decision — build ONLY after field results arrive)
+- Development remains PAUSED until user reports 36-gate field protocol results. NOTHING new
+  gets built before then, including this video work.
+- Phase 1 (FIRST): coach-marks + Marathi TTS narration on real screens during real tasks.
+  Every coach-mark paired with a speaker icon (non-readers hear it). Zero content production
+  from user; never stale when buttons move.
+- Phase 2 (THEN): user-recorded MP4 pipeline for 4-6 core flows ONLY — punch, incident,
+  voice report, vehicle entry. User records on a real phone. Agent builds: webdash upload →
+  R2 hosting, per-feature mapping (help button per screen), player, offline caching after
+  first view (expo-file-system), Marathi captions (Whisper transcript, user verifies).
+  Include per-video view counts (which screens are actually confusing).
+- REJECTED: first-run tour (people skip tours; fires when least ready to learn).
+- User flipping vehicle_log_enabled + home_config_enabled on prod now; force_update already OFF.

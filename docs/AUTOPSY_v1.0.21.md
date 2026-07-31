@@ -105,11 +105,13 @@ done
   `TTS_DAILY_CAP=30` per user per day (server cache hits bypass the TTS cap).
 - No Redis/infra change (caps + TTS cache use the existing Redis).
 
-**AFTER field verification passes (not before):** webdash → Admin →
-"📱 App version & updates" card → set the released version + a REAL store/APK URL
-(or leave empty) → Save. CGM/MD-only, audited, no SQL. This is the EXPLICIT FINAL
-LINE of every release runbook — a release is not done until this card is saved.
-(API equivalent: `PUT /api/admin/app-version`.)
+**AFTER field verification passes (not before) — the two EXPLICIT FINAL LINES of
+every release runbook (a release is not done until both are saved):**
+1. webdash → Admin → "🚩 Feature flags" card: flip/verify every flag this release
+   ships (new features ship OFF; 2026-07-31 lesson: wave-1 flags sat dark for days).
+2. webdash → Admin → "📱 App version & updates" card: released version + REAL
+   store/APK URL (or empty) → Save. CGM/MD-only, audited, no SQL.
+   (API equivalents: `PATCH /api/admin/settings`, `PUT /api/admin/app-version`.)
 
 ## 3. BACKUP DRILL — the numbers (re-run 2026-07-30, timed)
 
