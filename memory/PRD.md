@@ -1207,3 +1207,33 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   with grep -c after editing; rebuild webdash only after source greps pass.
 - Suite 287 passed. Webdash rebuilt (index-CvwOg17G.js). Screenshots: export range defaults
   + flags card with badges verified in browser as real CGM.
+
+## v1.0.22d — flag visibility hardening + force-update distribution guard (2026-08-01)
+- USER DIRECTIVE: development PAUSED for field verification of 1.0.17→1.0.22 batch. Only
+  no-field-risk work allowed until user reports the 36-gate protocol results + A1-D4 verdicts.
+- backend/scripts/flag_audit.py: read-only one-screen truth (DB flags + app_versions + env
+  toggles as loaded + credential presence). Run on EC2: docker compose exec -T api python
+  scripts/flag_audit.py. Doc: /app/docs/FLAG_AUDIT.md.
+- RUNBOOK RULE now THREE lines (permanent, user-mandated): every deploy runbook ends with
+  (a) run scripts/flag_audit.py, (b) Admin → Feature flags verify/flip, (c) Admin → App
+  version bump. FUTURE AGENTS MUST end every deploy order with all three.
+- Webdash FlagsOffBanner (App.tsx Layout): non-dismissible red strip on EVERY page when
+  vehicle_log_enabled or home_config_enabled is OFF (feature-gating flags only;
+  notif_batching/beacon_first excluded — OFF is a valid state, banner fatigue). Re-checks
+  each route change. Top-mgmt gets in-banner link to /admin; others "ask CGM/MD".
+- Admin App-version card: appver_force_warn rewritten to name the exact distribution trap
+  (Play internal testing list; ≥1.0.22 block screen; ≤1.0.17 ignores force, banner only) +
+  window.confirm guard on save when force ON and apk_url empty/play.google.com.
+- Fixed pre-existing duplicate `department:` key in webdash i18n.tsx (tsc TS1117 was being
+  MASKED by piping tsc through tail — pipe eats exit code; run tsc bare).
+- FORCE-UPDATE TRUTH (verified from git e6b6775): 1.0.17 fails OPEN everywhere Play IMMEDIATE
+  is unavailable → nobody on 1.0.17 is locked out today. Hard-block risk exists only on
+  builds ≥1.0.22 for off-Play-list phones, exit = apk_url. Advice to user: force OFF until
+  distribution covers everyone, or apk_url = direct APK download.
+- PROD home-screen prerequisites verified from prod snapshot: home_configs seeded+active for
+  SECURITY(dept-wide), TIME_OFFICE(dept-wide), CGM, MD; both depts active with managers.
+  Flipping home_config_enabled + vehicle_log_enabled is SUFFICIENT — nothing else needed.
+- Webdash rebuilt; tsc clean (bare run); banner + warn + confirm verified in browser as CGM 0001.
+- PENDING (proposal sent, NO CODE): in-app "how to use" guidance for semi-literate users —
+  user asked for honest video-capability answer + ranked options (user-recorded MP4 pipeline
+  vs coach-marks vs TTS help screens vs first-run tour). Await verdict.

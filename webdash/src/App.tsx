@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, canUseDashboard, isTopMgmt, useAuth } from "./auth";
 import { LangSwitcher, Loading } from "./components";
 import eyeBase from "./eye-base.png";
@@ -55,6 +55,44 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
         <button className="btn ghost" onClick={onClose}>{t("back")}</button>
         {msg && <div style={{ fontWeight: 600, fontSize: 14 }}>{msg}</div>}
       </div>
+    </div>
+  );
+}
+
+/** Non-dismissible strip when a feature-gating Wave-1 flag is OFF — real users
+ * silently lose the feature while demo accounts (which bypass flags) keep working,
+ * so this must be VISIBLE, not discoverable. Re-checks on every route change. */
+function FlagsOffBanner() {
+  const { t } = useI18n();
+  const { user } = useAuth();
+  const location = useLocation();
+  const [offKeys, setOffKeys] = useState<string[]>([]);
+  useEffect(() => {
+    api("/admin/settings")
+      .then((s) => {
+        const off: string[] = [];
+        if (!s.vehicle_log_enabled) off.push("flag_vehicle");
+        if (!s.home_config_enabled) off.push("flag_homecfg");
+        setOffKeys(off);
+      })
+      .catch(() => setOffKeys([]));
+  }, [location.pathname]);
+  if (offKeys.length === 0) return null;
+  return (
+    <div
+      data-testid="flags-off-banner"
+      style={{
+        background: "var(--danger, #B3261E)", color: "#fff", padding: "10px 16px",
+        borderRadius: 10, marginBottom: 14, fontSize: 14, fontWeight: 600,
+        display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+      }}
+    >
+      <span>⚠️ {t("flags_off_banner")}: {offKeys.map((k) => t(k)).join(" · ")}</span>
+      {isTopMgmt(user) ? (
+        <NavLink to="/admin" style={{ color: "#fff", textDecoration: "underline" }}>{t("flags_off_fix")}</NavLink>
+      ) : (
+        <span style={{ fontWeight: 400 }}>{t("veh_ask_admin")}</span>
+      )}
     </div>
   );
 }
@@ -117,6 +155,7 @@ function Layout() {
         </button>
       </nav>
       <main className="main">
+        <FlagsOffBanner />
         <Outlet />
       </main>
       {pwdModal && <ChangePasswordModal onClose={() => setPwdModal(false)} />}

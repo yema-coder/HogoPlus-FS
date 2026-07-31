@@ -56,9 +56,20 @@ const D: Record<string, [string, string, string]> = {
   appver_notes: ["Notes", "नोट्स", "नोंदी"],
   appver_force: ["Force update (blocks old apps)", "फ़ोर्स अपडेट (पुराने ऐप ब्लॉक)", "फोर्स अपडेट (जुने अ‍ॅप ब्लॉक)"],
   appver_force_warn: [
-    "Old apps will be BLOCKED until they update — first make sure every user can actually get the update (Play testing list / APK link).",
-    "पुराने ऐप अपडेट होने तक ब्लॉक रहेंगे — पहले पक्का करें कि हर उपयोगकर्ता अपडेट पा सकता है (Play टेस्टिंग सूची / APK लिंक)।",
-    "जुने अ‍ॅप अपडेट होईपर्यंत ब्लॉक राहतील — आधी खात्री करा की प्रत्येक वापरकर्त्याला अपडेट मिळू शकते (Play टेस्टिंग यादी / APK लिंक).",
+    "Force ON: phones on app 1.0.22+ that fall behind this version get a FULL-SCREEN BLOCK — their only exit is the URL above. Distribution today is Play internal testing (limited email list): off-list phones opening a Play link hit a dead end and are locked out of attendance. Use a direct APK link everyone can download, or keep force OFF until distribution covers everyone. (Apps ≤1.0.17 ignore force and only show a banner.)",
+    "फ़ोर्स ON: 1.0.22+ ऐप वाले फ़ोन पिछड़ने पर पूरी तरह ब्लॉक होंगे — निकलने का एकमात्र रास्ता ऊपर वाला URL है। वितरण अभी Play इंटरनल टेस्टिंग (सीमित ईमेल सूची) है: सूची से बाहर के फ़ोन Play लिंक खोलकर फँस जाएँगे और हाज़िरी नहीं लगा पाएँगे। सबके लिए खुलने वाला सीधा APK लिंक दें, या वितरण सबको कवर करने तक फ़ोर्स OFF रखें। (≤1.0.17 ऐप फ़ोर्स नहीं मानते, सिर्फ़ बैनर दिखाते हैं।)",
+    "फोर्स ON: 1.0.22+ अ‍ॅप असलेले फोन मागे पडल्यास पूर्ण ब्लॉक होतील — बाहेर पडण्याचा एकमेव मार्ग वरचा URL आहे. वितरण सध्या Play इंटर्नल टेस्टिंग (मर्यादित ईमेल यादी) आहे: यादीबाहेरचे फोन Play लिंकवर अडकतील आणि हजेरी लावू शकणार नाहीत. सर्वांना उघडता येईल असा थेट APK लिंक द्या, किंवा वितरण सर्वांना मिळेपर्यंत फोर्स OFF ठेवा. (≤1.0.17 अ‍ॅप फोर्स मानत नाहीत, फक्त बॅनर दाखवतात.)",
+  ],
+  appver_force_confirm: [
+    "Force update is ON but the URL is a Play Store link (or empty). Workers OUTSIDE the Play testing list will be blocked with NO way out. Save anyway?",
+    "फ़ोर्स अपडेट ON है पर URL Play Store लिंक है (या खाली)। Play टेस्टिंग सूची से बाहर के कर्मचारी बिना रास्ते के ब्लॉक हो जाएँगे। फिर भी सेव करें?",
+    "फोर्स अपडेट ON आहे पण URL Play Store लिंक आहे (किंवा रिकामा). Play टेस्टिंग यादीबाहेरचे कर्मचारी मार्गाशिवाय ब्लॉक होतील. तरीही सेव्ह करायचे?",
+  ],
+  flags_off_banner: [
+    "Switched OFF for real users", "असली उपयोगकर्ताओं के लिए बंद", "खऱ्या वापरकर्त्यांसाठी बंद",
+  ],
+  flags_off_fix: [
+    "Turn on: Admin → Feature flags", "चालू करें: Admin → फ़ीचर फ़्लैग", "चालू करा: Admin → फीचर फ्लॅग",
   ],
   appver_bad_version: ["Version must look like 1.0.22", "वर्शन 1.0.22 जैसा होना चाहिए", "आवृत्ती 1.0.22 सारखी हवी"],
   appver_bad_url: ["URL must start with https:// (or leave empty)", "URL https:// से शुरू होना चाहिए (या खाली छोड़ें)", "URL https:// ने सुरू व्हावा (किंवा रिकामे ठेवा)"],
@@ -160,7 +171,6 @@ const D: Record<string, [string, string, string]> = {
   attendanceRegister: ["Attendance register", "उपस्थिति रजिस्टर", "हजेरी रजिस्टर"],
   allDepartments: ["All departments (flagged)", "सभी विभाग (फ़्लैग्ड)", "सर्व विभाग (फ्लॅग्ड)"],
   pendingFlagged: ["pending flagged", "लंबित फ़्लैग्ड", "प्रलंबित फ्लॅग्ड"],
-  department: ["Department", "विभाग", "विभाग"],
   submissions: ["Form submissions", "फ़ॉर्म सबमिशन", "फॉर्म सबमिशन"],
   punchIn: ["Punch in", "पंच इन", "पंच इन"],
   punchOut: ["Punch out", "पंच आउट", "पंच आउट"],

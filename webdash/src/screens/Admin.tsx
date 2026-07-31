@@ -90,6 +90,11 @@ export default function Admin() {
       setVerMsg(t("appver_bad_url"));
       return;
     }
+    // Distribution trap guard: force ON + no direct APK link = off-list phones
+    // (outside Play internal testing) get the block screen with a dead-end URL.
+    if (ver.force_update && (!url || url.includes("play.google.com"))) {
+      if (!window.confirm(t("appver_force_confirm"))) return;
+    }
     try {
       const res = await api("/admin/app-version", {
         method: "PUT",
