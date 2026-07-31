@@ -477,3 +477,14 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - BACKUP_UPLOAD_ENABLED=0 in sandbox backend/.env is a DELIBERATE DR guard (sandbox dumps were
   overwriting prod R2 backup keys) — never remove it; prod defaults ON.
 - frontend/.env restored to api.hogoplus.in; app.json 1.0.22/10022.
+
+## v1.0.22b — MD dashboard vehicle bug + app-version gap (2026-07-31)
+- ROOT CAUSE: prod settings.vehicle_log_enabled=false → 403 feature_disabled on all
+  /vehicles/* for every real user; webdash stuck on Loading. Evidence: prod snapshot DB
+  value + browser console 403 + backend access log; NOT RDS/PG18 related.
+- Fixed: Vehicles.tsx friendly disabled panel + one-click enable (top mgmt); Admin card for
+  app-version (validated: semver pattern, https-only apk_url, placeholders rejected) +
+  feature-flag toggles; UpdateGate force-update block screen (native build required to test).
+- restore_latest.py: strips PG18 pg_dump artifacts (\restrict, SET transaction_timeout) so
+  RDS full dumps restore onto PG16 sandbox.
+- 287 pytest passed; webdash rebuilt; E2E browser-verified as real CGM with screenshots.

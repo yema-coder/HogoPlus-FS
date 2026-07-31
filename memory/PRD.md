@@ -1145,3 +1145,43 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   nudge steps 34-36). Deploy delta: git pull + rebuild + alembic upgrade head (0016) — no new
   keys/flags; PUNCHOUT_FLAG_AFTER_HOURS optional env.
 - Backlog per owner: Wave-2 "expected today" trucks + SOS stay PARKED. Awaiting A1-D4 verdicts.
+
+## v1.0.22b — MD-dashboard vehicle bug (ROOT-CAUSED) + app-version process gap (2026-07-31)
+- POD RECYCLED (4th recurrence): sandbox_recover.sh initially FAILED — prod backups are now
+  FULL pg_dump 18.4 dumps (user hardened prod; RDS is PG 18.3) containing `SET
+  transaction_timeout` (PG17+ GUC) which PG16 psql apply rejects under ON_ERROR_STOP.
+  FIX: restore_latest.py now strips \restrict/\unrestrict + SET transaction_timeout lines.
+  Sandbox restored from backups/2026-07-31/1007.sql.gz (manual prod backup, 447 employees,
+  alembic 0016 — user already migrated prod to 0016).
+- VEHICLE BUG ROOT CAUSE (evidence-backed): settings.vehicle_log_enabled=FALSE on prod (never
+  flipped after wave-1; all 7 vehicle_logs rows is_demo=true). _gate_access → 403
+  {"code":"feature_disabled"} for EVERY real user on /vehicles/logs|summary|inside; role-
+  independent; NOT RDS/PG18/query/empty-data. Deployed webdash bundle stuck on "Loading…"
+  (old bundle didn't surface the error). Reproduced: real CGM +918483029039 (whitelist demo
+  OTP; NEVER call send-otp for real phones from sandbox — REAL SMS creds present!) → browser
+  console 403s + backend access log 403 lines captured.
+- FIX: webdash Vehicles.tsx catches feature_disabled → friendly "switched off" panel
+  (veh-disabled testid) + one-click "Enable vehicle log" button for isTopMgmt → PATCH
+  /admin/settings (audited settings.updated) → auto-reload; empty register renders "No
+  entries" cleanly; populated register verified (screenshots, real CGM E2E in browser).
+  Regression test test_vehicle_log.py::test_webdash_register_flag_off_then_enable_then_empty_then_rows
+  (flag-off 403 ×3 endpoints, enable path, clean empty 200 [], populated row).
+- APP-VERSION GAP FIXES: (a) webdash Admin "App version & updates" card (GET /app-version,
+  PUT /admin/app-version — CGM/MD-gated, audited) + "Feature flags" card (vehicle_log/
+  home_config/notif_batching via PATCH /admin/settings); (b) AppVersionIn validation:
+  version pattern ^\d+\.\d+(\.\d+)?$, apk_url https-only, example.com/placeholder REJECTED,
+  blank → NULL (tests in test_prompt16.py); (c) comparison confirmed SEMANTIC (numeric
+  per-segment isNewer in UpdateBanner + UpdateGate — was never string compare); (d)
+  UpdateGate rewritten: force_update now renders a NON-DISMISSIBLE full-screen block modal
+  when Play IMMEDIATE is unavailable (sideload/outside testing list): Update-now button →
+  apk_url else market://com.hogoplus.fs else Play web URL, "contact Time Office" line,
+  "I've updated — check again" re-check + foreground re-check; non-force stays fail-open
+  (banner). NEEDS NATIVE BUILD to test (Expo Go excluded by appOwnership guard). i18n
+  update.* ×3; (e) runbook: FIELD_PROTOCOL step 33 + AUTOPSY final step now say the Admin
+  card is the EXPLICIT FINAL LINE of every release runbook.
+- Suite 287 passed (3 new). tsc/eslint clean. Webdash rebuilt (index-Bl-1qTFH.js).
+- WEIRDNESS NOTE: one search_replace in a parallel batch reported success but the panel
+  block was missing from Vehicles.tsx afterwards — verify批 edits with grep -c when batching
+  multiple edits to the SAME file.
+- User action still required on PROD: flip vehicle_log_enabled (new Vehicles-screen button
+  or Admin flags card after deploying this) — sandbox flip does NOT affect prod.

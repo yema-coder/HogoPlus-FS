@@ -113,6 +113,9 @@ def main() -> None:
         line for line in text_dump.splitlines()
         if not (line.startswith("ALTER ") and " OWNER TO " in line)
         and not line.startswith(("GRANT ", "REVOKE "))
+        # PG18 pg_dump output on older targets: \restrict/\unrestrict need psql>=x.10
+        # (Aug 2025 security release) and transaction_timeout is a PG17+ GUC.
+        and not line.startswith(("\\restrict", "\\unrestrict", "SET transaction_timeout"))
         and not (data_only and line.startswith('INSERT INTO "alembic_version"'))
     )
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as tmp:

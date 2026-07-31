@@ -189,9 +189,11 @@ name + phone model (fix rides the next build; not a rollout blocker).
 
 ## PHASE 10 — rollout
 
-**33.** All gates 0–8 green → on EC2, bump the app-version row to 1.0.21
-(AUTOPSY §2 last step).
-→ EXPECT 1.0.20 phones show the update banner and self-update. Rollout complete.
+**33.** All gates 0–8 green → webdash → Admin → "📱 App version & updates" card:
+set the released version (must match Phase 0 step 1), a REAL store/APK URL or leave
+empty, notes, Save. (No SQL, CGM/MD-only, audited. This is the EXPLICIT FINAL LINE of
+every release runbook — a release is NOT done until this card is saved.)
+→ EXPECT older phones show the update banner and self-update. Rollout complete.
 
 **Report back:** gate number + step number + what you saw for anything red. One line per
 failure is enough.

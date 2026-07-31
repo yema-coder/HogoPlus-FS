@@ -168,3 +168,42 @@ async def test_overstay_sweep_notifies_security_hod(client, db_session):
     inbox = (await client.get("/api/notifications/mine", headers=hod)).json()
     items = inbox["items"] if isinstance(inbox, dict) else inbox
     assert any(n["type"] == "vehicle_overstay" for n in items)
+
+
+async def test_webdash_register_flag_off_then_enable_then_empty_then_rows(client, db_session):
+    """MD-dashboard regression (2026-07-31 live bug): vehicle_log_enabled was never
+    flipped on prod, so every REAL user's register calls returned 403 feature_disabled
+    and the webdash stuck on Loading. Covers: flag-off 403s on all three register
+    endpoints, the one-click enable path (webdash button = PATCH /admin/settings),
+    the clean empty result, and a populated register."""
+    await db_session.execute(text("UPDATE settings SET vehicle_log_enabled=false"))
+    await db_session.commit()
+    cgm = await login(client, PHONES["cgm"])
+
+    for ep in ("/api/vehicles/logs", "/api/vehicles/summary", "/api/vehicles/inside"):
+        r = await client.get(ep, headers=cgm)
+        assert r.status_code == 403, f"{ep}: {r.status_code}"
+        assert r.json()["detail"] == {"code": "feature_disabled"}
+
+    # the webdash "Enable vehicle log" button path — CGM/MD only, audited server-side
+    r = await client.patch("/api/admin/settings", json={"vehicle_log_enabled": True}, headers=cgm)
+    assert r.status_code == 200 and r.json()["vehicle_log_enabled"] is True
+
+    # EMPTY path: no matching rows must be a clean 200 [] — never an error
+    r = await client.get("/api/vehicles/logs?plate=ZZ99XX0000", headers=cgm)
+    assert r.status_code == 200 and r.json() == []
+    r = await client.get("/api/vehicles/summary", headers=cgm)
+    assert r.status_code == 200
+    assert set(r.json()) == {"today_in", "today_out", "currently_inside"}
+
+    # POPULATED path: a real gate entry shows up in the register for top mgmt
+    sec = await login(client, PHONES["w_sec"])
+    r = await client.post(
+        "/api/vehicles/log",
+        json={"plate": "MH09TT7777", "vehicle_type": "truck", "direction": "in"},
+        headers=sec,
+    )
+    assert r.status_code == 200, r.text
+    r = await client.get("/api/vehicles/logs?plate=MH09TT7777", headers=cgm)
+    assert r.status_code == 200
+    assert len(r.json()) == 1 and r.json()[0]["plate"] == "MH09TT7777"
