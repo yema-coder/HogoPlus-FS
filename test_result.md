@@ -488,3 +488,11 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - restore_latest.py: strips PG18 pg_dump artifacts (\restrict, SET transaction_timeout) so
   RDS full dumps restore onto PG16 sandbox.
 - 287 pytest passed; webdash rebuilt; E2E browser-verified as real CGM with screenshots.
+
+## v1.0.22c — range export + flag truth card (2026-07-31)
+- Vehicles export: From→To inputs default to current month; register day view unchanged;
+  ranged xlsx covered by test_export_xlsx_date_range.
+- Admin Feature-flags card = one-screen truth (4 flags with ON/OFF badges + dup rules).
+  Prod audit: home_config_enabled + notif_batching_enabled still DARK; beacon_first OFF is
+  intentional policy. Runbook now ends with flag-flip + app-version as explicit final lines.
+- 287 pytest passed; webdash rebuilt; browser-verified as real CGM.

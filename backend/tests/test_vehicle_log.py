@@ -1,6 +1,8 @@
 """Wave 1 — Security vehicle entry/exit log: flag gating, permissions, ANPR-or-
 manual entry payloads, IN/OUT pairing, currently-inside, idempotent offline
 replay, summary counts and XLSX export."""
+import uuid
+
 from sqlalchemy import text
 
 from tests.conftest import PHONES, login
@@ -207,3 +209,48 @@ async def test_webdash_register_flag_off_then_enable_then_empty_then_rows(client
     r = await client.get("/api/vehicles/logs?plate=MH09TT7777", headers=cgm)
     assert r.status_code == 200
     assert len(r.json()) == 1 and r.json()[0]["plate"] == "MH09TT7777"
+
+
+async def test_export_xlsx_date_range(client, db_session):
+    """Time Office monthly gate audit: export accepts a date RANGE and filters by it."""
+    await db_session.execute(text("UPDATE settings SET vehicle_log_enabled=true"))
+    await db_session.commit()
+    cgm = await login(client, PHONES["cgm"])
+    sec = await login(client, PHONES["w_sec"])
+
+    r = await client.post(
+        "/api/vehicles/log",
+        json={"plate": "MH09RNG0001", "vehicle_type": "truck", "direction": "in"},
+        headers=sec,
+    )
+    assert r.status_code == 200, r.text
+    new_id = r.json()["log"]["id"]
+    # backdate a second entry 40 days into the past (outside this month)
+    old_id = str(uuid.uuid4())
+    await db_session.execute(
+        text(
+            "INSERT INTO vehicle_logs (id, plate, vehicle_type, direction, logged_by, logged_at, is_demo) "
+            "SELECT :i, 'MH09RNG0002', 'truck', 'in', logged_by, now() - interval '40 days', false "
+            "FROM vehicle_logs WHERE id = :n"
+        ),
+        {"i": old_id, "n": new_id},
+    )
+    await db_session.commit()
+
+    import io
+    from datetime import date as d, timedelta as td
+    from openpyxl import load_workbook
+
+    async def export_plates(frm: str, to: str) -> set:
+        r = await client.get(f"/api/vehicles/export.xlsx?date_from={frm}&date_to={to}", headers=cgm)
+        assert r.status_code == 200, r.text
+        ws = load_workbook(io.BytesIO(r.content)).active
+        return {row[2] for row in ws.iter_rows(min_row=2, values_only=True)}
+
+    today = d.today()
+    month_plates = await export_plates(today.replace(day=1).isoformat(), today.isoformat())
+    assert "MH09RNG0001" in month_plates
+    assert "MH09RNG0002" not in month_plates  # 40 days old — outside this month
+
+    all_plates = await export_plates((today - td(days=60)).isoformat(), today.isoformat())
+    assert {"MH09RNG0001", "MH09RNG0002"} <= all_plates

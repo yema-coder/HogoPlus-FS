@@ -1185,3 +1185,25 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   multiple edits to the SAME file.
 - User action still required on PROD: flip vehicle_log_enabled (new Vehicles-screen button
   or Admin flags card after deploying this) — sandbox flip does NOT affect prod.
+
+## v1.0.22c — range export + flag audit one-screen truth + runbook rule (2026-07-31)
+- EXPORT: /vehicles/export.xlsx already ranged server-side; webdash now has From→To date
+  inputs defaulting to THIS MONTH (istToday().slice(0,8)+"01" → today), day register view
+  untouched. Test test_export_xlsx_date_range (backdated row 40d, month vs 60d ranges,
+  openpyxl parse). Filename vehicle_register_<from>_to_<to>.xlsx.
+- FLAG AUDIT (prod snapshot 2026-07-31 1007 IST): vehicle_log_enabled OFF (user flipping),
+  home_config_enabled OFF (DARK — real users on legacy home), notif_batching_enabled OFF
+  (DARK), beacon_first_mode OFF (INTENTIONAL policy), dup rules 30/zone/category = active
+  defaults. Admin "Feature flags" card now = one-screen truth: ON/OFF badges for all 4
+  flags + dup rules editor (PATCH /admin/settings already accepted all keys — zero backend
+  change). Env-level flags need EC2 grep (DEMO_OTP_ENABLED, OPENAI_API_KEY, BACKUP_UPLOAD).
+- RUNBOOK RULE (permanent): every release runbook ends with TWO explicit lines — (a) Admin
+  → Feature flags: verify/flip flags the release ships (new features ship OFF), (b) Admin →
+  App version card: bump version. Written into FIELD_PROTOCOL step 33 + AUTOPSY final step.
+  FUTURE AGENTS: every deploy-order output MUST end with the flag-flip + app-version lines.
+- ⚠ FILE-WRITE RACE (2nd + 3rd occurrence): batched parallel search_replace on the SAME file
+  (webdash Vehicles.tsx) silently lost one edit and later duplicated a tail fragment
+  (esbuild syntax error). RULE: never batch multiple edits to one file in parallel; verify
+  with grep -c after editing; rebuild webdash only after source greps pass.
+- Suite 287 passed. Webdash rebuilt (index-CvwOg17G.js). Screenshots: export range defaults
+  + flags card with badges verified in browser as real CGM.

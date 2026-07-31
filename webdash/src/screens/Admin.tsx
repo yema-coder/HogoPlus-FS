@@ -116,6 +116,10 @@ export default function Admin() {
           vehicle_log_enabled: !!geo.vehicle_log_enabled,
           home_config_enabled: !!geo.home_config_enabled,
           notif_batching_enabled: !!geo.notif_batching_enabled,
+          beacon_first_mode: !!geo.beacon_first_mode,
+          dup_window_minutes: Number(geo.dup_window_minutes) || 30,
+          dup_same_zone: !!geo.dup_same_zone,
+          dup_same_category: !!geo.dup_same_category,
         }),
       });
       setGeo(res);
@@ -344,24 +348,44 @@ export default function Admin() {
           <div className="card">
             <h2>🚩 {t("flags_title")}</h2>
             {!geo ? <Empty /> : (
-              <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input data-testid="flag-vehicle-log" type="checkbox" checked={!!geo.vehicle_log_enabled}
-                    onChange={(e) => setGeo({ ...geo, vehicle_log_enabled: e.target.checked })} />
-                  {t("flag_vehicle")}
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input data-testid="flag-home-config" type="checkbox" checked={!!geo.home_config_enabled}
-                    onChange={(e) => setGeo({ ...geo, home_config_enabled: e.target.checked })} />
-                  {t("flag_homecfg")}
-                </label>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                  <input data-testid="flag-notif-batching" type="checkbox" checked={!!geo.notif_batching_enabled}
-                    onChange={(e) => setGeo({ ...geo, notif_batching_enabled: e.target.checked })} />
-                  {t("flag_notif")}
-                </label>
-                <button className="btn primary" data-testid="flags-save" onClick={saveFlags}>{t("save")}</button>
-                {flagsMsg && <span style={{ fontSize: 13, color: flagsMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{flagsMsg}</span>}
+              <div>
+                {([
+                  ["vehicle_log_enabled", "flag_vehicle", "flag-vehicle-log"],
+                  ["home_config_enabled", "flag_homecfg", "flag-home-config"],
+                  ["notif_batching_enabled", "flag_notif", "flag-notif-batching"],
+                  ["beacon_first_mode", "flag_beacon_first", "flag-beacon-first"],
+                ] as [string, string, string][]).map(([key, label, tid]) => (
+                  <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "4px 0" }}>
+                    <input data-testid={tid} type="checkbox" checked={!!geo[key]}
+                      onChange={(e) => setGeo({ ...geo, [key]: e.target.checked })} />
+                    <span style={{
+                      fontWeight: 700, fontSize: 11, padding: "1px 8px", borderRadius: 10,
+                      background: geo[key] ? "var(--success, #1E8E4E)" : "var(--muted, #888)", color: "#fff",
+                    }}>{geo[key] ? "ON" : "OFF"}</span>
+                    {t(label)}
+                  </label>
+                ))}
+                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--border, #eee)" }}>
+                  <span style={{ fontSize: 13, color: "var(--muted)" }}>{t("dup_rules")}:</span>
+                  <label style={{ fontSize: 13 }}>
+                    <input data-testid="dup-window" type="number" min={5} max={240} style={{ width: 60 }}
+                      value={geo.dup_window_minutes ?? 30}
+                      onChange={(e) => setGeo({ ...geo, dup_window_minutes: e.target.value })} /> {t("dup_minutes")}
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13 }}>
+                    <input data-testid="dup-zone" type="checkbox" checked={!!geo.dup_same_zone}
+                      onChange={(e) => setGeo({ ...geo, dup_same_zone: e.target.checked })} />{t("dup_zone")}
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13 }}>
+                    <input data-testid="dup-category" type="checkbox" checked={!!geo.dup_same_category}
+                      onChange={(e) => setGeo({ ...geo, dup_same_category: e.target.checked })} />{t("dup_category")}
+                  </label>
+                </div>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 10 }}>
+                  <button className="btn primary" data-testid="flags-save" onClick={saveFlags}>{t("save")}</button>
+                  {flagsMsg && <span style={{ fontSize: 13, color: flagsMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{flagsMsg}</span>}
+                </div>
+                <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 0 }}>{t("flags_hint")}</p>
               </div>
             )}
           </div>
