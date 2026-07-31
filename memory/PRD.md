@@ -1237,3 +1237,17 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - PENDING (proposal sent, NO CODE): in-app "how to use" guidance for semi-literate users —
   user asked for honest video-capability answer + ranked options (user-recorded MP4 pipeline
   vs coach-marks vs TTS help screens vs first-run tour). Await verdict.
+
+## VIDEO-HELP VERDICT (2026-08-01, user decision — build ONLY after field results arrive)
+- Development remains PAUSED until user reports 36-gate field protocol results. NOTHING new
+  gets built before then, including this video work.
+- Phase 1 (FIRST): coach-marks + Marathi TTS narration on real screens during real tasks.
+  Every coach-mark paired with a speaker icon (non-readers hear it). Zero content production
+  from user; never stale when buttons move.
+- Phase 2 (THEN): user-recorded MP4 pipeline for 4-6 core flows ONLY — punch, incident,
+  voice report, vehicle entry. User records on a real phone. Agent builds: webdash upload →
+  R2 hosting, per-feature mapping (help button per screen), player, offline caching after
+  first view (expo-file-system), Marathi captions (Whisper transcript, user verifies).
+  Include per-video view counts (which screens are actually confusing).
+- REJECTED: first-run tour (people skip tours; fires when least ready to learn).
+- User flipping vehicle_log_enabled + home_config_enabled on prod now; force_update already OFF.
