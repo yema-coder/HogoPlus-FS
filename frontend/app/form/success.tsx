@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { BigButton } from "@/src/components/BigButton";
+import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 
 export default function FormSuccess() {
@@ -24,41 +25,44 @@ export default function FormSuccess() {
   }, [isQueued, router]);
 
   return (
-    <SafeAreaView style={styles.safe} testID="form-success-screen">
-      <View style={styles.center}>
-        <View
-          style={[styles.circle, { backgroundColor: isQueued ? "#FDF0DC" : "#DDF5E5" }]}
-          testID={isQueued ? "form-queued-icon" : "form-sent-icon"}
-        >
-          {isQueued ? (
-            <CloudOff size={64} color={colors.warning} strokeWidth={2} />
-          ) : (
-            <CheckCircle2 size={64} color={colors.success} strokeWidth={2} />
-          )}
+    <SafeAreaView style={styles.safe} edges={["bottom"]} testID="form-success-screen">
+      <ScreenHeader title={t("forms.title")} backTo="/(tabs)/department" />
+      <View style={styles.content}>
+        <View style={styles.center}>
+          <View
+            style={[styles.circle, { backgroundColor: isQueued ? "#FDF0DC" : "#DDF5E5" }]}
+            testID={isQueued ? "form-queued-icon" : "form-sent-icon"}
+          >
+            {isQueued ? (
+              <CloudOff size={64} color={colors.warning} strokeWidth={2} />
+            ) : (
+              <CheckCircle2 size={64} color={colors.success} strokeWidth={2} />
+            )}
+          </View>
+          <Text style={styles.title}>
+            {isQueued ? t("incident.queuedTitle") : t("forms.successTitle")}
+          </Text>
+          <Text style={styles.body}>
+            {isQueued ? t("incident.queuedBody") : t("forms.successBody")}
+          </Text>
+          <Text style={styles.returning}>{t("incident.returningHome")}</Text>
         </View>
-        <Text style={styles.title}>
-          {isQueued ? t("incident.queuedTitle") : t("forms.successTitle")}
-        </Text>
-        <Text style={styles.body}>
-          {isQueued ? t("incident.queuedBody") : t("forms.successBody")}
-        </Text>
-        <Text style={styles.returning}>{t("incident.returningHome")}</Text>
+        <BigButton
+          testID="form-success-home-button"
+          label={t("common.home")}
+          icon={Home}
+          height={64}
+          onPress={() => router.replace("/(tabs)/department")}
+        />
       </View>
-      <BigButton
-        testID="form-success-home-button"
-        label={t("common.home")}
-        icon={Home}
-        height={64}
-        onPress={() => router.replace("/(tabs)/department")}
-      />
-      </SafeAreaView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: sizes.screenPadding,
     justifyContent: "space-between",
     paddingBottom: spacing.xl,

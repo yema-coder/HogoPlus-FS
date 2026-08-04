@@ -98,7 +98,7 @@ export default function AlertsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="alerts-screen">
-      <ScreenHeader title={t("notif.title")} back={false} />
+      <ScreenHeader title={t("notif.title")} backTo="/(tabs)/home" />
       {error && !data ? (
         <ErrorRetry onRetry={() => void refresh()} />
       ) : (

@@ -17,6 +17,7 @@ import { confirmIncidentRouting, incidentDetail, listDepartments } from "@/src/a
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
+import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { SpeakerButton } from "@/src/components/SpeakerButton";
 import { INCIDENT_CATEGORIES, categoryDef } from "@/src/constants/categories";
@@ -130,7 +131,8 @@ export default function IncidentSuccess() {
     && !incident?.ai_confirmed_by;
 
   return (
-    <SafeAreaView style={styles.safe} testID="incident-success-screen">
+    <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-success-screen">
+      <ScreenHeader title={t("home.reportIncident")} backTo="/" />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.center}>
           <View

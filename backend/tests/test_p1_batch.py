@@ -51,6 +51,17 @@ async def _mk_attendance(db_session, employee_id: str, day, flagged=True, approv
     return row
 
 
+def _free_day(offset: int = 3):
+    """A current-month day that other test suites never write to. Other files
+    punch these workers for TODAY (and sometimes yesterday); fixed
+    `.replace(day=N)` values collided with today every Nth of the month
+    (uq_attendance_emp_date). Offsets >= 3 keep clear of today/yesterday."""
+    today = datetime.now(IST).date()
+    if today.day >= offset + 2:
+        return today - timedelta(days=offset)
+    return today + timedelta(days=offset)
+
+
 # =====================================================================
 # 1. My Month — shared source of truth
 # =====================================================================
@@ -62,8 +73,8 @@ async def test_month_summary_counts_and_prev_month(client, db_session):
     first = today.replace(day=1)
     # other suites also punch for w_att1 — assert DELTAS against a baseline
     base = (await client.get("/api/attendance/month-summary", headers=w)).json()
-    await _mk_attendance(db_session, me["id"], first.replace(day=24), flagged=True)
-    await _mk_attendance(db_session, me["id"], first.replace(day=25), flagged=False)
+    await _mk_attendance(db_session, me["id"], _free_day(3), flagged=True)
+    await _mk_attendance(db_session, me["id"], _free_day(4), flagged=False)
     prev_day = (first - timedelta(days=1)).replace(day=24)
     await _mk_attendance(db_session, me["id"], prev_day, flagged=False)
 
@@ -83,7 +94,7 @@ async def test_month_summary_matches_to_flagged_queue(client, db_session):
     w = await login(client, PHONES["w_att2"])
     to = await login(client, PHONES["time_mgr"])
     me = await _me(client, w)
-    day = datetime.now(IST).date().replace(day=26)
+    day = _free_day(3)
     await _mk_attendance(db_session, me["id"], day, flagged=True)
 
     month = day.strftime("%Y-%m")
@@ -129,7 +140,7 @@ async def test_regularize_full_lifecycle_approve(client, db_session):
     w = await login(client, PHONES["w_att3"])
     to = await login(client, PHONES["time_mgr"])
     me = await _me(client, w)
-    day = datetime.now(IST).date().replace(day=27)
+    day = _free_day(3)
     att = await _mk_attendance(db_session, me["id"], day, flagged=True)
     month = day.strftime("%Y-%m")
     base = (
@@ -220,9 +231,7 @@ async def test_regularize_reject_resolves_punch(client, db_session):
     w = await login(client, PHONES["w_att4"])
     to = await login(client, PHONES["time_mgr"])
     me = await _me(client, w)
-    att = await _mk_attendance(
-        db_session, me["id"], datetime.now(IST).date().replace(day=4), flagged=True
-    )
+    att = await _mk_attendance(db_session, me["id"], _free_day(5), flagged=True)
     reg_id = (
         await client.post(f"/api/attendance/{att.id}/regularize", json={}, headers=w)
     ).json()["id"]
@@ -248,9 +257,8 @@ async def test_regularize_boundaries(client, db_session):
     w_other = await login(client, PHONES["w_att1"])
     prod_mgr = await login(client, PHONES["prod_mgr"])
     me = await _me(client, w)
-    day = datetime.now(IST).date().replace(day=5)
-    att_ok = await _mk_attendance(db_session, me["id"], day, flagged=True)
-    att_clean = await _mk_attendance(db_session, me["id"], day + timedelta(days=1), flagged=False)
+    att_ok = await _mk_attendance(db_session, me["id"], _free_day(3), flagged=True)
+    att_clean = await _mk_attendance(db_session, me["id"], _free_day(4), flagged=False)
 
     # cannot dispute someone else's punch
     r = await client.post(f"/api/attendance/{att_ok.id}/regularize", json={}, headers=w_other)

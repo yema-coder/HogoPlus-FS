@@ -151,7 +151,7 @@ export default function ReportsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="reports-screen">
-      <ScreenHeader title={t("reports.title")} back={false} />
+      <ScreenHeader title={t("reports.title")} backTo="/(tabs)/home" />
 
       {isManager ? (
         <View style={styles.toggleRow}>

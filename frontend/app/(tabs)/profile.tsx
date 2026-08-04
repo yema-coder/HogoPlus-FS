@@ -51,7 +51,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="profile-screen">
-      <ScreenHeader title={t("profile.title")} back={false} />
+      <ScreenHeader title={t("profile.title")} backTo="/(tabs)/home" />
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.hero}>
           <Pressable
