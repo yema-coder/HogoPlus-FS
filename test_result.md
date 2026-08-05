@@ -496,3 +496,23 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
   Prod audit: home_config_enabled + notif_batching_enabled still DARK; beacon_first OFF is
   intentional policy. Runbook now ends with flag-flip + app-version as explicit final lines.
 - 287 pytest passed; webdash rebuilt; browser-verified as real CGM.
+
+## v1.0.23 — back-nav audit + approvals All view + MD handover (2026-08-04)
+- Back buttons: ScreenHeader gained onBack/backTo (Href) props. Tab screens (alerts, reports,
+  profile, department, approvals) back={false} → backTo home; form/success, incident/success,
+  attendance/result got headers (backTo mirrors their Done buttons); face-enroll header back +
+  BackHandler mirror finish()/Later. Gates stay backless BY DESIGN: language, phone, pending,
+  permissions, index redirect. Hardware back on tabs = firstRoute (home) — matches on-screen.
+- Approvals: "All" pill first; stacked sections w/ live counts, 3-card previews + "View all n"
+  jump rows; renderItem refactored to renderRow(seg, item); keyExtractor allKey??id. Network
+  unchanged (queries were already batched on focus).
+- Webdash: role MD → sidebar identity "Prasad Sugar Mill" (md-identity testid).
+- Backend: scripts/seed_md_handover.py (idempotent, audited, never resets changed password) —
+  0428/1220 → MD + temp Hogo@123 + must_change. 4 tests in tests/test_md_handover.py.
+- Flake fixes: test_vehicle_log date range now uses IST today (UTC/IST window flake);
+  test_p1_batch _free_day() kills uq_attendance_emp_date collisions with fixed day-of-month.
+- 291 passed, 2 skipped (env-only: ffmpeg missing, in-day punch). testing_agent iteration_26:
+  mobile 100% pass, 0 bugs; webdash flows self-verified in browser (screenshots).
+- HARNESS: otp boxes need page.evaluate native-setter injection on [data-testid='otp-input'];
+  fill/type do NOT work. EXPO_PUBLIC_API_URL restored to api.hogoplus.in after testing
+  (sandbox testing needs it flipped to the preview URL first — remember to flip back).

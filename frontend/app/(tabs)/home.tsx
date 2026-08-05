@@ -55,7 +55,6 @@ import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, shadow, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatShiftTime, formatTime } from "@/src/utils/format";
-import { tri } from "@/src/i18n";
 
 /** Idle brand animation: the eye logo blinks softly every few seconds (native driver,
  * paused while the app is backgrounded — battery-friendly). */

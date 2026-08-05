@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -11,12 +11,27 @@ interface Props {
   back?: boolean;
   right?: React.ReactNode;
   testID?: string;
+  /** Deterministic back: onBack wins; else backTo (replace); else pop with home fallback. */
+  onBack?: () => void;
+  backTo?: Href;
 }
 
 /** Sticky, safe-area-aware screen header (72px content height). */
-export function ScreenHeader({ title, back = true, right, testID = "screen-header" }: Props) {
+export function ScreenHeader({ title, back = true, right, testID = "screen-header", onBack, backTo }: Props) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const goBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (backTo) {
+      router.replace(backTo);
+      return;
+    }
+    if (router.canGoBack()) router.back();
+    else router.replace("/(tabs)/home");
+  };
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]} testID={testID}>
       <View style={styles.row}>
@@ -24,7 +39,7 @@ export function ScreenHeader({ title, back = true, right, testID = "screen-heade
           <Pressable
             testID={`${testID}-back-button`}
             accessibilityRole="button"
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+            onPress={goBack}
             style={styles.backBtn}
           >
             <ArrowLeft size={26} color={colors.text} strokeWidth={2.4} />

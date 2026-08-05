@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 
 import { myAttendance, sendBleDiag } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
+import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatTime } from "@/src/utils/format";
@@ -93,7 +94,9 @@ export default function PunchResultScreen() {
   const r = render();
 
   return (
-    <SafeAreaView style={styles.safe} testID="punch-result-screen">
+    <SafeAreaView style={styles.safe} edges={["bottom"]} testID="punch-result-screen">
+      <ScreenHeader title={t("att.title")} backTo="/(tabs)/home" />
+      <View style={styles.content}>
       <View style={styles.center}>
         <Animated.View
           style={[styles.circle, { backgroundColor: r.bg, transform: [{ scale }] }]}
@@ -175,14 +178,15 @@ export default function PunchResultScreen() {
         height={64}
         onPress={() => router.replace("/(tabs)/home")}
       />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
+  safe: { flex: 1, backgroundColor: colors.background },
+  content: {
     flex: 1,
-    backgroundColor: colors.background,
     padding: sizes.screenPadding,
     justifyContent: "space-between",
     paddingBottom: spacing.xl,

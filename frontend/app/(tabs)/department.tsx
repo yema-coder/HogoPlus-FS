@@ -78,7 +78,7 @@ export default function DepartmentScreen() {
               ? tri(profile.department as unknown as Record<string, unknown>, "name")
               : t("tabs.dept")
         }
-        back={false}
+        backTo="/(tabs)/home"
       />
       <FlatList
         data={subItems}

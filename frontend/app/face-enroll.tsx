@@ -1,8 +1,8 @@
 import * as ImageManipulator from "expo-image-manipulator";
 import { useRouter } from "expo-router";
 import { ScanFace } from "lucide-react-native";
-import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { BackHandler, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -10,6 +10,7 @@ import { ApiError, uploadFile } from "@/src/api/client";
 import { faceEnroll } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { EyeLoader } from "@/src/components/EyeLoader";
+import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
@@ -32,6 +33,16 @@ export default function FaceEnrollScreen() {
     await markFaceEnrollAsked();
     router.replace("/(tabs)/home");
   };
+
+  // Android hardware back mirrors the on-screen back / "Later" exactly.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      void finish();
+      return true;
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (uri: string) => {
     setSaving(true);
@@ -94,7 +105,8 @@ export default function FaceEnrollScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe} testID="face-enroll-screen">
+    <SafeAreaView style={styles.safe} edges={["bottom"]} testID="face-enroll-screen">
+      <ScreenHeader title={t("face.title")} onBack={() => void finish()} />
       <View style={styles.center}>
         <View style={styles.iconWrap}>
           <ScanFace size={56} color={colors.primary} strokeWidth={1.8} />

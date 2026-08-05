@@ -238,8 +238,10 @@ async def test_export_xlsx_date_range(client, db_session):
     await db_session.commit()
 
     import io
-    from datetime import date as d, timedelta as td
+    from datetime import timedelta as td
     from openpyxl import load_workbook
+
+    from app.shift_logic import now_ist
 
     async def export_plates(frm: str, to: str) -> set:
         r = await client.get(f"/api/vehicles/export.xlsx?date_from={frm}&date_to={to}", headers=cgm)
@@ -247,7 +249,9 @@ async def test_export_xlsx_date_range(client, db_session):
         ws = load_workbook(io.BytesIO(r.content)).active
         return {row[2] for row in ws.iter_rows(min_row=2, values_only=True)}
 
-    today = d.today()
+    # export ranges are IST day boundaries — date.today() (UTC) is a DIFFERENT
+    # day between 18:30-24:00 UTC and made this test flake in that window
+    today = now_ist().date()
     month_plates = await export_plates(today.replace(day=1).isoformat(), today.isoformat())
     assert "MH09RNG0001" in month_plates
     assert "MH09RNG0002" not in month_plates  # 40 days old — outside this month

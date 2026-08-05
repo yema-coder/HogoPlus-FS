@@ -62,7 +62,7 @@ import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens"
 import { formatDateTime, formatTime, isOlderThan24h, timeAgo } from "@/src/utils/format";
 import { storage } from "@/src/utils/storage";
 
-type Segment = "forms" | "regs" | "swaps" | "incidents" | "attendance";
+type Segment = "all" | "forms" | "regs" | "swaps" | "incidents" | "attendance";
 type AttFilter = "today" | "yesterday" | "all";
 
 const resolveUri = (v: string) => (v.startsWith("http") ? v : fileUrl(v));
@@ -303,7 +303,7 @@ export default function ApprovalsScreen() {
 
   // ---------- segment data ----------
 
-  const segments: { key: Segment; label: string; count: number }[] = [
+  const tabDefs: { key: Segment; label: string; count: number }[] = [
     { key: "forms", label: t("approvals.formsTab"), count: counts.forms },
     { key: "regs", label: t("approvals.regsTab"), count: counts.regs },
     { key: "swaps", label: t("approvals.swapsTab"), count: counts.swaps },
@@ -311,6 +311,10 @@ export default function ApprovalsScreen() {
     ...(showAttendance
       ? [{ key: "attendance" as Segment, label: t("approvals.attendanceTab"), count: counts.attendance }]
       : []),
+  ];
+  const segments: { key: Segment; label: string; count: number }[] = [
+    { key: "all", label: t("approvals.allTab"), count: tabDefs.reduce((n, s) => n + s.count, 0) },
+    ...tabDefs,
   ];
 
   const deptName = (code: string | null | undefined) => {
@@ -320,19 +324,58 @@ export default function ApprovalsScreen() {
 
   const empty = <EmptyState icon={ClipboardCheck} title={t("approvals.empty")} />;
 
-  const listData: unknown[] =
-    segment === "forms"
+  const itemsFor = (seg: Segment): unknown[] =>
+    seg === "forms"
       ? byDept(subs)
-      : segment === "regs"
+      : seg === "regs"
         ? byDept(regs)
-        : segment === "swaps"
+        : seg === "swaps"
           ? byDept(swaps)
-          : segment === "incidents"
+          : seg === "incidents"
             ? byDept(incidents)
             : [...disputes, ...byDept(flagged)];
 
-  const renderItem = ({ item }: { item: unknown }) => {
-    if (segment === "forms") {
+  // "All" view: every section stacked (stable tab order), each with header +
+  // live pending count. Renders only the first ALL_PREVIEW cards per section —
+  // header/"view all" jump into the full tab. Network cost is unchanged: the
+  // section queries were already batched on focus for the badges/cache.
+  const ALL_PREVIEW = 3;
+  type AllRow =
+    | { allKey: string; allKind: "header"; seg: Segment; label: string; count: number }
+    | { allKey: string; allKind: "none" }
+    | { allKey: string; allKind: "more"; seg: Segment; n: number }
+    | { allKey: string; allKind: "item"; seg: Segment; item: unknown };
+
+  const listData: unknown[] =
+    segment === "all"
+      ? tabDefs.flatMap((s): AllRow[] => {
+          const items = itemsFor(s.key);
+          const rows: AllRow[] = [
+            { allKey: `h-${s.key}`, allKind: "header", seg: s.key, label: s.label, count: items.length },
+          ];
+          if (items.length === 0) {
+            rows.push({ allKey: `n-${s.key}`, allKind: "none" });
+          } else {
+            rows.push(
+              ...items.slice(0, ALL_PREVIEW).map(
+                (it): AllRow => ({
+                  allKey: `i-${s.key}-${(it as { id: string }).id}`,
+                  allKind: "item",
+                  seg: s.key,
+                  item: it,
+                }),
+              ),
+            );
+            if (items.length > ALL_PREVIEW) {
+              rows.push({ allKey: `m-${s.key}`, allKind: "more", seg: s.key, n: items.length });
+            }
+          }
+          return rows;
+        })
+      : itemsFor(segment);
+
+  const renderRow = (seg: Segment, item: unknown) => {
+    if (seg === "forms") {
       const s = item as SubmissionItem;
       return (
         <Pressable
@@ -358,7 +401,7 @@ export default function ApprovalsScreen() {
         </Pressable>
       );
     }
-    if (segment === "regs") {
+    if (seg === "regs") {
       const emp = item as PendingRegistration;
       const dup = emp.duplicate_hints ?? [];
       return (
@@ -479,7 +522,7 @@ export default function ApprovalsScreen() {
         </View>
       );
     }
-    if (segment === "swaps") {
+    if (seg === "swaps") {
       const s = item as SwapRequest;
       return (
         <View style={styles.regCard} testID={`approval-swap-${s.id}`}>
@@ -521,7 +564,7 @@ export default function ApprovalsScreen() {
         </View>
       );
     }
-    if (segment === "incidents") {
+    if (seg === "incidents") {
       const inc = item as Incident;
       const def = categoryDef(inc.category);
       const Icon = def.icon;
@@ -553,7 +596,7 @@ export default function ApprovalsScreen() {
       );
     }
     // v1.0.21: attendance dispute card — worker's request + original evidence
-    if (segment === "attendance" && (item as RegularizationItem).attendance !== undefined) {
+    if (seg === "attendance" && (item as RegularizationItem).attendance !== undefined) {
       const d = item as RegularizationItem;
       const a = d.attendance;
       return (
@@ -738,9 +781,48 @@ export default function ApprovalsScreen() {
     );
   };
 
+  const renderItem = ({ item }: { item: unknown }) => {
+    const row = item as {
+      allKind?: string; seg?: Segment; label?: string; count?: number; n?: number; item?: unknown;
+    };
+    if (row.allKind === "header") {
+      return (
+        <Pressable
+          testID={`all-section-${row.seg}`}
+          accessibilityRole="button"
+          onPress={() => setSegment(row.seg as Segment)}
+          style={({ pressed }) => [styles.allHeader, { opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={styles.allHeaderText}>{row.label}</Text>
+          <View style={[styles.segBadge, (row.count ?? 0) === 0 && styles.allBadgeZero]}>
+            <Text style={styles.segBadgeText}>{row.count}</Text>
+          </View>
+          <Text style={styles.allChevron}>›</Text>
+        </Pressable>
+      );
+    }
+    if (row.allKind === "none") {
+      return <Text style={styles.allNone}>✓ {t("approvals.noneHere")}</Text>;
+    }
+    if (row.allKind === "more") {
+      return (
+        <Pressable
+          testID={`all-more-${row.seg}`}
+          accessibilityRole="button"
+          onPress={() => setSegment(row.seg as Segment)}
+          style={({ pressed }) => [styles.allMore, { opacity: pressed ? 0.8 : 1 }]}
+        >
+          <Text style={styles.allMoreText}>{t("approvals.viewAll", { n: row.n })} →</Text>
+        </Pressable>
+      );
+    }
+    if (row.allKind === "item") return renderRow(row.seg as Segment, row.item);
+    return renderRow(segment, item);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="approvals-screen">
-      <ScreenHeader title={t("approvals.title")} back={false} />
+      <ScreenHeader title={t("approvals.title")} backTo="/(tabs)/home" />
 
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.segRow}>
@@ -812,7 +894,10 @@ export default function ApprovalsScreen() {
 
       <FlatList
         data={listData}
-        keyExtractor={(item) => (item as { id: string }).id}
+        keyExtractor={(item) => {
+          const r = item as { allKey?: string; id?: string };
+          return r.allKey ?? r.id ?? "";
+        }}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
         refreshing={loading}
@@ -1106,6 +1191,28 @@ const styles = StyleSheet.create({
   },
   scoreChipText: { fontFamily: fonts.bold, fontSize: type.sm, color: colors.danger },
   actionRow: { flexDirection: "row", gap: spacing.md },
+  // "All" stacked view
+  allHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: sizes.touchTarget,
+    paddingTop: spacing.sm,
+  },
+  allHeaderText: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  allBadgeZero: { backgroundColor: colors.muted },
+  allChevron: { fontFamily: fonts.bold, fontSize: type.xl, color: colors.muted, marginLeft: "auto" },
+  allNone: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted, paddingLeft: 2 },
+  allMore: {
+    minHeight: sizes.touchTarget,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  allMoreText: { fontFamily: fonts.bold, fontSize: type.base, color: colors.primary },
   swapRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   swapSide: { flex: 1, alignItems: "center", gap: spacing.xs },
   swapName: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.text },

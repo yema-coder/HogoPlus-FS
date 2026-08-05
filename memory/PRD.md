@@ -1251,3 +1251,24 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   Include per-video view counts (which screens are actually confusing).
 - REJECTED: first-run tour (people skip tours; fires when least ready to learn).
 - User flipping vehicle_log_enabled + home_config_enabled on prod now; force_update already OFF.
+
+## v1.0.23 — nav fixes + approvals All view + MD dashboard handover (2026-08-04)
+- BACK AUDIT: every non-root screen now has a top-left back (ScreenHeader onBack/backTo props).
+  Fixed: alerts, reports, profile, department, approvals (tabs → backTo home), form/success,
+  incident/success, attendance/result (headers mirror Done buttons), face-enroll (back +
+  BackHandler = Later). Intentionally backless gates: language, phone, pending, permissions.
+- APPROVALS "ALL" VIEW: All pill first (total badge); stacked sections in stable tab order,
+  live counts, 3-card previews + View-all jump rows; header tap jumps to full tab; swipe/tab
+  behaviour unchanged. Marathi/Hindi/English keys added (allTab/viewAll/noneHere).
+- MD HANDOVER: +919096171949 (0428) & +919561722986 (1220) linked to MD role via
+  scripts/seed_md_handover.py (idempotent, audited employee.md_handover, temp Hogo@123 with
+  forced change, never resets changed passwords, dept left as-is — only role flipped).
+  Webdash: MD role sees identity "Prasad Sugar Mill" (no name/role label); other roles unchanged.
+- BUG SWEEP extras: duplicate i18n dept key (earlier), unused tri import in home.tsx, UTC/IST
+  export test flake, uq_attendance_emp_date day-of-month test flakes (_free_day helper),
+  frontend/.env EXPO_PUBLIC_API_URL was pointing sandbox preview at PROD (restored: preview URL
+  during tests, api.hogoplus.in committed for builds — release builds pin prod via launch guard).
+- app.json 1.0.23/10023. Deploy runbook: /app/docs/DEPLOY_ORDER_v1.0.23.md (ends with FINAL
+  THREE standing rule). 291 pytest green; testing_agent iteration_26 mobile 100% pass.
+- STATUS: backend/data halves ready to deploy now; app halves ride APK 1.0.23. Field protocol
+  for the previous batch STILL pending user execution.
