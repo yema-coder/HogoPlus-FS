@@ -1330,3 +1330,16 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - DEPLOY (EC2, in order): git pull → docker compose build api → alembic upgrade head (0017) →
   python scripts/seed_head_office_md.py → verification queries → webdash rebuilt inside image;
   APK 1.0.24 build for mobile halves.
+
+## QUEUED — next batch (user-approved 2026-08-06)
+- "Recent MD logins" mini-panel on webdash Admin: audit-based (auth.md_login /
+  auth.md_login_failed / auth.md_elevate), showing timestamp + method (password/OTP-elevate) +
+  IP + phone (for elevate). Visibility rationale: shared MD password.
+
+## STANDING RULE — SANDBOX-URL PREFLIGHT (user-mandated, 2nd prod-SMS incident)
+Before ANY automated login/OTP test (screenshot tool, testing_agent, curl-driven flows):
+1. `grep EXPO_PUBLIC_API_URL /app/frontend/.env` — MUST be the sandbox preview URL, NOT
+   api.hogoplus.in. If it's prod: flip to preview, `sudo supervisorctl restart expo`, test,
+   then REVERT + restart expo.
+2. This check is the MANDATORY FIRST STEP of every test run — never discover it afterwards.
+3. Webdash is safe (relative /api → local); ONLY the Expo bundle carries the prod URL.
