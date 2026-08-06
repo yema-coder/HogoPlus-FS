@@ -1293,3 +1293,40 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
 - Tests: tests/test_employee_mgmt.py (5) — full suite 297 passed, 1 env skip.
 - GOTCHA: conftest login() only works for demo/whitelisted phones; use set_otp + verify for
   ad-hoc employees. attendance.selfie_key is NOT NULL.
+
+## v1.0.24 — HEAD OFFICE dept + Add-Employee Wizard + MD Access Redesign (2026-08-06)
+- MIGRATION 0017: departments.{beacon_exempt,geofence_exempt,can_add_employees} (all default
+  false), settings.{md_password_hash,md_otp_phones}. General per-dept policy — NOT hardcoded.
+- EC2 SCRIPT scripts/seed_head_office_md.py (idempotent, replaces seed_md_handover.py which was
+  DELETED along with its test): creates HEAD_OFFICE dept (Pune, remote — all 3 flags ON,
+  TIME_OFFICE gets can_add_employees ON), HO manager "Mahesh Makne" +919511738318 (EDIT block
+  at top: HO_MANAGER_NAME / HO_MANAGER_EMP_ID), shared MD account (emp_id "MD",
+  "Prasad Sugar Mill", role MD, NO phone, NO personal password), settings.md_password_hash =
+  Hogo@123 ONLY if unset (never resets changed password), md_otp_phones =
+  +919511738318,+918483029039, DEMOTES +919096171949 & +919561722986 → Manager + passwords
+  cleared. Prints final MD-access state. All audited.
+- AUTH: POST /auth/md-login {password} — settings password alone opens shared MD account;
+  rate-limited 5 fails/IP + 50 global per 15 min; audits auth.md_login / auth.md_login_failed.
+  POST /auth/md-elevate (bearer) — OTP-logged-in whitelisted phone swaps to shared-MD tokens,
+  audits auth.md_elevate {phone, via_employee}. Legacy /auth/password-login kept for CGM;
+  shared MD rejected there (no personal password). POST /admin/md-password (real MD, rank 1).
+- ATTENDANCE: punch-in honors dept flags — beacon_exempt (incl. beacon-first mode),
+  geofence_exempt (GPS still stored; gps_missing still flags).
+- WIZARD: 5-step add-employee (name → emp_id → dept+role → phone → review) on mobile
+  (app/employees/new.tsx) AND webdash (AddEmployeeWizard modal from /employees "+ Add").
+  Per-step uniqueness via NEW GET /admin/employees/availability (names holder). Gate
+  _require_can_add_employees = TO-manager-or-top OR Manager/HOD of can_add_employees dept.
+  employee_profile now returns can_add_employees → mobile home shows "Add employee" tile for
+  HO manager (routes straight to wizard; TO/MD/CGM keep the directory tile). rank>2 cannot
+  create CGM/MD (existing rule).
+- WEBDASH LOGIN: two tabs — OTP (unchanged, then silent /auth/md-elevate try) and "MD login"
+  (password only, NO emp_id). Admin page: MD-only "MD dashboard password" rotate card.
+- Tests: tests/test_head_office_md.py (9) — full suite 301 passed, 2 skipped.
+- SANDBOX GOTCHA: frontend/.env EXPO_PUBLIC_API_URL points at PROD api.hogoplus.in (field
+  protocol). For sandbox e2e it was TEMPORARILY flipped to the preview URL and REVERTED.
+  Mobile web OTP boxes: use CDP Input.insertText (page.fill/type do NOT trigger RN-web state).
+  Sandbox DEMO_OTP_WHITELIST now also includes +919511738318.
+- app.json: version 1.0.24 / versionCode 10024.
+- DEPLOY (EC2, in order): git pull → docker compose build api → alembic upgrade head (0017) →
+  python scripts/seed_head_office_md.py → verification queries → webdash rebuilt inside image;
+  APK 1.0.24 build for mobile halves.

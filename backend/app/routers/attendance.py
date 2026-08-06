@@ -236,9 +236,25 @@ async def punch_in(
     if body.gps_lat is not None and body.gps_lng is not None:
         distance = _haversine_m(body.gps_lat, body.gps_lng, fs.factory_lat, fs.factory_lng)
         inside = distance <= fs.radius_meters
+    # Per-department location policy (v1.0.24, general capability): remote
+    # departments (HEAD_OFFICE in Pune — no beacons installed, permanently outside
+    # the factory geofence) opt out via flags on the department row.
+    #  - beacon_exempt: never wait for/require/flag on beacons (incl. beacon-first mode)
+    #  - geofence_exempt: the factory geofence never flags their punches
+    # GPS is still captured and stored as evidence (gps_verified stays truthful);
+    # a punch with NO GPS at all still flags gps_missing; selfie/face unchanged.
+    dept_row = None
+    if employee.department_code:
+        dept_row = (
+            await session.execute(
+                select(Department).where(Department.code == employee.department_code)
+            )
+        ).scalar_one_or_none()
+    beacon_exempt = bool(dept_row and dept_row.beacon_exempt)
+    geofence_exempt = bool(dept_row and dept_row.geofence_exempt)
     if matched_beacon:
         level = "verified_plus"
-    elif fs.beacon_first_mode:
+    elif fs.beacon_first_mode and not beacon_exempt:
         # BEACON-FIRST POLICY (settings flag, ships OFF): the beacon zone is the
         # PRIMARY location identity. GPS is still captured and stored as secondary
         # evidence (gps_verified keeps the geofence truth) but never decides the
@@ -252,7 +268,7 @@ async def punch_in(
     elif body.gps_lat is None or body.gps_lng is None:
         level = "flagged"
         flagged_reason = "gps_missing"
-    elif not inside:
+    elif not inside and not geofence_exempt:
         level = "flagged"
         flagged_reason = f"outside_geofence({int(distance)}m)"
     else:

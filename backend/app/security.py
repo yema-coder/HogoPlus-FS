@@ -176,6 +176,16 @@ def employee_profile(employee: Employee) -> dict:
             "code": dept.code, "name_en": dept.name_en,
             "name_hi": dept.name_hi, "name_mr": dept.name_mr,
         } if dept else None,
+        # v1.0.24: drives the mobile "Add employee" entry — CGM/MD always; a
+        # Manager (or explicit HOD) of a can_add_employees department (HEAD_OFFICE).
+        "can_add_employees": bool(
+            (role and role.rank <= 2)
+            or (
+                dept
+                and dept.can_add_employees
+                and (employee.role_code == "Manager" or dept.manager_employee_id == employee.id)
+            )
+        ),
         "designation": employee.designation,
         "role_code": employee.role_code,
         "role": {

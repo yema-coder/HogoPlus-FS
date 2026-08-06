@@ -5,7 +5,7 @@ import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Integer as SAInteger
@@ -21,6 +21,7 @@ from app.routers.attendance import _haversine_m
 from app.schemas import (
     ChangePasswordIn,
     FaceEnrollIn,
+    MdLoginIn,
     PasswordLoginIn,
     RefreshIn,
     RegisterIn,
@@ -358,6 +359,106 @@ async def change_password(
     await session.commit()
     await redis_client.delete(_pw_fail_key(employee.emp_id))
     return {"status": "password_changed"}
+
+
+# ---- v1.0.24 MD ACCESS REDESIGN -------------------------------------------------
+# The MD dashboard opens with ONE shared password (no emp_id) stored in
+# settings.md_password_hash — OR via OTP from the exact numbers listed in
+# settings.md_otp_phones. Every attempt (success AND failure) is audited;
+# password failures are rate-limited per-IP and globally.
+
+MD_LOGIN_MAX_PER_IP = 5
+MD_LOGIN_MAX_GLOBAL = 50
+MD_LOGIN_WINDOW_SECONDS = 15 * 60
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _shared_md_account(session: AsyncSession) -> Employee | None:
+    return (
+        await session.execute(
+            select(Employee).where(
+                Employee.emp_id == "MD",
+                Employee.is_active.is_(True),
+                Employee.is_demo.is_(False),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+@router.post("/auth/md-login")
+async def md_login(
+    body: MdLoginIn, request: Request, session: AsyncSession = Depends(get_session)
+):
+    """Shared-password MD login: the password ALONE opens the MD dashboard."""
+    ip = _client_ip(request)
+    ip_key = f"mdlogin:fail:ip:{ip}"
+    global_key = "mdlogin:fail:global"
+    ip_fails = int(await redis_client.get(ip_key) or 0)
+    global_fails = int(await redis_client.get(global_key) or 0)
+    if ip_fails >= MD_LOGIN_MAX_PER_IP or global_fails >= MD_LOGIN_MAX_GLOBAL:
+        raise HTTPException(status_code=429, detail=PW_LOCKOUT_DETAIL)
+
+    fs = (await session.execute(select(FactorySettings))).scalars().first()
+
+    async def _fail():
+        for key in (ip_key, global_key):
+            count = await redis_client.incr(key)
+            if count == 1:
+                await redis_client.expire(key, MD_LOGIN_WINDOW_SECONDS)
+        await write_audit(
+            session, None, "auth.md_login_failed", "settings", None, {"ip": ip}, is_demo=False
+        )
+        await session.commit()
+
+    if (
+        fs is None
+        or not fs.md_password_hash
+        or not verify_password(body.password, fs.md_password_hash)
+    ):
+        await _fail()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    md = await _shared_md_account(session)
+    if md is None:
+        await _fail()
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    await redis_client.delete(ip_key)
+    await write_audit(session, md.id, "auth.md_login", "employee", str(md.id), {"ip": ip}, is_demo=False)
+    await session.commit()
+    tokens = create_token_pair(md)
+    return {**tokens, "employee": employee_profile(md), "must_change_password": False}
+
+
+@router.post("/auth/md-elevate")
+async def md_elevate(
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """OTP path to the MD dashboard: ONLY the numbers in settings.md_otp_phones
+    (exactly two) may elevate to the shared MD account after a normal OTP login.
+    Everyone else keeps their personal dashboard role (CGM / TO manager)."""
+    fs = (await session.execute(select(FactorySettings))).scalars().first()
+    whitelist = (
+        {p.strip() for p in (fs.md_otp_phones or "").split(",") if p.strip()} if fs else set()
+    )
+    if not employee.phone or employee.phone not in whitelist:
+        raise HTTPException(status_code=403, detail="This number is not authorized for MD access")
+    md = await _shared_md_account(session)
+    if md is None:
+        raise HTTPException(status_code=503, detail="Shared MD account is not provisioned")
+    await write_audit(
+        session, md.id, "auth.md_elevate", "employee", str(md.id),
+        {"phone": employee.phone, "via_employee": str(employee.id)}, is_demo=False,
+    )
+    await session.commit()
+    tokens = create_token_pair(md)
+    return {**tokens, "employee": employee_profile(md)}
 
 
 @router.post("/auth/refresh")

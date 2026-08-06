@@ -139,14 +139,9 @@ function Layout() {
         </details>
         <div style={{ flex: 1 }} />
         <div style={{ padding: "10px 12px", fontSize: 13, opacity: 0.85 }}>
-          {user.role?.code === "MD" ? (
-            <b data-testid="md-identity">Prasad Sugar Mill</b>
-          ) : (
-            <>
-              <b>{user.full_name}</b>
-              <div style={{ opacity: 0.8 }}>{roleLabel}{user.department_code ? ` · ${user.department_code}` : ""}</div>
-            </>
-          )}
+          {/* v1.0.24: the dashboard identity is the MILL, never a person.
+              Individual identity lands in the audit log per login/action. */}
+          <b data-testid="md-identity">Prasad Sugar Mill</b>
         </div>
         {isTopMgmt(user) && (
           <button

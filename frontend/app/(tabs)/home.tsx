@@ -11,6 +11,7 @@ import {
   LogIn,
   LogOut,
   Megaphone,
+  UserPlus,
   Users,
 } from "lucide-react-native";
 import { StatusBar } from "expo-status-bar";
@@ -455,6 +456,14 @@ export default function HomeScreen() {
                 icon={Users}
                 tint={colors.accent}
                 onPress={() => router.push("/employees")}
+              />
+            ) : profile?.can_add_employees ? (
+              <GridTile
+                testID="home-tile-add-employee"
+                label={t("emp.add")}
+                icon={UserPlus}
+                tint={colors.accent}
+                onPress={() => router.push("/employees/new")}
               />
             ) : (
               <View style={{ flex: 1 }} />

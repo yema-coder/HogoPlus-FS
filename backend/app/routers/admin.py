@@ -2,7 +2,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,7 @@ from app.schemas import (
     FormDefCreateIn,
     FormDefPatchIn,
     GenerateReportIn,
+    MdPasswordIn,
     PurgeDemoIn,
     RejectIn,
     SetPasswordIn,
@@ -56,6 +57,29 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def _require_time_office_or_top(session: AsyncSession, employee: Employee):
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+
+
+async def _require_can_add_employees(session: AsyncSession, employee: Employee):
+    """v1.0.24 direct-add capability: Time Office manager / CGM / MD (existing rule)
+    OR manager of ANY department carrying the can_add_employees policy flag
+    (HEAD_OFFICE ships with it ON — remote Pune office onboards its own people)."""
+    if await is_dept_manager(session, employee, "TIME_OFFICE"):
+        return
+    if employee.role_code == "Manager":
+        dept = (
+            await session.execute(
+                select(Department).where(
+                    Department.can_add_employees.is_(True),
+                    or_(
+                        Department.manager_employee_id == employee.id,
+                        Department.code == employee.department_code,
+                    ),
+                )
+            )
+        ).scalars().first()
+        if dept is not None:
+            return
+    raise HTTPException(status_code=403, detail="Time Office / Head Office Manager / CGM / MD only")
 
 
 # ---------------- settings ----------------
@@ -1006,7 +1030,7 @@ async def emp_id_suggest(
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    await _require_time_office_or_top(session, actor)
+    await _require_can_add_employees(session, actor)
     from sqlalchemy import text as sa_text
 
     row = (
@@ -1019,6 +1043,32 @@ async def emp_id_suggest(
     return {"suggested_emp_id": f"{row + 1:04d}"}
 
 
+@router.get("/employees/availability")
+async def employee_availability(
+    emp_id: str | None = None,
+    phone: str | None = None,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Per-step uniqueness check for the add-employee wizard — names the current
+    holder so the operator can correct BEFORE the final submit."""
+    await _require_can_add_employees(session, actor)
+    out: dict = {"emp_id_taken_by": None, "phone_taken_by": None}
+    if emp_id:
+        e = (
+            await session.execute(select(Employee).where(Employee.emp_id == emp_id))
+        ).scalar_one_or_none()
+        if e is not None:
+            out["emp_id_taken_by"] = f"{e.full_name} ({e.emp_id})"
+    if phone:
+        e = (
+            await session.execute(select(Employee).where(Employee.phone == phone))
+        ).scalar_one_or_none()
+        if e is not None:
+            out["phone_taken_by"] = f"{e.full_name} ({e.emp_id})"
+    return out
+
+
 @router.post("/employees")
 async def direct_add_employee(
     body: DirectAddEmployeeIn,
@@ -1027,7 +1077,7 @@ async def direct_add_employee(
 ):
     """Time Office Manager: Worker/Staff/Clerk/Manager. CGM/MD: any role.
     Created ACTIVE immediately — first login lands on the role's home."""
-    await _require_time_office_or_top(session, actor)
+    await _require_can_add_employees(session, actor)
     role = (await session.execute(select(Role).where(Role.code == body.role_code))).scalar_one_or_none()
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
@@ -1074,6 +1124,27 @@ async def direct_add_employee(
     await session.commit()
     await session.refresh(emp)
     return employee_profile(emp)
+
+
+# ---------------- v1.0.24: shared MD dashboard password ----------------
+
+@router.post("/md-password")
+async def set_md_password(
+    body: MdPasswordIn,
+    actor: Employee = Depends(require_real_role(1)),
+    session: AsyncSession = Depends(get_session),
+):
+    """MD only: rotate the ONE shared MD dashboard password. Takes effect on the
+    next /auth/md-login immediately; existing sessions stay valid."""
+    fs = (await session.execute(select(FactorySettings))).scalars().first()
+    if fs is None:
+        raise HTTPException(status_code=404, detail="Settings not seeded")
+    fs.md_password_hash = hash_password(body.new_password)
+    await write_audit(
+        session, actor.id, "admin.md_password_changed", "settings", None, {}, is_demo=False
+    )
+    await session.commit()
+    return {"status": "md_password_changed"}
 
 
 # ---------------- Prompt 17 Part F: announcements ----------------

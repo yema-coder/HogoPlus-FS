@@ -29,6 +29,8 @@ export interface EmployeeProfile {
   selfie_url: string | null;
   is_active: boolean;
   has_face_reference?: boolean;
+  /** v1.0.24: true for CGM/MD and managers of can_add_employees departments (HEAD_OFFICE). */
+  can_add_employees?: boolean;
 }
 
 /** v1.0.20: pending registration enriched with the evidence an approver needs. */

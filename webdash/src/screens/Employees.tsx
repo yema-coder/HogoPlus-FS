@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { Chip, Empty, Loading } from "../components";
 import { localName, useI18n } from "../i18n";
+import AddEmployeeWizard from "./AddEmployeeWizard";
 
 const ROLES = ["Worker", "Staff", "Clerk", "Manager", "CGM", "MD"];
 const EMP_ID_RE = /^[A-Za-z0-9]{1,20}$/;
@@ -244,6 +245,7 @@ export default function Employees() {
   const [dept, setDept] = useState("");
   const [err, setErr] = useState("");
   const [sel, setSel] = useState<Emp | null>(null);
+  const [adding, setAdding] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
 
   const load = () => api("/admin/employees?all=true").then(setRows).catch((e) => setErr(e.message));
@@ -272,12 +274,22 @@ export default function Employees() {
     load();
   };
 
+  const onCreated = () => {
+    setAdding(false);
+    setSavedMsg(true);
+    setTimeout(() => setSavedMsg(false), 2500);
+    load();
+  };
+
   return (
     <div>
       <div className="topbar">
         <h1 data-testid="employees-title">{t("nav_employees")}</h1>
         <div style={{ display: "flex", gap: 10, marginRight: 150, alignItems: "center" }}>
           {savedMsg && <Chip tone="green">{t("emps_saved")}</Chip>}
+          <button className="btn primary" data-testid="emps-add-btn" onClick={() => setAdding(true)}>
+            + {t("emps_add")}
+          </button>
           <select data-testid="emps-dept-filter" value={dept} onChange={(e) => setDept(e.target.value)}>
             <option value="">{t("emps_all_depts")}</option>
             {depts.map((d) => <option key={d.code} value={d.code}>{localName(d, lang)}</option>)}
@@ -329,6 +341,7 @@ export default function Employees() {
       )}
 
       {sel && <Editor emp={sel} depts={depts} onClose={() => setSel(null)} onSaved={onSaved} />}
+      {adding && <AddEmployeeWizard depts={depts} onClose={() => setAdding(false)} onCreated={onCreated} />}
     </div>
   );
 }
