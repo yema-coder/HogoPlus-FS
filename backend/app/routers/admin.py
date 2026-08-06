@@ -152,12 +152,33 @@ async def patch_employee(
             )
         ).scalar_one_or_none()
         if dup:
-            raise HTTPException(status_code=409, detail="Phone already in use")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Phone already in use by {dup.emp_id} · {dup.full_name}",
+            )
         changes["phone"] = {"old": emp.phone, "new": body.phone}
         emp.phone = body.phone
         if emp.onboarding_status == "seeded":
             emp.onboarding_status = "approved"
             changes["onboarding_status"] = {"old": "seeded", "new": "approved"}
+    if body.emp_id is not None and body.emp_id != emp.emp_id:
+        # Login-identity change (password login + display id). SAFE: every table
+        # references employees by internal UUID; emp_id exists ONLY on employees
+        # (unique). Sessions survive — JWT sub is the UUID, not emp_id.
+        if actor.role.rank > 2:
+            raise HTTPException(status_code=403, detail="Only CGM/MD can change emp_id")
+        dup = (
+            await session.execute(
+                select(Employee).where(Employee.emp_id == body.emp_id, Employee.id != emp.id)
+            )
+        ).scalar_one_or_none()
+        if dup:
+            raise HTTPException(
+                status_code=409,
+                detail=f"emp_id {body.emp_id} is already taken by {dup.full_name} ({dup.phone or 'no phone'})",
+            )
+        changes["emp_id"] = {"old": emp.emp_id, "new": body.emp_id}
+        emp.emp_id = body.emp_id
     if body.full_name is not None:
         changes["full_name"] = {"old": emp.full_name, "new": body.full_name}
         emp.full_name = body.full_name
@@ -402,7 +423,8 @@ async def employee_onboarding_history(
                 AuditEvent.entity_id == str(employee_id),
                 AuditEvent.action.in_(
                     ("employee.registered", "employee.register", "employee.approved",
-                     "employee.rejected", "employee.updated", "employee.created")
+                     "employee.rejected", "employee.updated", "employee.created",
+                     "employee.md_handover")
                 ),
             )
             .order_by(AuditEvent.created_at.asc())
@@ -430,11 +452,26 @@ async def employee_onboarding_history(
 async def search_employees(
     search: str | None = None,
     missing_phone: bool = False,
+    all: bool = False,
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
     """Employee lookup for the admin screens (Time Office Manager / CGM / MD)."""
     await _require_time_office_or_top(session, actor)
+    if all:
+        # Full register for the MD-dashboard Employees section: every row incl.
+        # inactive/pending, no cap (~450 rows — trivial payload, snappy
+        # client-side search). MD/CGM only; TO keeps the capped search below.
+        if actor.role.rank > 2:
+            raise HTTPException(status_code=403, detail="MD/CGM only")
+        rows = (
+            await session.execute(
+                select(Employee)
+                .where(Employee.is_demo == actor.is_demo)
+                .order_by(Employee.emp_id)
+            )
+        ).scalars().all()
+        return [employee_profile(e) for e in rows]
     query = select(Employee).where(
         Employee.is_active.is_(True), Employee.is_demo == actor.is_demo
     )

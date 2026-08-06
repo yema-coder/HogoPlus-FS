@@ -1272,3 +1272,24 @@ Bugs 2/3/4 fixes: HELD pending user approval of diagnosis.
   THREE standing rule). 291 pytest green; testing_agent iteration_26 mobile 100% pass.
 - STATUS: backend/data halves ready to deploy now; app halves ride APK 1.0.23. Field protocol
   for the previous batch STILL pending user execution.
+
+## v1.0.24w — MD-dashboard Employee Management (webdash + backend ONLY, no APK) (2026-08-06)
+- Webdash /employees (MD/CGM nav + route): 418-row table, instant client-side search
+  (name/emp_id/phone), dept filter, status chips; row click → editor modal (name, phone,
+  emp_id, dept, role) with inline validation + OLD→NEW confirm step + per-employee History
+  view. Phone input auto-normalizes to +91XXXXXXXXXX (employee-0061 lesson).
+- Backend: GET /admin/employees?all=true (rank≤2 only, includes inactive, uncapped);
+  PATCH /admin/employees gained emp_id editing (rank≤2 only, ^[A-Za-z0-9]{1,20}$, uniqueness
+  409 naming holder); phone-dup 409 now names holder; history endpoint includes
+  employee.md_handover action. NO schema change, NO migration, NO seed step.
+- EMP_ID SAFETY VERDICT (evidence: models.py): every FK references employees.id (UUID);
+  emp_id exists ONLY on employees (unique) → emp_id freely editable, nothing orphans.
+  JWT sub = UUID → sessions survive emp_id AND phone changes.
+- PHONE = LOGIN IDENTITY: verify-otp resolves Employee.phone at request time (no cache) —
+  old number dead for login at commit (falls into self-registration path); new number logs
+  into same account instantly. Push token on employees row (UUID) — survives. Documented
+  behavior: existing app sessions SURVIVE phone change (safe: refresh bound to UUID; old-SIM
+  holder cannot log in). Deactivation (later scope) is the kill-switch if a device is lost.
+- Tests: tests/test_employee_mgmt.py (5) — full suite 297 passed, 1 env skip.
+- GOTCHA: conftest login() only works for demo/whitelisted phones; use set_otp + verify for
+  ad-hoc employees. attendance.selfie_key is NOT NULL.

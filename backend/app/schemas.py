@@ -257,6 +257,7 @@ class RegularizeDecideIn(BaseModel):
 class EmployeePatchIn(BaseModel):
     phone: str | None = Field(default=None, pattern=PHONE_REGEX)
     full_name: str | None = None
+    emp_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{1,20}$")
     role_code: str | None = None
     department_code: str | None = None
     shift_code: str | None = None
