@@ -355,6 +355,15 @@ export const searchEmployees = (search: string) =>
 
 export const empIdSuggest = () => api<{ suggested_emp_id: string }>("/admin/emp-id-suggest");
 
+export const employeeAvailability = (params: { emp_id?: string; phone?: string }) => {
+  const q = new URLSearchParams();
+  if (params.emp_id) q.set("emp_id", params.emp_id);
+  if (params.phone) q.set("phone", params.phone);
+  return api<{ emp_id_taken_by?: string | null; phone_taken_by?: string | null }>(
+    `/admin/employees/availability?${q.toString()}`,
+  );
+};
+
 export const directAddEmployee = (body: {
   full_name: string;
   phone: string;

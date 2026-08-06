@@ -85,6 +85,21 @@ class Department(TimestampMixin, Base):
         nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # v1.0.24 per-department policy flags (general capability, not hardcoded to a
+    # dept). HEAD_OFFICE (Pune, remote, no beacons) ships with all three ON.
+    # beacon_exempt: punches never wait for/require/flag on beacons (incl. beacon-first mode)
+    beacon_exempt: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # geofence_exempt: the factory geofence never flags this department's punches
+    # (GPS still captured + stored as evidence; gps_missing still flags)
+    geofence_exempt: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # can_add_employees: managers of this department get the direct-add capability
+    can_add_employees: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
 
 class Employee(TimestampMixin, Base):
@@ -397,6 +412,13 @@ class FactorySettings(TimestampMixin, Base):
     )
     notif_batching_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
+    )
+    # v1.0.24 MD access redesign: ONE shared dashboard password (no emp_id) and
+    # the exact OTP numbers allowed to reach the MD dashboard (comma-separated
+    # +91XXXXXXXXXX). Managed by scripts/seed_head_office_md.py + POST /admin/md-password.
+    md_password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    md_otp_phones: Mapped[str] = mapped_column(
+        String(200), default="", server_default="", nullable=False
     )
 
 

@@ -59,6 +59,8 @@ export default function Admin() {
   const [ver, setVer] = useState<any>(null);
   const [verMsg, setVerMsg] = useState("");
   const [flagsMsg, setFlagsMsg] = useState("");
+  const [mdPwd, setMdPwd] = useState("");
+  const [mdPwdMsg, setMdPwdMsg] = useState("");
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
@@ -109,6 +111,21 @@ export default function Admin() {
       setVerMsg(`✓ ${t("saved")}`);
     } catch (e: any) {
       setVerMsg(e.message);
+    }
+  };
+
+  const saveMdPwd = async () => {
+    setMdPwdMsg("");
+    if (mdPwd.length < 8) {
+      setMdPwdMsg(t("pwdTooShort"));
+      return;
+    }
+    try {
+      await api("/admin/md-password", { method: "POST", body: JSON.stringify({ new_password: mdPwd }) });
+      setMdPwd("");
+      setMdPwdMsg(`✓ ${t("pwdChanged")}`);
+    } catch (e: any) {
+      setMdPwdMsg(e.message);
     }
   };
 
@@ -349,6 +366,34 @@ export default function Admin() {
               </div>
             )}
           </div>
+
+          {user?.role_code === "MD" && (
+            <div className="card">
+              <h2>🔐 {t("mdpwd_title")}</h2>
+              <p style={{ fontSize: 13, color: "var(--muted)" }}>{t("mdpwd_hint")}</p>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  data-testid="mdpwd-input"
+                  type="password"
+                  placeholder={t("newPassword")}
+                  value={mdPwd}
+                  onChange={(e) => setMdPwd(e.target.value)}
+                  style={{ flex: 1, minWidth: 200 }}
+                />
+                <button className="btn primary" data-testid="mdpwd-save" onClick={saveMdPwd}>
+                  {t("changePassword")}
+                </button>
+                {mdPwdMsg && (
+                  <span
+                    data-testid="mdpwd-msg"
+                    style={{ fontSize: 13, color: mdPwdMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}
+                  >
+                    {mdPwdMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="card">
             <h2>🚩 {t("flags_title")}</h2>

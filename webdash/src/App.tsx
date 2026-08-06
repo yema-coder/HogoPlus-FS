@@ -8,6 +8,7 @@ import Admin from "./screens/Admin";
 import Approvals from "./screens/Approvals";
 import Attendance from "./screens/Attendance";
 import Department from "./screens/Department";
+import Employees from "./screens/Employees";
 import Incidents from "./screens/Incidents";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
@@ -130,6 +131,7 @@ function Layout() {
         <NavLink to="/approvals">✅ {t("nav_approvals")}</NavLink>
         <NavLink to="/reports">📊 {t("nav_reports")}</NavLink>
         <NavLink to="/vehicles">🚚 {t("nav_vehicles")}</NavLink>
+        {isTopMgmt(user) && <NavLink to="/employees">👥 {t("nav_employees")}</NavLink>}
         {isTopMgmt(user) && <NavLink to="/admin">⚙️ {t("nav_admin")}</NavLink>}
         <details className="nav-more">
           <summary>{t("more")} ▾</summary>
@@ -137,14 +139,9 @@ function Layout() {
         </details>
         <div style={{ flex: 1 }} />
         <div style={{ padding: "10px 12px", fontSize: 13, opacity: 0.85 }}>
-          {user.role?.code === "MD" ? (
-            <b data-testid="md-identity">Prasad Sugar Mill</b>
-          ) : (
-            <>
-              <b>{user.full_name}</b>
-              <div style={{ opacity: 0.8 }}>{roleLabel}{user.department_code ? ` · ${user.department_code}` : ""}</div>
-            </>
-          )}
+          {/* v1.0.24: the dashboard identity is the MILL, never a person.
+              Individual identity lands in the audit log per login/action. */}
+          <b data-testid="md-identity">Prasad Sugar Mill</b>
         </div>
         {isTopMgmt(user) && (
           <button
@@ -194,6 +191,7 @@ export default function App() {
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/vehicles" element={<Vehicles />} />
+              <Route path="/employees" element={<Employees />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

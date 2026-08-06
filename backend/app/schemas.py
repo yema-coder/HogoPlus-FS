@@ -257,6 +257,7 @@ class RegularizeDecideIn(BaseModel):
 class EmployeePatchIn(BaseModel):
     phone: str | None = Field(default=None, pattern=PHONE_REGEX)
     full_name: str | None = None
+    emp_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9]{1,20}$")
     role_code: str | None = None
     department_code: str | None = None
     shift_code: str | None = None
@@ -420,6 +421,14 @@ class DirectAddEmployeeIn(BaseModel):
     role_code: str
     shift_code: str | None = None
     emp_id: str = Field(min_length=1, max_length=20)
+
+
+class MdLoginIn(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
+class MdPasswordIn(BaseModel):
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class EscalateIn(BaseModel):

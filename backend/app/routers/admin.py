@@ -2,7 +2,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,6 +34,7 @@ from app.schemas import (
     FormDefCreateIn,
     FormDefPatchIn,
     GenerateReportIn,
+    MdPasswordIn,
     PurgeDemoIn,
     RejectIn,
     SetPasswordIn,
@@ -56,6 +57,29 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def _require_time_office_or_top(session: AsyncSession, employee: Employee):
     if not await is_dept_manager(session, employee, "TIME_OFFICE"):
         raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+
+
+async def _require_can_add_employees(session: AsyncSession, employee: Employee):
+    """v1.0.24 direct-add capability: Time Office manager / CGM / MD (existing rule)
+    OR manager of ANY department carrying the can_add_employees policy flag
+    (HEAD_OFFICE ships with it ON — remote Pune office onboards its own people)."""
+    if await is_dept_manager(session, employee, "TIME_OFFICE"):
+        return
+    if employee.role_code == "Manager":
+        dept = (
+            await session.execute(
+                select(Department).where(
+                    Department.can_add_employees.is_(True),
+                    or_(
+                        Department.manager_employee_id == employee.id,
+                        Department.code == employee.department_code,
+                    ),
+                )
+            )
+        ).scalars().first()
+        if dept is not None:
+            return
+    raise HTTPException(status_code=403, detail="Time Office / Head Office Manager / CGM / MD only")
 
 
 # ---------------- settings ----------------
@@ -152,12 +176,33 @@ async def patch_employee(
             )
         ).scalar_one_or_none()
         if dup:
-            raise HTTPException(status_code=409, detail="Phone already in use")
+            raise HTTPException(
+                status_code=409,
+                detail=f"Phone already in use by {dup.emp_id} · {dup.full_name}",
+            )
         changes["phone"] = {"old": emp.phone, "new": body.phone}
         emp.phone = body.phone
         if emp.onboarding_status == "seeded":
             emp.onboarding_status = "approved"
             changes["onboarding_status"] = {"old": "seeded", "new": "approved"}
+    if body.emp_id is not None and body.emp_id != emp.emp_id:
+        # Login-identity change (password login + display id). SAFE: every table
+        # references employees by internal UUID; emp_id exists ONLY on employees
+        # (unique). Sessions survive — JWT sub is the UUID, not emp_id.
+        if actor.role.rank > 2:
+            raise HTTPException(status_code=403, detail="Only CGM/MD can change emp_id")
+        dup = (
+            await session.execute(
+                select(Employee).where(Employee.emp_id == body.emp_id, Employee.id != emp.id)
+            )
+        ).scalar_one_or_none()
+        if dup:
+            raise HTTPException(
+                status_code=409,
+                detail=f"emp_id {body.emp_id} is already taken by {dup.full_name} ({dup.phone or 'no phone'})",
+            )
+        changes["emp_id"] = {"old": emp.emp_id, "new": body.emp_id}
+        emp.emp_id = body.emp_id
     if body.full_name is not None:
         changes["full_name"] = {"old": emp.full_name, "new": body.full_name}
         emp.full_name = body.full_name
@@ -402,7 +447,8 @@ async def employee_onboarding_history(
                 AuditEvent.entity_id == str(employee_id),
                 AuditEvent.action.in_(
                     ("employee.registered", "employee.register", "employee.approved",
-                     "employee.rejected", "employee.updated", "employee.created")
+                     "employee.rejected", "employee.updated", "employee.created",
+                     "employee.md_handover")
                 ),
             )
             .order_by(AuditEvent.created_at.asc())
@@ -430,11 +476,26 @@ async def employee_onboarding_history(
 async def search_employees(
     search: str | None = None,
     missing_phone: bool = False,
+    all: bool = False,
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
     """Employee lookup for the admin screens (Time Office Manager / CGM / MD)."""
     await _require_time_office_or_top(session, actor)
+    if all:
+        # Full register for the MD-dashboard Employees section: every row incl.
+        # inactive/pending, no cap (~450 rows — trivial payload, snappy
+        # client-side search). MD/CGM only; TO keeps the capped search below.
+        if actor.role.rank > 2:
+            raise HTTPException(status_code=403, detail="MD/CGM only")
+        rows = (
+            await session.execute(
+                select(Employee)
+                .where(Employee.is_demo == actor.is_demo)
+                .order_by(Employee.emp_id)
+            )
+        ).scalars().all()
+        return [employee_profile(e) for e in rows]
     query = select(Employee).where(
         Employee.is_active.is_(True), Employee.is_demo == actor.is_demo
     )
@@ -969,7 +1030,7 @@ async def emp_id_suggest(
     actor: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
-    await _require_time_office_or_top(session, actor)
+    await _require_can_add_employees(session, actor)
     from sqlalchemy import text as sa_text
 
     row = (
@@ -982,6 +1043,32 @@ async def emp_id_suggest(
     return {"suggested_emp_id": f"{row + 1:04d}"}
 
 
+@router.get("/employees/availability")
+async def employee_availability(
+    emp_id: str | None = None,
+    phone: str | None = None,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Per-step uniqueness check for the add-employee wizard — names the current
+    holder so the operator can correct BEFORE the final submit."""
+    await _require_can_add_employees(session, actor)
+    out: dict = {"emp_id_taken_by": None, "phone_taken_by": None}
+    if emp_id:
+        e = (
+            await session.execute(select(Employee).where(Employee.emp_id == emp_id))
+        ).scalar_one_or_none()
+        if e is not None:
+            out["emp_id_taken_by"] = f"{e.full_name} ({e.emp_id})"
+    if phone:
+        e = (
+            await session.execute(select(Employee).where(Employee.phone == phone))
+        ).scalar_one_or_none()
+        if e is not None:
+            out["phone_taken_by"] = f"{e.full_name} ({e.emp_id})"
+    return out
+
+
 @router.post("/employees")
 async def direct_add_employee(
     body: DirectAddEmployeeIn,
@@ -990,7 +1077,7 @@ async def direct_add_employee(
 ):
     """Time Office Manager: Worker/Staff/Clerk/Manager. CGM/MD: any role.
     Created ACTIVE immediately — first login lands on the role's home."""
-    await _require_time_office_or_top(session, actor)
+    await _require_can_add_employees(session, actor)
     role = (await session.execute(select(Role).where(Role.code == body.role_code))).scalar_one_or_none()
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
@@ -1037,6 +1124,27 @@ async def direct_add_employee(
     await session.commit()
     await session.refresh(emp)
     return employee_profile(emp)
+
+
+# ---------------- v1.0.24: shared MD dashboard password ----------------
+
+@router.post("/md-password")
+async def set_md_password(
+    body: MdPasswordIn,
+    actor: Employee = Depends(require_real_role(1)),
+    session: AsyncSession = Depends(get_session),
+):
+    """MD only: rotate the ONE shared MD dashboard password. Takes effect on the
+    next /auth/md-login immediately; existing sessions stay valid."""
+    fs = (await session.execute(select(FactorySettings))).scalars().first()
+    if fs is None:
+        raise HTTPException(status_code=404, detail="Settings not seeded")
+    fs.md_password_hash = hash_password(body.new_password)
+    await write_audit(
+        session, actor.id, "admin.md_password_changed", "settings", None, {}, is_demo=False
+    )
+    await session.commit()
+    return {"status": "md_password_changed"}
 
 
 # ---------------- Prompt 17 Part F: announcements ----------------
