@@ -1343,3 +1343,9 @@ Before ANY automated login/OTP test (screenshot tool, testing_agent, curl-driven
    then REVERT + restart expo.
 2. This check is the MANDATORY FIRST STEP of every test run — never discover it afterwards.
 3. Webdash is safe (relative /api → local); ONLY the Expo bundle carries the prod URL.
+
+## Apple Review demo account (2026-08-07)
+- scripts/seed_apple_review_account.py (idempotent EC2 script): +919123456789 / fixed demo
+  OTP 123456 / emp_id APPLE / role CGM / dept HEAD_OFFICE / is_demo=True. Requested number
+  1234567890 rejected by +91[6-9]\d{9} validation (app + API) — 9123456789 substituted.
+  Verified e2e in sandbox (send-otp → demo_account mode, verify → CGM rank 2 profile).
