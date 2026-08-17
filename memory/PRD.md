@@ -1349,3 +1349,22 @@ Before ANY automated login/OTP test (screenshot tool, testing_agent, curl-driven
   OTP 123456 / emp_id APPLE / role CGM / dept HEAD_OFFICE / is_demo=True. Requested number
   1234567890 rejected by +91[6-9]\d{9} validation (app + API) — 9123456789 substituted.
   Verified e2e in sandbox (send-otp → demo_account mode, verify → CGM rank 2 profile).
+
+## Claude integration ROLLED BACK (2026-08-07)
+- User first requested Claude Sonnet 4.6 for text AI, then asked to UNDO before completion.
+- All changes reverted: ai_core.py (text_llm_route/CLAUDE_MODEL removed), config.py, .env
+  (AI_TEXT_PROVIDER removed), schemas.py (AiProviderIn removed), admin.py (ai-provider
+  endpoints removed), ai.py (back to ai_core.active_model()). No webdash UI was ever added.
+- AI routing is back to original: OPENAI_API_KEY first, Emergent+Gemini fallback.
+- Verified post-revert: 18 tests green (test_ai_key_routing + test_head_office_md), backend healthy.
+- Pod wipe recurrence #6 happened mid-revert — recovered, re-migrated (0017), re-seeded
+  (Mahesh Makne + APPLE review account).
+
+## DEPLOYMENT NOTE (2026-08-07)
+- User deployed via Emergent Publish: PRODUCTION at https://hogo-backend-phase1.emergent.host
+  (K8s backend + EAS frontend, Expo Go QR on that URL). Agent has NO access to it.
+- This app now has TWO productions: (1) the self-managed EC2 at api.hogoplus.in (mobile bundle's
+  EXPO_PUBLIC_API_URL still points here), (2) the Emergent-hosted deployment above.
+- For any user-reported issue: ALWAYS ask first whether it's on PREVIEW or PRODUCTION.
+  Preview → fix directly. Emergent production → fix in preview, user redeploys; env/domain
+  issues → Emergent Support. EC2 production → ship via the EC2 deploy scripts as usual.
