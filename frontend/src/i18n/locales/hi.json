@@ -80,7 +80,8 @@
     "stripOpen": "{{count}} चालू",
     "stripResolved": "इस हफ़्ते {{count}} हल हुए",
     "announceTile": "घोषणा",
-    "employeesTile": "कर्मचारी"
+    "employeesTile": "कर्मचारी",
+    "presenceTile": "टीम उपस्थिति"
   },
   "cat": {
     "safety": "सुरक्षा",
@@ -640,7 +641,30 @@
     "gpsOff": "GPS बंद है — ट्रैकिंग रुकी",
     "batteryTitle": "ट्रैकिंग चालू रखें",
     "batteryLead": "कुछ फ़ोन बैटरी बचाने के लिए ऐप बंद कर देते हैं। अपने फ़ोन के लिए ये स्टेप करें ताकि स्क्रीन लॉक होने पर भी ट्रैकिंग चले।",
-    "openSettings": "ऐप सेटिंग्स खोलें"
+    "openSettings": "ऐप सेटिंग्स खोलें",
+    "summaryTitle": "टीम उपस्थिति",
+    "tabSummary": "शिफ्ट सारांश",
+    "tabAlerts": "अलर्ट",
+    "coverage": "कवरेज",
+    "trackedShort": "ट्रैक हुए",
+    "outside": "बाहर",
+    "insideGps": "अंदर (GPS)",
+    "noSummary": "इस दिन कोई कर्मचारी नहीं",
+    "noAlerts": "कोई खुला अलर्ट नहीं — सब ठीक",
+    "ack": "स्वीकारें",
+    "acked": "स्वीकृत",
+    "resolve": "सुलझाएँ",
+    "alertOutside": "फ़ैक्टरी के बाहर",
+    "alertGoneDark": "सिग्नल गुम",
+    "alertLowBattery": "बैटरी कम",
+    "alertUnauthorized": "अनधिकृत क्षेत्र",
+    "notTracked": "ट्रैक नहीं",
+    "minOutside": "मिनट बाहर",
+    "minSilent": "मिनट से सिग्नल नहीं",
+    "managersOnly": "केवल प्रबंधकों के लिए",
+    "disabled": "लाइव उपस्थिति बंद है",
+    "today": "आज",
+    "since": "से"
   },
   "del": {
     "title": "मेरा खाता हटाएँ",

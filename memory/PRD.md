@@ -1377,3 +1377,53 @@ Before ANY automated login/OTP test (screenshot tool, testing_agent, curl-driven
 - Mobile app renders language-select screen correctly (smoke screenshot).
 - Status: awaiting USER VERIFICATION of the 4 completed priorities from v1.0.25
   (Webdash Presence Map, Back Button Redo, Mobile FGS Presence, Account Deletion + Privacy Policy).
+
+## v1.0.26 — LIVE PRESENCE PHASE 2 + SHIFT SUMMARY (2026-06, this session)
+User picked both suggested items: (1) Shift Summary (daily time-in-zone per worker) on
+webdash + mobile, (2) Phase 2 presence: alerts engine (core 3 + unauthorized zone),
+webdash alerts panel + supervisor alerts in mobile app, muster = one-shot inside/outside
+snapshot, worker timeline + animated trail replay.
+
+### Backend
+- NEW model PresenceAlert (migration 0019): one OPEN row per (employee, alert_type),
+  status active|acknowledged|resolved, detail JSONB, resolved_by NULL = auto-cleared.
+- NEW app/presence_alerts.py: run_presence_alert_sweep() — minute sweep via Celery beat
+  AND APScheduler (job presence_alerts_sweep, redis-locked, TTL 50s). Alert types:
+  outside_geofence (persistence timer in redis, >= presence_outside_alert_min),
+  gone_dark (silent >= presence_nosignal_alert_min; explicit "stopped" excluded),
+  low_battery (<15%, clears >=20% hysteresis), unauthorized_zone (beacon dept != worker dept).
+  Notifies dept manager + TIME_OFFICE + SECURITY managers ON RAISE ONLY (types
+  presence_outside/gone_dark/low_battery/unauthorized_zone in notify.T).
+- NEW endpoints in routers/presence.py: GET /presence/alerts (open|resolved|all),
+  POST /presence/alerts/{id}/ack|resolve (audited), GET /presence/muster (one-shot
+  inside/outside/unknown, audited 1/min), GET /presence/shift-summary?date= (per-worker
+  zone-minutes, GAP_CAP 10 min per ping, durations clipped to punch-in..end window,
+  coverage_pct), GET /presence/timeline?employee_id&date (points + merged segments with
+  no_data gaps, audited presence.timeline_view). /live refactored into _worker_states().
+- demo-simulate now backfills a 2h zone-hopping trail (idempotent per day) for demo cast.
+- presence purge also deletes resolved alerts >30 days.
+- Tests: tests/test_presence_phase2.py (8 tests) — all green; full suite 318 passed.
+
+### Webdash
+- Presence area now has sub-tabs (src/presence/shared.tsx: PresenceTabs w/ open-alert badge
+  30s poll, shared types/helpers moved out of Presence.tsx).
+- NEW screens: PresenceAlerts (KPI by type, ack/resolve, show-resolved toggle, 15s refresh),
+  PresenceMuster (3 columns + retake + print), PresenceSummary (date picker, coverage bars,
+  zone chips, links to trail), PresenceTrail (/presence/worker/:id?date= — vertical timeline
+  + Leaflet polyline replay with play/pause slider). Routes added in App.tsx; i18n prs2_* keys
+  (en/hi/mr); styles appended to styles.css. Built to backend/webdash_dist.
+
+### Mobile (Expo)
+- NEW /app/frontend/app/presence-summary.tsx "Team Presence" (managers rank<=3):
+  Summary tab (day nav arrows, coverage bars, zone chips) + Alerts tab (ack/resolve).
+- Home: home-tile-presence for rank<=3 OUTSIDE the !cfgWidgets block (config-home users
+  see it too). alerts.tsx routes entity_type presence_alert -> /presence-summary?tab=alerts.
+- endpoints.ts presence Phase 2 fns/types; locales presence.* + home.presenceTile (en/hi/mr).
+- ScreenHeader guard passes (29 screens).
+
+### Verified
+- Webdash e2e as demo CGM (+919000000500/123456): live tabs+badge, alerts ack/resolve UI,
+  summary table, muster columns, trail replay animation — screenshots OK.
+- Mobile e2e: home tile -> Team Presence summary + alerts tabs — screenshots OK.
+- NOTE: EXPO_PUBLIC_API_URL currently = preview URL (correct for sandbox); flip to
+  https://api.hogoplus.in only when shipping the EC2 mobile release (see DEPLOY_ORDER doc).

@@ -10,6 +10,7 @@ import {
   ClipboardList,
   LogIn,
   LogOut,
+  MapPin,
   Megaphone,
   UserPlus,
   Users,
@@ -475,6 +476,18 @@ export default function HomeScreen() {
           </View>
         ) : null}
         </>
+        ) : null}
+        {rank <= 3 ? (
+          <View style={styles.grid}>
+            <GridTile
+              testID="home-tile-presence"
+              label={t("home.presenceTile")}
+              icon={MapPin}
+              tint={colors.primary}
+              onPress={() => router.push("/presence-summary")}
+            />
+            <View style={{ flex: 1 }} />
+          </View>
         ) : null}
       </ScrollView>
 

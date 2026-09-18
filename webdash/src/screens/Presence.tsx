@@ -3,73 +3,22 @@ import "leaflet/dist/leaflet.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Circle, MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { isTopMgmt, useAuth } from "../auth";
 import { Chip, Loading } from "../components";
 import { useI18n } from "../i18n";
+import {
+  FreshBadge, PresenceTabs, STATUS_TONE,
+  hash, zoneName, zonePositions,
+  type Snapshot, type Worker, type Zone,
+} from "../presence/shared";
 
-/** v1.0.25 LIVE WORKER PRESENCE — Phase 1 dashboard.
+/** v1.0.25 LIVE WORKER PRESENCE — Phase 1 dashboard (+ Phase 2 sub-tabs).
  * Freshness (server receive time): Live <=6 min · Recent <=15 min · Stale >15 min.
  * Auto-refreshes every 15 s without a page reload. Works down to 360 px. */
 
 const REFRESH_MS = 15_000;
-
-interface Zone { key: string; name_en: string; name_hi: string; name_mr: string; count: number }
-interface Worker {
-  id: string; emp_id: string; full_name: string; department_code: string | null;
-  status: string; freshness: string | null; seconds_since: number | null;
-  zone_key: string | null; zone_en: string | null; zone_hi: string | null; zone_mr: string | null;
-  lat: number | null; lng: number | null; inside_geofence: boolean | null;
-  battery_pct: number | null; last_seen: string | null; punched_in_at: string;
-}
-interface Snapshot {
-  enabled: boolean; generated_at: string; scope?: string;
-  geofence?: { lat: number; lng: number; radius_m: number };
-  counts?: Record<string, number>; zones?: Zone[]; workers?: Worker[];
-}
-
-const STATUS_TONE: Record<string, "green" | "red" | "amber" | "blue" | undefined> = {
-  in_zone: "green", gps_inside: "green", gps_outside: "red",
-  stopped: "amber", no_signal: undefined, not_tracked: undefined,
-};
-
-function zoneName(z: { name_en?: string | null; zone_en?: string | null; [k: string]: any }, lang: string): string {
-  return z[`name_${lang}`] || z[`zone_${lang}`] || z.name_en || z.zone_en || "—";
-}
-
-/** Beacons carry no GPS coordinates (indoor). Zones get a stable, deterministic
- * ring layout inside the geofence so counts are glanceable on the map. */
-function zonePositions(zones: Zone[], center: [number, number], radiusM: number): Record<string, [number, number]> {
-  const sorted = [...zones].sort((a, b) => a.key.localeCompare(b.key));
-  const out: Record<string, [number, number]> = {};
-  const mPerDegLat = 111_320;
-  const mPerDegLng = 111_320 * Math.cos((center[0] * Math.PI) / 180);
-  const inner = Math.ceil(sorted.length / 2.6);
-  sorted.forEach((z, i) => {
-    const onInner = i < inner;
-    const idx = onInner ? i : i - inner;
-    const total = onInner ? inner : sorted.length - inner;
-    const r = radiusM * (onInner ? 0.32 : 0.62);
-    const ang = (2 * Math.PI * idx) / Math.max(total, 1) + (onInner ? 0 : Math.PI / total);
-    out[z.key] = [center[0] + (r * Math.sin(ang)) / mPerDegLat, center[1] + (r * Math.cos(ang)) / mPerDegLng];
-  });
-  return out;
-}
-
-function hash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-function FreshBadge({ w }: { w: Worker }) {
-  const { t } = useI18n();
-  if (!w.freshness) return <Chip>—</Chip>;
-  const tone = w.freshness === "live" ? "green" : w.freshness === "recent" ? "amber" : undefined;
-  const label = t(`prs_${w.freshness}`);
-  const mins = w.seconds_since !== null ? Math.round(w.seconds_since / 60) : null;
-  return <Chip tone={tone}>{label}{mins !== null ? ` · ${mins}m` : ""}</Chip>;
-}
 
 export default function Presence() {
   const { t, lang } = useI18n();
@@ -186,6 +135,7 @@ export default function Presence() {
     return (
       <>
         <div className="topbar"><h1 data-testid="presence-title">📍 {t("prs_title")}</h1></div>
+        <PresenceTabs active="live" />
         <div className="card" data-testid="presence-disabled" style={{ textAlign: "center", padding: 40 }}>
           <h2>{t("prs_disabled_title")}</h2>
           <p style={{ color: "var(--muted)", margin: "10px 0 18px" }}>{t("prs_disabled_msg")}</p>
@@ -217,6 +167,7 @@ export default function Presence() {
           <button className="btn ghost" style={{ padding: "6px 12px" }} onClick={load}>↻ {t("refresh")}</button>
         </div>
       </div>
+      <PresenceTabs active="live" />
 
       {/* top strip */}
       <div className="prs-strip" data-testid="presence-strip">
@@ -340,7 +291,12 @@ export default function Presence() {
             <tbody>
               {shownWorkers.map((w) => (
                 <tr key={w.id} className={w.status === "gps_outside" ? "red" : ""} data-testid={`worker-row-${w.emp_id}`}>
-                  <td><b>{w.full_name}</b> <span style={{ color: "var(--muted)", fontSize: 12 }}>{w.emp_id}</span></td>
+                  <td>
+                    <Link to={`/presence/worker/${w.id}`} style={{ color: "inherit" }} data-testid={`worker-link-${w.emp_id}`}>
+                      <b>{w.full_name}</b>
+                    </Link>{" "}
+                    <span style={{ color: "var(--muted)", fontSize: 12 }}>{w.emp_id}</span>
+                  </td>
                   <td>{w.department_code || "—"}</td>
                   <td><Chip tone={STATUS_TONE[w.status]}>{t(`prs_${w.status}`)}</Chip></td>
                   <td>{w.zone_en ? zoneName(w, lang) : w.status.startsWith("gps") ? "GPS" : "—"}</td>

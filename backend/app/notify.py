@@ -249,6 +249,35 @@ T = {
             "mr": "हजेरीवर आक्षेप नोंदवला",
         },
     },
+    # v1.0.26 live presence Phase 2 — alerts engine
+    "presence_outside": {
+        "title": {
+            "en": "🚨 Worker outside factory",
+            "hi": "🚨 कर्मचारी फ़ैक्टरी के बाहर",
+            "mr": "🚨 कामगार कारखान्याबाहेर",
+        },
+    },
+    "presence_gone_dark": {
+        "title": {
+            "en": "⚠️ Worker signal lost",
+            "hi": "⚠️ कर्मचारी का सिग्नल गुम",
+            "mr": "⚠️ कामगाराचा सिग्नल गेला",
+        },
+    },
+    "presence_low_battery": {
+        "title": {
+            "en": "🔋 Worker phone battery low",
+            "hi": "🔋 कर्मचारी के फ़ोन की बैटरी कम",
+            "mr": "🔋 कामगाराच्या फोनची बॅटरी कमी",
+        },
+    },
+    "presence_unauthorized_zone": {
+        "title": {
+            "en": "⛔ Worker in unauthorized zone",
+            "hi": "⛔ कर्मचारी अनधिकृत क्षेत्र में",
+            "mr": "⛔ कामगार अनधिकृत झोनमध्ये",
+        },
+    },
     "regularization_decided": {
         "title": {
             "en": "Your attendance request was reviewed",

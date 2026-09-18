@@ -46,4 +46,9 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.presence_history_purge",
         "schedule": crontab(hour=1, minute=0),
     },
+    # v1.0.26 live presence Phase 2: alerts engine, every minute
+    "presence-alerts-sweep-every-min": {
+        "task": "app.tasks.presence_alerts_sweep",
+        "schedule": crontab(minute="*"),
+    },
 }

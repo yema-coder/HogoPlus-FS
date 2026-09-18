@@ -13,6 +13,10 @@ import Incidents from "./screens/Incidents";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
 import Presence from "./screens/Presence";
+import PresenceAlerts from "./screens/PresenceAlerts";
+import PresenceMuster from "./screens/PresenceMuster";
+import PresenceSummary from "./screens/PresenceSummary";
+import PresenceTrail from "./screens/PresenceTrail";
 import Reports from "./screens/Reports";
 import Vehicles from "./screens/Vehicles";
 import logo from "./logo.png";
@@ -188,6 +192,10 @@ export default function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<Incidents />} />
               <Route path="/presence" element={<Presence />} />
+              <Route path="/presence/alerts" element={<PresenceAlerts />} />
+              <Route path="/presence/summary" element={<PresenceSummary />} />
+              <Route path="/presence/muster" element={<PresenceMuster />} />
+              <Route path="/presence/worker/:id" element={<PresenceTrail />} />
               <Route path="/departments" element={<Overview />} />
               <Route path="/dept/:code" element={<Department />} />
               <Route path="/approvals" element={<Approvals />} />

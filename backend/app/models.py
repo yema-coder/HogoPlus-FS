@@ -668,6 +668,40 @@ class PresenceHistory(Base):
     )
 
 
+class PresenceAlert(TimestampMixin, Base):
+    """v1.0.26 Phase 2 alerts engine — ONE open row per (employee, alert_type).
+    The minute-sweep raises / refreshes (last_seen_at) / auto-resolves; managers
+    acknowledge or resolve manually. resolved_by NULL + resolved = auto-cleared."""
+
+    __tablename__ = "presence_alerts"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    alert_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # outside_geofence | gone_dark | low_battery | unauthorized_zone
+    status: Mapped[str] = mapped_column(
+        String(15), default="active", server_default="active", nullable=False, index=True
+    )  # active | acknowledged | resolved
+    zone_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    zone_en: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+
+
 class PresenceConsent(TimestampMixin, Base):
     """Versioned, server-side consent record (DPDP). Tracking NEVER starts
     without a consent row matching the current consent version."""
