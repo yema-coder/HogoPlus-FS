@@ -1264,3 +1264,27 @@ async def _vehicle_overstay_sweep_async() -> dict:
         return {"overstay_alerts": alerted}
     finally:
         await engine.dispose()
+
+
+# ---------------- v1.0.25 live presence: 30-day history retention ----------------
+
+async def _presence_purge_async() -> int:
+    from datetime import timedelta
+
+    from sqlalchemy import delete
+
+    from app.database import SessionLocal
+    from app.models import PresenceHistory
+    from app.shift_logic import now_ist
+
+    cutoff = now_ist() - timedelta(days=30)
+    async with SessionLocal() as session:
+        result = await session.execute(delete(PresenceHistory).where(PresenceHistory.server_ts < cutoff))
+        await session.commit()
+        return result.rowcount or 0
+
+
+@celery.task(name="app.tasks.presence_history_purge")
+def presence_history_purge() -> int:
+    """DPDP retention: presence trail rows older than 30 days are deleted daily."""
+    return asyncio.run(_presence_purge_async())

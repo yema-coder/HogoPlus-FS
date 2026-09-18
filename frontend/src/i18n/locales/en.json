@@ -22,7 +22,8 @@
     "close": "Close camera",
     "confirm": "Confirm",
     "home": "Go Home",
-    "location": "Location"
+    "location": "Location",
+    "pressAgainExit": "Press back again to exit"
   },
   "lang": {
     "title": "Choose your language",
@@ -58,7 +59,9 @@
     "pendingBody": "Your manager will approve you soon. You can already report incidents.",
     "pendingIncident": "Report Complaint",
     "checkStatus": "Check status",
-    "waitingApproval": "Pending approval"
+    "waitingApproval": "Pending approval",
+    "privacyPrefix": "By registering you agree to our",
+    "privacyLink": "privacy policy"
   },
   "home": {
     "reportIncident": "Report Complaint",
@@ -238,7 +241,9 @@
     "language": "Language",
     "logout": "Log out",
     "memberNote": "Contact Time Office to change details",
-    "sahayak": "SOP assistant — ask anything"
+    "sahayak": "SOP assistant — ask anything",
+    "privacy": "Privacy policy",
+    "deleteAccount": "Delete my account"
   },
   "shift": {
     "title": "My Shift",
@@ -627,5 +632,30 @@
     "unlink": "Not same — unlink",
     "unlinked": "Unlinked",
     "viewOriginal": "View first report"
+  },
+  "presence": {
+    "consentCta": "Shift location: give consent",
+    "chipOn": "Location ON — shift only",
+    "chipOff": "Tracking stopped — tap to restart",
+    "gpsOff": "GPS is off — tracking paused",
+    "batteryTitle": "Keep tracking running",
+    "batteryLead": "Some phones stop apps to save battery. Follow the steps for your phone so shift tracking keeps working with the screen locked.",
+    "openSettings": "Open app settings"
+  },
+  "del": {
+    "title": "Delete my account",
+    "warnTitle": "This will permanently delete your account",
+    "goneHead": "Deleted forever",
+    "goneBody": "Your name, phone number, selfies, face-verification data, notifications and location history.",
+    "keptHead": "Kept by law (without your name)",
+    "keptBody": "Attendance, complaint and audit records stay as \"Deleted user #ID\" — the factory must keep them.",
+    "noUndo": "This cannot be undone. You will be signed out everywhere.",
+    "startBtn": "Delete my account",
+    "confirmModal": "Really delete your account forever?",
+    "otpTitle": "Enter the OTP to confirm",
+    "otpHint": "We sent a 6-digit code to {{phone}}",
+    "otpSent": "OTP sent",
+    "confirmBtn": "Permanently delete",
+    "done": "Account deleted"
   }
 }

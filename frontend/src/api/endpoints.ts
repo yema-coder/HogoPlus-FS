@@ -445,3 +445,45 @@ export const vehiclesInside = () => api<VehicleLogItem[]>("/vehicles/inside");
 
 export const vehiclesSummary = () =>
   api<{ today_in: number; today_out: number; currently_inside: number }>("/vehicles/summary");
+
+// ---------------- v1.0.25 live worker presence ----------------
+
+export interface PresenceMyStatus {
+  enabled: boolean;
+  in_pilot: boolean;
+  consent_required: boolean;
+  consent_version: string;
+  tracking_expected: boolean;
+  stop_after?: string | null;
+  intervals: { scan_s: number; heartbeat_s: number };
+  current: {
+    source: string;
+    zone_en: string | null;
+    zone_mr: string | null;
+    zone_hi: string | null;
+    inside_geofence: boolean | null;
+    server_ts: string;
+  } | null;
+}
+
+export const presenceMyStatus = () => api<PresenceMyStatus>("/presence/my-status");
+
+export const presenceConsent = (version: string, lang: string) =>
+  api<{ status: string; version: string }>("/presence/consent", {
+    method: "POST",
+    body: { version, lang },
+  });
+
+export const presencePing = (pings: unknown[]) =>
+  api<{ accepted: number; duplicates: number; heartbeat_s: number }>("/presence/ping", {
+    method: "POST",
+    body: { pings },
+  });
+
+// ---------------- v1.0.25 App-Store compliance: account deletion ----------------
+
+export const deleteAccountRequest = () =>
+  api<{ message: string; expires_in: number }>("/auth/delete-account/request", { method: "POST" });
+
+export const deleteAccountConfirm = (otp: string) =>
+  api<{ status: string }>("/auth/delete-account/confirm", { method: "POST", body: { otp } });

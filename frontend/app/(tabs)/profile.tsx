@@ -1,10 +1,11 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, IdCard, LogOut, MessageCircleQuestion } from "lucide-react-native";
+import { ChevronRight, IdCard, LogOut, MessageCircleQuestion, ShieldCheck, Trash2 } from "lucide-react-native";
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { Linking, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { API_BASE } from "@/src/api/client";
 import { patchMe } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
@@ -138,6 +139,28 @@ export default function ProfileScreen() {
           onPress={() => setConfirmOut(true)}
           style={{ marginTop: spacing.lg }}
         />
+
+        {/* v1.0.25 App-Store compliance: hosted privacy policy + in-app deletion */}
+        <Pressable
+          testID="privacy-policy-link"
+          accessibilityRole="button"
+          onPress={() => void Linking.openURL(`${API_BASE}/legal/privacy`)}
+          style={styles.linkRow}
+        >
+          <ShieldCheck size={20} color={colors.muted} strokeWidth={2.2} />
+          <Text style={styles.linkText}>{t("profile.privacy")}</Text>
+          <ChevronRight size={18} color={colors.muted} strokeWidth={2.2} />
+        </Pressable>
+        <Pressable
+          testID="delete-account-entry"
+          accessibilityRole="button"
+          onPress={() => router.push("/delete-account")}
+          style={styles.linkRow}
+        >
+          <Trash2 size={20} color={colors.danger} strokeWidth={2.2} />
+          <Text style={[styles.linkText, { color: colors.danger }]}>{t("profile.deleteAccount")}</Text>
+          <ChevronRight size={18} color={colors.muted} strokeWidth={2.2} />
+        </Pressable>
       </ScrollView>
 
       <ConfirmModal
@@ -243,4 +266,12 @@ const styles = StyleSheet.create({
   },
   sahayakTitle: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
   sahayakSub: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: spacing.sm,
+  },
+  linkText: { flex: 1, fontFamily: fonts.semiBold, fontSize: type.base, color: colors.muted },
 });

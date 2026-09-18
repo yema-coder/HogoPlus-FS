@@ -10,9 +10,9 @@
 # ---------- Stage 1: build the MD Command Center (webdash) static bundle -----
 FROM node:20-slim AS webdash
 WORKDIR /webdash
-# copy manifest first for layer caching (lockfile optional — npm install is resilient)
-COPY webdash/package.json ./
-RUN npm install --no-audit --no-fund
+# copy manifests first for layer caching — lockfile pinned, reproducible install
+COPY webdash/package.json webdash/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY webdash/ ./
 # vite.config sets base:"/api/dash/" and outDir ../backend/webdash_dist; we override
 # --outDir to a clean path so stage 2 can copy it to the location app/main.py expects.

@@ -1,25 +1,40 @@
 import hashlib
+import hmac
 import logging
 import os
 import secrets
 import uuid as uuid_mod
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import cast, func, select
+from fastapi.responses import FileResponse
+from sqlalchemy import cast, delete as sa_delete, func, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Integer as SAInteger
 
 from app.audit import write_audit
 from app.config import settings
 from app.database import get_session
-from app.models import AppVersion, Department, Employee, FactorySettings, OtpAttempt, ShiftAssignment
+from app.models import (
+    AppVersion,
+    Attendance,
+    Department,
+    Employee,
+    FactorySettings,
+    OtpAttempt,
+    PresenceConsent,
+    PresenceHistory,
+    ShiftAssignment,
+    WorkerPresence,
+)
 from app.notify import dispatcher, template
 from app.otp import NotConfigured, SMSDeliveryError, get_otp_sender
 from app.redis_client import redis_client
 from app.routers.attendance import _haversine_m
 from app.schemas import (
     ChangePasswordIn,
+    DeleteAccountIn,
     FaceEnrollIn,
     MdLoginIn,
     PasswordLoginIn,
@@ -29,6 +44,7 @@ from app.schemas import (
     UpdateMeIn,
     VerifyOtpIn,
 )
+from app.storage import get_storage
 from app.security import (
     create_registration_token,
     create_token_pair,
@@ -548,3 +564,153 @@ async def app_version(session: AsyncSession = Depends(get_session)):
         "notes": row.notes,
         "force_update": row.force_update,
     }
+
+
+# ---------------- v1.0.25 App-Store compliance: privacy policy + account deletion ----
+
+_PRIVACY_HTML = Path(__file__).resolve().parent.parent.parent / "legal" / "privacy.html"
+
+
+@router.get("/legal/privacy", include_in_schema=False)
+async def privacy_policy():
+    """Public hosted privacy policy (EN + MR) — linked from Profile & Registration."""
+    return FileResponse(_PRIVACY_HTML, media_type="text/html")
+
+
+DELETE_OTP_TTL = 600
+DELETE_LOCK_SECONDS = 900
+
+_DEMO_DELETE_BLOCK = {
+    "code": "demo_protected",
+    "en": "This demo/review account cannot be deleted.",
+    "hi": "यह डेमो/समीक्षा खाता हटाया नहीं जा सकता।",
+    "mr": "हे डेमो/रिव्ह्यू खाते डिलीट करता येत नाही.",
+}
+
+
+def _block_protected_delete(employee: Employee) -> None:
+    """Demo bubble + Play/Apple reviewer accounts are protected from deletion."""
+    if employee.is_demo:
+        raise HTTPException(status_code=409, detail=_DEMO_DELETE_BLOCK)
+
+
+@router.post("/auth/delete-account/request")
+async def delete_account_request(
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Step 1: OTP re-verification to the phone ON FILE (never client-supplied)."""
+    _block_protected_delete(employee)
+    if not employee.phone:
+        raise HTTPException(status_code=409, detail="No phone on file — contact the Time Office")
+    if await redis_client.exists(f"acctdel:lock:{employee.id}"):
+        raise HTTPException(status_code=429, detail="Too many wrong attempts. Try again later.")
+    otp = f"{secrets.randbelow(10**6):06d}"
+    if not await redis_client.set(f"acctdel:otp:{employee.id}", _hash(otp), ex=DELETE_OTP_TTL, nx=True):
+        raise HTTPException(status_code=429, detail=_rate_limit_detail(DELETE_OTP_TTL))
+    try:
+        await get_otp_sender().send(employee.phone, otp)
+    except NotConfigured as exc:
+        await redis_client.delete(f"acctdel:otp:{employee.id}")
+        raise HTTPException(status_code=503, detail=str(exc))
+    except SMSDeliveryError as exc:
+        await redis_client.delete(f"acctdel:otp:{employee.id}")
+        raise HTTPException(status_code=502, detail=f"SMS delivery failed: {exc}")
+    await write_audit(
+        session, employee.id, "account.delete_otp_sent", "employee", str(employee.id), {},
+        is_demo=employee.is_demo,
+    )
+    await session.commit()
+    return {"message": "OTP sent", "expires_in": DELETE_OTP_TTL}
+
+
+@router.post("/auth/delete-account/confirm")
+async def delete_account_confirm(
+    body: DeleteAccountIn,
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Step 2: verify OTP, then DELETE personal data and ANONYMISE legal records.
+
+    Deleted: name, phone, selfies (registration reference + attendance photos),
+    Rekognition face reference, push token, presence trail, consents, password.
+    Kept (anonymised as "Deleted user #emp_id"): attendance, incidents, audit —
+    factory statutory records. is_active=False kills every access/refresh token
+    (both token paths re-check is_active)."""
+    _block_protected_delete(employee)
+    if await redis_client.exists(f"acctdel:lock:{employee.id}"):
+        raise HTTPException(status_code=429, detail="Too many wrong attempts. Try again later.")
+
+    stored = await redis_client.get(f"acctdel:otp:{employee.id}")
+    demo_ok = (
+        settings.demo_otp_enabled
+        and body.otp == settings.demo_otp
+        and (employee.phone or "") in settings.demo_otp_whitelist_set
+    )
+    if not ((stored and hmac.compare_digest(str(stored), _hash(body.otp))) or demo_ok):
+        fails = await redis_client.incr(f"acctdel:fail:{employee.id}")
+        if fails == 1:
+            await redis_client.expire(f"acctdel:fail:{employee.id}", DELETE_LOCK_SECONDS)
+        if fails >= LOCKOUT_THRESHOLD:
+            await redis_client.setex(f"acctdel:lock:{employee.id}", DELETE_LOCK_SECONDS, "1")
+            raise HTTPException(status_code=429, detail="Too many wrong attempts. Try again later.")
+        raise HTTPException(status_code=401, detail=f"Invalid OTP. {LOCKOUT_THRESHOLD - fails} attempts left.")
+    await redis_client.delete(f"acctdel:otp:{employee.id}", f"acctdel:fail:{employee.id}")
+
+    label = f"Deleted user #{employee.emp_id}"
+
+    # collect storage keys BEFORE the rows are anonymised (deleted after commit)
+    doomed_keys: list[str] = []
+    if employee.reference_selfie_key:
+        doomed_keys.append(employee.reference_selfie_key)
+    selfie_rows = (
+        await session.execute(
+            select(Attendance.selfie_key).where(
+                Attendance.employee_id == employee.id, Attendance.selfie_key != "deleted"
+            )
+        )
+    ).scalars().all()
+    doomed_keys.extend(k for k in selfie_rows if k)
+
+    # 1) anonymise the employee row (legal FKs stay valid; personal data gone)
+    employee.full_name = label
+    employee.phone = None
+    employee.password_hash = None
+    employee.selfie_url = None
+    employee.reference_selfie_key = None  # Rekognition compares against this — face data gone
+    employee.reference_selfie_set_at = None
+    employee.expo_push_token = None
+    employee.reg_lat = None
+    employee.reg_lng = None
+    employee.reg_address = None
+    employee.reg_zone = None
+    employee.reg_device = None
+    employee.is_active = False  # every access/refresh token dies on next use
+
+    # 2) attendance rows KEPT (statutory) — selfie photos anonymised
+    await session.execute(
+        sa_update(Attendance).where(Attendance.employee_id == employee.id).values(selfie_key="deleted")
+    )
+
+    # 3) live-presence trail + consents hard-deleted
+    await session.execute(sa_delete(WorkerPresence).where(WorkerPresence.employee_id == employee.id))
+    await session.execute(sa_delete(PresenceHistory).where(PresenceHistory.employee_id == employee.id))
+    await session.execute(sa_delete(PresenceConsent).where(PresenceConsent.employee_id == employee.id))
+
+    # 4) audit the deletion (no personal data in the payload)
+    await write_audit(
+        session, employee.id, "account.deleted", "employee", str(employee.id),
+        {"emp_id": employee.emp_id, "selfie_objects": len(doomed_keys)},
+        is_demo=employee.is_demo,
+    )
+    await session.commit()
+
+    # 5) best-effort storage object deletion AFTER the commit (idempotent)
+    st = get_storage()
+    for key in doomed_keys:
+        try:
+            st.delete(key)
+        except Exception:  # noqa: BLE001 — a stale object never blocks the deletion
+            logger.warning("delete-account: could not delete storage object %s", key)
+
+    return {"status": "deleted"}

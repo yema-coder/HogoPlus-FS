@@ -1368,3 +1368,12 @@ Before ANY automated login/OTP test (screenshot tool, testing_agent, curl-driven
 - For any user-reported issue: ALWAYS ask first whether it's on PREVIEW or PRODUCTION.
   Preview → fix directly. Emergent production → fix in preview, user redeploys; env/domain
   issues → Emergent Support. EC2 production → ship via the EC2 deploy scripts as usual.
+
+## FORK HEALTH CHECK (2026-06 session)
+- Post-fork environment verified healthy: all supervisor services RUNNING (backend, expo,
+  celery worker/beat, postgresql, redis), PG accepting connections, Redis PONG.
+- Endpoints verified externally: /api/health 200, /api/legal/privacy 200, /api/dash/ 200
+  (webdash SPA), /api/presence/live 401 (correctly auth-gated).
+- Mobile app renders language-select screen correctly (smoke screenshot).
+- Status: awaiting USER VERIFICATION of the 4 completed priorities from v1.0.25
+  (Webdash Presence Map, Back Button Redo, Mobile FGS Presence, Account Deletion + Privacy Policy).

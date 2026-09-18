@@ -63,7 +63,6 @@ async def duo(db_session):
     await _purge(db_session)
 
 
-@pytest.mark.anyio
 async def test_list_all_scope_md_cgm_only(client, db_session, duo):
     cgm = await login(client, PHONES["cgm"])
     # deactivate one so the full register must still include it
@@ -83,7 +82,6 @@ async def test_list_all_scope_md_cgm_only(client, db_session, duo):
     await db_session.commit()
 
 
-@pytest.mark.anyio
 async def test_emp_id_change_is_uuid_safe_and_audited(client, db_session, duo):
     cgm = await login(client, PHONES["cgm"])
     emp = duo[0]
@@ -109,7 +107,6 @@ async def test_emp_id_change_is_uuid_safe_and_audited(client, db_session, duo):
     assert upd and upd[-1]["detail"]["emp_id"] == {"old": "E900", "new": "E900X"}
 
 
-@pytest.mark.anyio
 async def test_emp_id_uniqueness_and_rank_gate(client, db_session, duo):
     cgm = await login(client, PHONES["cgm"])
     # collision names the current holder
@@ -131,7 +128,6 @@ async def test_emp_id_uniqueness_and_rank_gate(client, db_session, duo):
     assert r.status_code == 422
 
 
-@pytest.mark.anyio
 async def test_phone_change_flips_login_identity_immediately(client, db_session, duo):
     cgm = await login(client, PHONES["cgm"])
     emp = duo[0]
@@ -164,7 +160,6 @@ async def test_phone_change_flips_login_identity_immediately(client, db_session,
     assert me.status_code == 200 and me.json()["id"] == str(emp.id)
 
 
-@pytest.mark.anyio
 async def test_phone_uniqueness_names_holder(client, db_session, duo):
     cgm = await login(client, PHONES["cgm"])
     r = await client.patch(

@@ -20,6 +20,7 @@ from app.routers import (
     home,
     incidents,
     notifications,
+    presence,
     shifts,
     vehicles,
 )
@@ -57,6 +58,7 @@ api.include_router(ai.router)
 api.include_router(dashboard.router)
 api.include_router(home.router)
 api.include_router(vehicles.router)
+api.include_router(presence.router)
 
 app.include_router(api)
 
