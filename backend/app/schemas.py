@@ -262,6 +262,7 @@ class EmployeePatchIn(BaseModel):
     department_code: str | None = None
     shift_code: str | None = None
     is_active: bool | None = None
+    designation: str | None = Field(default=None, max_length=100)
 
 
 class AssignManagerIn(BaseModel):
@@ -421,6 +422,7 @@ class DirectAddEmployeeIn(BaseModel):
     role_code: str
     shift_code: str | None = None
     emp_id: str = Field(min_length=1, max_length=20)
+    designation: str | None = Field(default=None, max_length=100)
 
 
 class MdLoginIn(BaseModel):
@@ -429,6 +431,40 @@ class MdLoginIn(BaseModel):
 
 class MdPasswordIn(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# ---------------- v1.0.25 live worker presence ----------------
+
+class PresencePing(BaseModel):
+    client_ping_id: str = Field(min_length=8, max_length=64)
+    source: Literal["beacon", "gps", "stopped"]
+    zone_key: str | None = Field(default=None, max_length=150)
+    lat: float | None = None
+    lng: float | None = None
+    accuracy_m: float | None = Field(default=None, ge=0, le=10000)
+    battery_pct: int | None = Field(default=None, ge=0, le=100)
+    app_version: str | None = Field(default=None, max_length=20)
+    client_ts: _datetime.datetime | None = None
+
+
+class PresencePingBatchIn(BaseModel):
+    pings: list[PresencePing] = Field(min_length=1, max_length=50)
+
+
+class PresenceConsentIn(BaseModel):
+    version: str = Field(min_length=1, max_length=10)
+    lang: Literal["mr", "hi", "en"] = "mr"
+
+
+class PresenceSettingsIn(BaseModel):
+    live_presence_enabled: bool | None = None
+    presence_pilot_emp_ids: str | None = Field(default=None, max_length=5000)
+    presence_nosignal_alert_min: int | None = Field(default=None, ge=5, le=120)
+    presence_outside_alert_min: int | None = Field(default=None, ge=2, le=120)
+
+
+class DeleteAccountIn(BaseModel):
+    otp: str = Field(min_length=4, max_length=8)
 
 
 class EscalateIn(BaseModel):

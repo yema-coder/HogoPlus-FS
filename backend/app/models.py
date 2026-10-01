@@ -420,6 +420,21 @@ class FactorySettings(TimestampMixin, Base):
     md_otp_phones: Mapped[str] = mapped_column(
         String(200), default="", server_default="", nullable=False
     )
+    # v1.0.25 LIVE WORKER PRESENCE (Phase 1) — everything OFF by default.
+    # A worker is tracked ONLY when: global flag ON + emp_id in the pilot list
+    # + consent recorded + currently punched in. Both gates required (owner rule 6).
+    live_presence_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    presence_pilot_emp_ids: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
+    )  # comma-separated emp_ids
+    presence_nosignal_alert_min: Mapped[int] = mapped_column(
+        Integer, default=15, server_default="15", nullable=False
+    )
+    presence_outside_alert_min: Mapped[int] = mapped_column(
+        Integer, default=10, server_default="10", nullable=False
+    )
 
 
 class BleBeacon(TimestampMixin, Base):
@@ -598,3 +613,104 @@ class VehicleLog(TimestampMixin, Base):
         Boolean, default=False, server_default="false", nullable=False, index=True
     )
     logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# ---------------- v1.0.25 LIVE WORKER PRESENCE (Phase 1) ----------------
+
+class WorkerPresence(TimestampMixin, Base):
+    """LATEST known state per worker — one row, upserted on every accepted ping.
+    Freshness is ALWAYS computed off server_ts (cheap phones have clock drift);
+    stale data is shown as history, never as live."""
+
+    __tablename__ = "worker_presence"
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), primary_key=True
+    )
+    source: Mapped[str] = mapped_column(String(10), nullable=False)  # beacon | gps | stopped
+    zone_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    zone_en: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    zone_hi: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    zone_mr: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    zone_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inside_geofence: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    battery_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    app_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    client_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    server_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+
+
+class PresenceHistory(Base):
+    """Append-only trail for replay/timeline. Auto-purged after 30 days."""
+
+    __tablename__ = "presence_history"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    zone_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    zone_en: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    inside_geofence: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    battery_pct: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    client_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    server_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+
+
+class PresenceAlert(TimestampMixin, Base):
+    """v1.0.26 Phase 2 alerts engine — ONE open row per (employee, alert_type).
+    The minute-sweep raises / refreshes (last_seen_at) / auto-resolves; managers
+    acknowledge or resolve manually. resolved_by NULL + resolved = auto-cleared."""
+
+    __tablename__ = "presence_alerts"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    alert_type: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # outside_geofence | gone_dark | low_battery | unauthorized_zone
+    status: Mapped[str] = mapped_column(
+        String(15), default="active", server_default="active", nullable=False, index=True
+    )  # active | acknowledged | resolved
+    zone_key: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    zone_en: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+
+
+class PresenceConsent(TimestampMixin, Base):
+    """Versioned, server-side consent record (DPDP). Tracking NEVER starts
+    without a consent row matching the current consent version."""
+
+    __tablename__ = "presence_consents"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    version: Mapped[str] = mapped_column(String(10), nullable=False)
+    lang: Mapped[str] = mapped_column(String(5), nullable=False, default="mr")
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

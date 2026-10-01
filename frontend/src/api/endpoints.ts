@@ -371,7 +371,11 @@ export const directAddEmployee = (body: {
   role_code: string;
   shift_code?: string;
   emp_id: string;
+  designation?: string;
 }) => api<EmployeeProfile>("/admin/employees", { method: "POST", body });
+
+export const adminDesignations = () =>
+  api<{ designations: string[] }>("/admin/designations");
 
 export const patchEmployee = (
   id: string,
@@ -382,6 +386,7 @@ export const patchEmployee = (
     department_code: string;
     shift_code: string;
     is_active: boolean;
+    designation: string;
   }>,
 ) => api<EmployeeProfile>(`/admin/employees/${id}`, { method: "PATCH", body });
 
@@ -445,3 +450,116 @@ export const vehiclesInside = () => api<VehicleLogItem[]>("/vehicles/inside");
 
 export const vehiclesSummary = () =>
   api<{ today_in: number; today_out: number; currently_inside: number }>("/vehicles/summary");
+
+// ---------------- v1.0.25 live worker presence ----------------
+
+export interface PresenceMyStatus {
+  enabled: boolean;
+  in_pilot: boolean;
+  consent_required: boolean;
+  consent_version: string;
+  tracking_expected: boolean;
+  stop_after?: string | null;
+  intervals: { scan_s: number; heartbeat_s: number };
+  current: {
+    source: string;
+    zone_en: string | null;
+    zone_mr: string | null;
+    zone_hi: string | null;
+    inside_geofence: boolean | null;
+    server_ts: string;
+  } | null;
+}
+
+export const presenceMyStatus = () => api<PresenceMyStatus>("/presence/my-status");
+
+export const presenceConsent = (version: string, lang: string) =>
+  api<{ status: string; version: string }>("/presence/consent", {
+    method: "POST",
+    body: { version, lang },
+  });
+
+export const presencePing = (pings: unknown[]) =>
+  api<{ accepted: number; duplicates: number; heartbeat_s: number }>("/presence/ping", {
+    method: "POST",
+    body: { pings },
+  });
+
+// ---------------- v1.0.26 live presence Phase 2 (managers) ----------------
+
+export interface PresenceSummaryZone {
+  zone_key: string;
+  zone_en: string;
+  zone_hi: string | null;
+  zone_mr: string | null;
+  minutes: number;
+}
+
+export interface PresenceSummaryWorker {
+  id: string;
+  emp_id: string;
+  full_name: string;
+  department_code: string | null;
+  tracked: boolean;
+  punch_in_at: string;
+  punch_out_at: string | null;
+  shift_min: number | null;
+  tracked_min: number;
+  coverage_pct: number | null;
+  zones: PresenceSummaryZone[];
+  gps_inside_min: number;
+  outside_min: number;
+}
+
+export interface PresenceSummaryResp {
+  enabled: boolean;
+  generated_at: string;
+  date?: string;
+  counts?: { workers: number; tracked: number; avg_coverage_pct: number };
+  workers?: PresenceSummaryWorker[];
+}
+
+export interface PresenceAlertItem {
+  id: string;
+  employee_id: string;
+  emp_id: string;
+  full_name: string;
+  department_code: string | null;
+  alert_type: string;
+  status: string;
+  zone_key: string | null;
+  zone_en: string | null;
+  detail: Record<string, unknown>;
+  first_seen_at: string;
+  last_seen_at: string;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  auto_resolved: boolean;
+}
+
+export interface PresenceAlertList {
+  generated_at: string;
+  open_total: number;
+  open_by_type: Record<string, number>;
+  alerts: PresenceAlertItem[];
+}
+
+export const presenceShiftSummary = (date?: string) =>
+  api<PresenceSummaryResp>(`/presence/shift-summary${date ? `?date=${date}` : ""}`);
+
+export const presenceAlerts = (status: "open" | "resolved" | "all" = "open") =>
+  api<PresenceAlertList>(`/presence/alerts?status=${status}`);
+
+export const presenceAlertAck = (id: string) =>
+  api<{ status: string }>(`/presence/alerts/${id}/ack`, { method: "POST" });
+
+export const presenceAlertResolve = (id: string) =>
+  api<{ status: string }>(`/presence/alerts/${id}/resolve`, { method: "POST" });
+
+// ---------------- v1.0.25 App-Store compliance: account deletion ----------------
+
+export const deleteAccountRequest = () =>
+  api<{ message: string; expires_in: number }>("/auth/delete-account/request", { method: "POST" });
+
+export const deleteAccountConfirm = (otp: string) =>
+  api<{ status: string }>("/auth/delete-account/confirm", { method: "POST", body: { otp } });

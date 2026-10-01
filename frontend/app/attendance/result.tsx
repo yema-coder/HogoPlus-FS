@@ -10,6 +10,7 @@ import { myAttendance, sendBleDiag } from "@/src/api/endpoints";
 import { BigButton } from "@/src/components/BigButton";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
+import { onPunchInSuccess } from "@/src/presence/tracker";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 import { formatTime } from "@/src/utils/format";
 import { storage } from "@/src/utils/storage";
@@ -53,6 +54,16 @@ export default function PunchResultScreen() {
         : Haptics.NotificationFeedbackType.Success,
     ).catch(() => undefined);
   }, [isQueued, level]);
+
+  // v1.0.25 live presence: right after a successful punch-in, either ask for
+  // consent (first time, pilot only) or start the foreground shift tracker.
+  useEffect(() => {
+    if (isQueued) return;
+    void onPunchInSuccess().then((r) => {
+      if (r === "consent") router.push("/presence-consent");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per result
+  }, []);
 
   const render = () => {
     if (isQueued) {

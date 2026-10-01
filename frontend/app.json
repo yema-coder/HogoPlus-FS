@@ -2,7 +2,7 @@
   "expo": {
     "name": "HogoPlus-FS",
     "slug": "frontend",
-    "version": "1.0.24",
+    "version": "1.0.25",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hogoplus",
@@ -26,7 +26,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.hogoplus.fs",
-      "versionCode": 10024,
+      "versionCode": 10025,
       "permissions": [
         "POST_NOTIFICATIONS"
       ]
@@ -63,7 +63,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Confirms your attendance location at the factory"
+          "locationWhenInUsePermission": "Confirms your attendance location at the factory",
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [

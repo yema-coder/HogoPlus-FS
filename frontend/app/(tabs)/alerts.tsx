@@ -59,6 +59,8 @@ export default function AlertsScreen() {
       router.push("/shift");
     } else if (item.entity_type === "employee") {
       if (rank <= 3) router.push("/(tabs)/approvals");
+    } else if (item.entity_type === "presence_alert") {
+      if (rank <= 3) router.push({ pathname: "/presence-summary", params: { tab: "alerts" } });
     } else if (item.entity_type === "attendance") {
       router.push("/attendance/history");
     } else if (item.entity_type === "vehicle") {

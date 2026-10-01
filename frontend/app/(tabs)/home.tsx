@@ -10,6 +10,7 @@ import {
   ClipboardList,
   LogIn,
   LogOut,
+  MapPin,
   Megaphone,
   UserPlus,
   Users,
@@ -52,6 +53,8 @@ import { UpdateBanner } from "@/src/components/UpdateBanner";
 import { useCachedFetch } from "@/src/hooks/useCachedFetch";
 import { ConfigHome } from "@/src/home/ConfigHome";
 import { useOutboxStore } from "@/src/offline/outbox";
+import { PresenceChip } from "@/src/presence/PresenceChip";
+import { onPunchOut } from "@/src/presence/tracker";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, radius, shadow, sizes, spacing, type } from "@/src/theme/tokens";
@@ -189,6 +192,7 @@ export default function HomeScreen() {
     setPunchingOut(true);
     try {
       await punchOut();
+      void onPunchOut(); // v1.0.25: stop shift location tracking immediately
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
       await att.refresh();
     } catch (e) {
@@ -228,6 +232,7 @@ export default function HomeScreen() {
               </View>
             ) : null}
           </View>
+          <PresenceChip punchedIn />
           <BigButton
             testID="punch-out-button"
             label={t("home.punchOut")}
@@ -471,6 +476,18 @@ export default function HomeScreen() {
           </View>
         ) : null}
         </>
+        ) : null}
+        {rank <= 3 ? (
+          <View style={styles.grid}>
+            <GridTile
+              testID="home-tile-presence"
+              label={t("home.presenceTile")}
+              icon={MapPin}
+              tint={colors.primary}
+              onPress={() => router.push("/presence-summary")}
+            />
+            <View style={{ flex: 1 }} />
+          </View>
         ) : null}
       </ScrollView>
 

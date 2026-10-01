@@ -69,6 +69,8 @@ export default function EditEmployeeScreen() {
     if (values.role_code !== employee.role_code) body.role_code = values.role_code;
     if (values.is_active !== employee.is_active) body.is_active = values.is_active;
     if (values.shift_code && values.shift_code !== "KEEP") body.shift_code = values.shift_code;
+    if (values.designation.trim() && values.designation.trim() !== (employee.designation ?? ""))
+      body.designation = values.designation.trim();
     if (Object.keys(body).length === 0) {
       router.back();
       return;
@@ -136,6 +138,7 @@ export default function EditEmployeeScreen() {
           phone: employee.phone ?? "+91",
           department_code: employee.department_code,
           role_code: employee.role_code,
+          designation: employee.designation ?? "",
           is_active: employee.is_active,
         }}
         submitLabel={t("emp.save")}

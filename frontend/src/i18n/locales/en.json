@@ -22,7 +22,8 @@
     "close": "Close camera",
     "confirm": "Confirm",
     "home": "Go Home",
-    "location": "Location"
+    "location": "Location",
+    "pressAgainExit": "Press back again to exit"
   },
   "lang": {
     "title": "Choose your language",
@@ -58,7 +59,9 @@
     "pendingBody": "Your manager will approve you soon. You can already report incidents.",
     "pendingIncident": "Report Complaint",
     "checkStatus": "Check status",
-    "waitingApproval": "Pending approval"
+    "waitingApproval": "Pending approval",
+    "privacyPrefix": "By registering you agree to our",
+    "privacyLink": "privacy policy"
   },
   "home": {
     "reportIncident": "Report Complaint",
@@ -77,7 +80,8 @@
     "stripOpen": "{{count}} in progress",
     "stripResolved": "{{count}} resolved this week",
     "announceTile": "Announcement",
-    "employeesTile": "Employees"
+    "employeesTile": "Employees",
+    "presenceTile": "Team presence"
   },
   "cat": {
     "safety": "Safety",
@@ -238,7 +242,9 @@
     "language": "Language",
     "logout": "Log out",
     "memberNote": "Contact Time Office to change details",
-    "sahayak": "SOP assistant — ask anything"
+    "sahayak": "SOP assistant — ask anything",
+    "privacy": "Privacy policy",
+    "deleteAccount": "Delete my account"
   },
   "shift": {
     "title": "My Shift",
@@ -554,6 +560,8 @@
     "makeHod": "Set as department manager (HOD) of {{dept}}",
     "hodSet": "HOD updated: {{name}}",
     "keepShift": "Keep current",
+    "designation": "Designation",
+    "optional": "optional",
     "wiz": {
       "nameTitle": "Full name",
       "idTitle": "Employee ID",
@@ -564,6 +572,7 @@
       "nameHint": "Type the employee's full name as it should appear on records.",
       "idHint": "The next free ID is pre-filled. Change it if needed.",
       "phoneHint": "10-digit mobile number — the employee will log in with it.",
+      "desigHint": "e.g. Fieldman, Slipboy, Overseer",
       "checking": "Checking…",
       "next": "Next",
       "idTaken": "This ID is already taken by {{who}}",
@@ -627,5 +636,53 @@
     "unlink": "Not same — unlink",
     "unlinked": "Unlinked",
     "viewOriginal": "View first report"
+  },
+  "presence": {
+    "consentCta": "Shift location: give consent",
+    "chipOn": "Location ON — shift only",
+    "chipOff": "Tracking stopped — tap to restart",
+    "gpsOff": "GPS is off — tracking paused",
+    "batteryTitle": "Keep tracking running",
+    "batteryLead": "Some phones stop apps to save battery. Follow the steps for your phone so shift tracking keeps working with the screen locked.",
+    "openSettings": "Open app settings",
+    "summaryTitle": "Team Presence",
+    "tabSummary": "Shift summary",
+    "tabAlerts": "Alerts",
+    "coverage": "Coverage",
+    "trackedShort": "tracked",
+    "outside": "Outside",
+    "insideGps": "Inside (GPS)",
+    "noSummary": "No workers for this day",
+    "noAlerts": "No open alerts — all clear",
+    "ack": "Acknowledge",
+    "acked": "Acknowledged",
+    "resolve": "Resolve",
+    "alertOutside": "Outside factory",
+    "alertGoneDark": "Signal lost",
+    "alertLowBattery": "Low battery",
+    "alertUnauthorized": "Unauthorized zone",
+    "notTracked": "Not tracked",
+    "minOutside": "min outside",
+    "minSilent": "min silent",
+    "managersOnly": "Managers only",
+    "disabled": "Live presence is switched off",
+    "today": "Today",
+    "since": "since"
+  },
+  "del": {
+    "title": "Delete my account",
+    "warnTitle": "This will permanently delete your account",
+    "goneHead": "Deleted forever",
+    "goneBody": "Your name, phone number, selfies, face-verification data, notifications and location history.",
+    "keptHead": "Kept by law (without your name)",
+    "keptBody": "Attendance, complaint and audit records stay as \"Deleted user #ID\" — the factory must keep them.",
+    "noUndo": "This cannot be undone. You will be signed out everywhere.",
+    "startBtn": "Delete my account",
+    "confirmModal": "Really delete your account forever?",
+    "otpTitle": "Enter the OTP to confirm",
+    "otpHint": "We sent a 6-digit code to {{phone}}",
+    "otpSent": "OTP sent",
+    "confirmBtn": "Permanently delete",
+    "done": "Account deleted"
   }
 }

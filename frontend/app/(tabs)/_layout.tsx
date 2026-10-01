@@ -1,15 +1,23 @@
-import { Redirect, Tabs } from "expo-router";
+import { Redirect, Tabs, usePathname, useRouter } from "expo-router";
 import { Bell, ClipboardCheck, ClipboardList, Home, UserRound } from "lucide-react-native";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { BackHandler, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { departmentIcon } from "@/src/constants/departments";
+import { showToast } from "@/src/components/Toast";
 import { useApprovalsStore } from "@/src/stores/approvalsStore";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { useAuthStore } from "@/src/stores/authStore";
 import { useNotifStore } from "@/src/stores/notifStore";
 import { colors, fonts, sizes } from "@/src/theme/tokens";
+
+/** Root tab paths — Android hardware back policy:
+ *  sub-screen → pop (never exit; orphan deep-links land on home)
+ *  non-home tab → go to home
+ *  home → "press back again to exit" (2 s window) */
+const ROOT_TAB_PATHS = ["/home", "/department", "/reports", "/approvals", "/alerts", "/profile"];
 
 export default function TabsLayout() {
   const { t } = useTranslation();
@@ -25,6 +33,35 @@ export default function TabsLayout() {
   const isManager = rank <= 3;
   const showAttendance = rank <= 2 || (profile?.department_code === "TIME_OFFICE" && rank === 3);
   const DeptIcon = departmentIcon(profile?.department_code ?? "");
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const pathRef = useRef(pathname);
+  pathRef.current = pathname;
+  const lastBackPress = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      const p = pathRef.current;
+      if (!ROOT_TAB_PATHS.includes(p)) {
+        // a sub-screen is on top of the tabs — pop it; orphan deep-links go home
+        if (router.canGoBack()) return false; // default pop
+        router.replace("/(tabs)/home");
+        return true;
+      }
+      if (p !== "/home") {
+        router.navigate("/(tabs)/home");
+        return true;
+      }
+      const now = Date.now();
+      if (now - lastBackPress.current < 2000) return false; // second press → exit
+      lastBackPress.current = now;
+      showToast(t("common.pressAgainExit"));
+      return true;
+    });
+    return () => sub.remove();
+  }, [router, t]);
 
   useEffect(() => {
     if (isManager) void refreshApprovals(showAttendance);

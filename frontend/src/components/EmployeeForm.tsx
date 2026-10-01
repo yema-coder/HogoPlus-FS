@@ -10,7 +10,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
-import { listDepartments } from "@/src/api/endpoints";
+import { adminDesignations, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { tri } from "@/src/i18n";
@@ -26,6 +26,7 @@ export interface EmployeeFormValues {
   role_code: string;
   shift_code: string;
   emp_id: string;
+  designation: string;
   is_active: boolean;
 }
 
@@ -55,6 +56,7 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
   const shifts = mode === "edit" ? ["KEEP", ...SHIFTS] : SHIFTS;
 
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [desigList, setDesigList] = useState<string[]>([]);
   const [values, setValues] = useState<EmployeeFormValues>({
     full_name: initial.full_name ?? "",
     phone: initial.phone ?? "+91",
@@ -62,6 +64,7 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
     role_code: initial.role_code ?? "Worker",
     shift_code: initial.shift_code ?? (mode === "edit" ? "KEEP" : "GEN"),
     emp_id: initial.emp_id ?? "",
+    designation: initial.designation ?? "",
     is_active: initial.is_active ?? true,
   });
 
@@ -75,12 +78,25 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
 
   useEffect(() => {
     void listDepartments().then(setDepartments).catch(() => undefined);
+    void adminDesignations()
+      .then((r) => setDesigList(r.designations))
+      .catch(() => undefined);
   }, []);
 
   const set = <K extends keyof EmployeeFormValues>(key: K, val: EmployeeFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: val }));
 
   const phoneOk = PHONE_REGEX.test(values.phone.trim());
+  // designation type-ahead: top suggestions, filtered as the user types
+  const desigSuggestions = (
+    values.designation.trim()
+      ? desigList.filter(
+          (d) =>
+            d.toLowerCase().includes(values.designation.trim().toLowerCase()) &&
+            d !== values.designation,
+        )
+      : desigList
+  ).slice(0, 8);
   const canSubmit =
     values.full_name.trim().length >= 2 &&
     phoneOk &&
@@ -173,6 +189,34 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
             </Pressable>
           ))}
         </View>
+
+        <Text style={styles.label}>
+          {t("emp.designation")} ({t("emp.optional")})
+        </Text>
+        <TextInput
+          testID="emp-desig-input"
+          style={styles.input}
+          value={values.designation}
+          onChangeText={(v) => set("designation", v)}
+          placeholder={t("emp.wiz.desigHint")}
+          placeholderTextColor={colors.muted}
+        />
+        {desigSuggestions.length > 0 ? (
+          <View style={styles.chipsWrap}>
+            {desigSuggestions.map((d) => (
+              <Pressable
+                key={d}
+                testID={`emp-desig-${d}`}
+                onPress={() => set("designation", d)}
+                style={[styles.chip, values.designation === d && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, values.designation === d && styles.chipTextActive]}>
+                  {d}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={styles.label}>{t("emp.shift")}</Text>
         <View style={styles.chipsWrap}>

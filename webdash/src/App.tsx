@@ -12,6 +12,11 @@ import Employees from "./screens/Employees";
 import Incidents from "./screens/Incidents";
 import Login from "./screens/Login";
 import Overview from "./screens/Overview";
+import Presence from "./screens/Presence";
+import PresenceAlerts from "./screens/PresenceAlerts";
+import PresenceMuster from "./screens/PresenceMuster";
+import PresenceSummary from "./screens/PresenceSummary";
+import PresenceTrail from "./screens/PresenceTrail";
 import Reports from "./screens/Reports";
 import Vehicles from "./screens/Vehicles";
 import logo from "./logo.png";
@@ -127,6 +132,7 @@ function Layout() {
           </div>
         </div>
         <NavLink to="/" end>⚠️ {t("nav_incidents")}</NavLink>
+        <NavLink to="/presence" data-testid="nav-presence">📍 {t("nav_presence")}</NavLink>
         <NavLink to="/departments">🏭 {t("nav_overview")}</NavLink>
         <NavLink to="/approvals">✅ {t("nav_approvals")}</NavLink>
         <NavLink to="/reports">📊 {t("nav_reports")}</NavLink>
@@ -185,6 +191,11 @@ export default function App() {
             <Route path="/login" element={<LoginGate />} />
             <Route element={<Layout />}>
               <Route path="/" element={<Incidents />} />
+              <Route path="/presence" element={<Presence />} />
+              <Route path="/presence/alerts" element={<PresenceAlerts />} />
+              <Route path="/presence/summary" element={<PresenceSummary />} />
+              <Route path="/presence/muster" element={<PresenceMuster />} />
+              <Route path="/presence/worker/:id" element={<PresenceTrail />} />
               <Route path="/departments" element={<Overview />} />
               <Route path="/dept/:code" element={<Department />} />
               <Route path="/approvals" element={<Approvals />} />

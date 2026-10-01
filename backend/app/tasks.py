@@ -1264,3 +1264,58 @@ async def _vehicle_overstay_sweep_async() -> dict:
         return {"overstay_alerts": alerted}
     finally:
         await engine.dispose()
+
+
+# ---------------- v1.0.25 live presence: 30-day history retention ----------------
+
+async def _presence_purge_async() -> int:
+    from datetime import timedelta
+
+    from sqlalchemy import delete
+
+    from app.database import SessionLocal
+    from app.models import PresenceHistory
+    from app.shift_logic import now_ist
+
+    from app.models import PresenceAlert
+
+    cutoff = now_ist() - timedelta(days=30)
+    async with SessionLocal() as session:
+        result = await session.execute(delete(PresenceHistory).where(PresenceHistory.server_ts < cutoff))
+        # Phase 2: resolved alerts follow the same 30-day retention
+        await session.execute(delete(PresenceAlert).where(
+            PresenceAlert.status == "resolved", PresenceAlert.last_seen_at < cutoff))
+        await session.commit()
+        return result.rowcount or 0
+
+
+# ---------------- v1.0.26 live presence Phase 2: alerts engine ----------------
+
+async def _presence_alerts_sweep_async() -> dict:
+    from app.presence_alerts import run_presence_alert_sweep
+
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    sm = async_sessionmaker(bind=engine, expire_on_commit=False)
+    try:
+        async with sm() as session:
+            counts = await run_presence_alert_sweep(session)
+            await session.commit()
+        return counts
+    finally:
+        await engine.dispose()
+
+
+@celery.task(name="app.tasks.presence_alerts_sweep")
+def presence_alerts_sweep() -> dict:
+    if not _job_lock_sync("presence_alerts_sweep", 50):
+        return {"skipped": "lock"}
+    counts = asyncio.run(_presence_alerts_sweep_async())
+    if counts.get("raised") or counts.get("auto_resolved"):
+        logger.info("Presence alerts sweep: %s", counts)
+    return counts
+
+
+@celery.task(name="app.tasks.presence_history_purge")
+def presence_history_purge() -> int:
+    """DPDP retention: presence trail rows older than 30 days are deleted daily."""
+    return asyncio.run(_presence_purge_async())

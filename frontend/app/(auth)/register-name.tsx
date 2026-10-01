@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Linking,
   StyleSheet,
   Text,
   TextInput,
@@ -9,6 +10,7 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
+import { API_BASE } from "@/src/api/client";
 import { BigButton } from "@/src/components/BigButton";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
@@ -49,6 +51,16 @@ export default function RegisterName() {
             height={64}
             style={{ marginTop: spacing.xl }}
           />
+          <Text style={styles.privacyLine}>
+            {t("reg.privacyPrefix")}{" "}
+            <Text
+              testID="register-privacy-link"
+              style={styles.privacyLink}
+              onPress={() => void Linking.openURL(`${API_BASE}/legal/privacy`)}
+            >
+              {t("reg.privacyLink")}
+            </Text>
+          </Text>
       </KeyboardAwareScrollView>
     </SafeAreaView>
   );
@@ -69,4 +81,12 @@ const styles = StyleSheet.create({
     fontSize: type.lg,
     color: colors.text,
   },
+  privacyLine: {
+    fontFamily: fonts.regular,
+    fontSize: type.sm,
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: spacing.lg,
+  },
+  privacyLink: { fontFamily: fonts.bold, color: colors.accent, textDecorationLine: "underline" },
 });
