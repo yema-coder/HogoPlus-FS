@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { ApiError } from "@/src/api/client";
 import {
+  adminDesignations,
   directAddEmployee,
   empIdSuggest,
   employeeAvailability,
@@ -49,6 +50,8 @@ export default function NewEmployeeWizard() {
   const [empId, setEmpId] = useState("");
   const [dept, setDept] = useState("");
   const [role, setRole] = useState("Worker");
+  const [desig, setDesig] = useState("");
+  const [desigList, setDesigList] = useState<string[]>([]);
   const [phone, setPhone] = useState("");
   const [depts, setDepts] = useState<DepartmentItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -61,11 +64,20 @@ export default function NewEmployeeWizard() {
     void listDepartments()
       .then(setDepts)
       .catch(() => undefined);
+    void adminDesignations()
+      .then((r) => setDesigList(r.designations))
+      .catch(() => undefined);
   }, []);
 
   const rank = profile?.role?.rank ?? 5;
   const roles = rank <= 2 ? ["Worker", "Staff", "Clerk", "Manager", "CGM", "MD"] : ["Worker", "Staff", "Clerk", "Manager"];
   const phoneNorm = normPhone(phone);
+  // designation type-ahead: top suggestions, filtered as the user types
+  const desigSuggestions = (
+    desig.trim()
+      ? desigList.filter((d) => d.toLowerCase().includes(desig.trim().toLowerCase()) && d !== desig)
+      : desigList
+  ).slice(0, 8);
   const stepValid = [
     name.trim().length >= 2,
     EMP_ID_RE.test(empId.trim()),
@@ -120,6 +132,7 @@ export default function NewEmployeeWizard() {
         department_code: dept,
         role_code: role,
         emp_id: empId.trim(),
+        ...(desig.trim() ? { designation: desig.trim() } : {}),
       });
       showToast(t("emp.created"), "success");
       if (router.canGoBack()) router.back();
@@ -152,6 +165,7 @@ export default function NewEmployeeWizard() {
     [t("emp.wiz.idTitle"), empId.trim()],
     [t("emp.dept"), depts.find((d) => d.code === dept) ? tri(depts.find((d) => d.code === dept) as unknown as Record<string, unknown>, "name") : dept],
     [t("emp.role"), role],
+    [t("emp.designation"), desig.trim() || "—"],
     [t("emp.wiz.phoneTitle"), phoneNorm ?? ""],
   ];
 
@@ -236,6 +250,32 @@ export default function NewEmployeeWizard() {
                   </Pressable>
                 ))}
               </View>
+              <Text style={styles.sectionLabel}>
+                {t("emp.designation")}{" "}
+                <Text style={styles.optionalTag}>({t("emp.optional")})</Text>
+              </Text>
+              <TextInput
+                testID="wiz-desig"
+                style={styles.desigInput}
+                value={desig}
+                onChangeText={setDesig}
+                placeholder={t("emp.wiz.desigHint")}
+                placeholderTextColor={colors.muted}
+              />
+              {desigSuggestions.length > 0 ? (
+                <View style={styles.chipWrap}>
+                  {desigSuggestions.map((d) => (
+                    <Pressable
+                      key={d}
+                      testID={`wiz-desig-opt-${d}`}
+                      onPress={() => setDesig(d)}
+                      style={[styles.chip, desig === d && styles.chipActive]}
+                    >
+                      <Text style={[styles.chipText, desig === d && styles.chipTextActive]}>{d}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           )}
           {step === 3 && (
@@ -315,6 +355,18 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   sectionLabel: { fontFamily: fonts.bold, fontSize: type.base, color: colors.text },
+  optionalTag: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
+  desigInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    minHeight: 52,
+    fontFamily: fonts.semiBold,
+    fontSize: type.base,
+    color: colors.text,
+  },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   chip: {
     minHeight: sizes.touchTarget,

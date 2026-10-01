@@ -560,6 +560,8 @@
     "makeHod": "Set as department manager (HOD) of {{dept}}",
     "hodSet": "HOD updated: {{name}}",
     "keepShift": "Keep current",
+    "designation": "Designation",
+    "optional": "optional",
     "wiz": {
       "nameTitle": "Full name",
       "idTitle": "Employee ID",
@@ -570,6 +572,7 @@
       "nameHint": "Type the employee's full name as it should appear on records.",
       "idHint": "The next free ID is pre-filled. Change it if needed.",
       "phoneHint": "10-digit mobile number — the employee will log in with it.",
+      "desigHint": "e.g. Fieldman, Slipboy, Overseer",
       "checking": "Checking…",
       "next": "Next",
       "idTaken": "This ID is already taken by {{who}}",

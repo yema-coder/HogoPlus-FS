@@ -1427,3 +1427,17 @@ snapshot, worker timeline + animated trail replay.
 - Mobile e2e: home tile -> Team Presence summary + alerts tabs — screenshots OK.
 - NOTE: EXPO_PUBLIC_API_URL currently = preview URL (correct for sandbox); flip to
   https://api.hogoplus.in only when shipping the EC2 mobile release (see DEPLOY_ORDER doc).
+
+## 2026-06 fork — Designation picker (Add/Edit employee, mobile + webdash) — COMPLETE
+- Mobile add wizard (app/employees/new.tsx): step 3 "Designation (optional)" text input +
+  type-ahead chips from GET /api/admin/designations; sent in POST /api/admin/employees. (pre-existing, verified)
+- Mobile edit (app/employees/edit.tsx + src/components/EmployeeForm.tsx): designation added to
+  EmployeeFormValues, prefilled from employee.designation, suggestion chips, PATCHed only when
+  changed & non-empty. (NEW this fork)
+- Webdash AddEmployeeWizard.tsx: step 3 designation input (datalist + suggestion chip buttons,
+  filters as you type), review row, included in POST payload; i18n wiz_desig/wiz_optional/
+  wiz_desig_hint (en/hi/mr). Rebuilt to backend/webdash_dist. (NEW this fork)
+- Mobile i18n keys added (en/hi/mr): emp.designation, emp.optional, emp.wiz.desigHint.
+- Verified: webdash wizard step-2 screenshot (typing "Field" filters to "Fieldman"); mobile wizard
+  step-2 screenshot (chips filter); mobile edit screenshot (prefill "Demo Worker — Agriculture");
+  curl POST create w/ designation + PATCH designation round-trip OK.

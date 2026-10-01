@@ -2,7 +2,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -206,6 +206,9 @@ async def patch_employee(
     if body.full_name is not None:
         changes["full_name"] = {"old": emp.full_name, "new": body.full_name}
         emp.full_name = body.full_name
+    if body.designation is not None and body.designation.strip():
+        changes["designation"] = {"old": emp.designation, "new": body.designation.strip()}
+        emp.designation = body.designation.strip()
     if body.role_code is not None:
         role = (await session.execute(select(Role).where(Role.code == body.role_code))).scalar_one_or_none()
         if role is None:
@@ -1069,6 +1072,32 @@ async def employee_availability(
     return out
 
 
+@router.get("/designations")
+async def list_designations(
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Distinct job designations in use (most common first) — feeds the
+    add-employee picker (dropdown + free typing). Placeholders excluded."""
+    await _require_can_add_employees(session, actor)
+    rows = (
+        await session.execute(
+            select(Employee.designation, func.count())
+            .where(
+                Employee.is_demo.is_(actor.is_demo),
+                Employee.is_active.is_(True),
+                Employee.designation.isnot(None),
+                Employee.designation != "",
+                Employee.designation != "Self Registered Worker",
+                Employee.designation.notlike("Duplicate%"),
+            )
+            .group_by(Employee.designation)
+            .order_by(func.count().desc(), Employee.designation)
+        )
+    ).all()
+    return {"designations": [d for d, _ in rows]}
+
+
 @router.post("/employees")
 async def direct_add_employee(
     body: DirectAddEmployeeIn,
@@ -1100,7 +1129,7 @@ async def direct_add_employee(
     emp = Employee(
         emp_id=body.emp_id, full_name=body.full_name, phone=body.phone,
         department_code=body.department_code, role_code=body.role_code,
-        designation=role.label_en, language_pref="mr",
+        designation=(body.designation or "").strip() or role.label_en, language_pref="mr",
         shift_swap_eligible=role.rank >= 4, onboarding_status="approved",
         is_active=True, is_demo=actor.is_demo,
     )

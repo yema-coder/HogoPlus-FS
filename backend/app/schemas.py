@@ -262,6 +262,7 @@ class EmployeePatchIn(BaseModel):
     department_code: str | None = None
     shift_code: str | None = None
     is_active: bool | None = None
+    designation: str | None = Field(default=None, max_length=100)
 
 
 class AssignManagerIn(BaseModel):
@@ -421,6 +422,7 @@ class DirectAddEmployeeIn(BaseModel):
     role_code: str
     shift_code: str | None = None
     emp_id: str = Field(min_length=1, max_length=20)
+    designation: str | None = Field(default=None, max_length=100)
 
 
 class MdLoginIn(BaseModel):

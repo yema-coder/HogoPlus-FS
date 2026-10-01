@@ -371,7 +371,11 @@ export const directAddEmployee = (body: {
   role_code: string;
   shift_code?: string;
   emp_id: string;
+  designation?: string;
 }) => api<EmployeeProfile>("/admin/employees", { method: "POST", body });
+
+export const adminDesignations = () =>
+  api<{ designations: string[] }>("/admin/designations");
 
 export const patchEmployee = (
   id: string,
@@ -382,6 +386,7 @@ export const patchEmployee = (
     department_code: string;
     shift_code: string;
     is_active: boolean;
+    designation: string;
   }>,
 ) => api<EmployeeProfile>(`/admin/employees/${id}`, { method: "PATCH", body });
 

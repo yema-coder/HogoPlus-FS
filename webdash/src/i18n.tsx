@@ -190,6 +190,9 @@ const D: Record<string, [string, string, string]> = {
   wiz_phone_taken: ["This number already belongs to", "यह नंबर पहले से इनका है", "हा नंबर आधीच यांचा आहे"],
   wiz_checking: ["Checking…", "जाँच हो रही है…", "तपासत आहे…"],
   wiz_next: ["Next", "आगे", "पुढे"],
+  wiz_desig: ["Designation", "पद", "हुद्दा"],
+  wiz_optional: ["optional", "वैकल्पिक", "ऐच्छिक"],
+  wiz_desig_hint: ["e.g. Fieldman, Slipboy", "जैसे फील्डमैन, स्लिपबॉय", "उदा. फील्डमन, स्लिपबॉय"],
   accessDenied: ["Access restricted", "पहुँच प्रतिबंधित", "प्रवेश मर्यादित"],
   accessDeniedMsg: [
     "The Command Center is for Managers, CGM and MD only.",
