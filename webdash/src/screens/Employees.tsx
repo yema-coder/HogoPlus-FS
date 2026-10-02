@@ -20,15 +20,16 @@ const normPhone = (raw: string): string | null => {
 
 type Emp = {
   id: string; emp_id: string; full_name: string; phone: string | null;
-  department_code: string | null; role_code: string; is_active: boolean;
-  onboarding_status: string;
+  department_code: string | null; role_code: string; designation: string | null;
+  is_active: boolean; onboarding_status: string;
 };
-type Draft = { full_name: string; phone: string; emp_id: string; department_code: string; role_code: string };
+type Draft = { full_name: string; phone: string; emp_id: string; department_code: string; role_code: string; designation: string };
 type Change = { field: string; old: string; next: string; payloadKey: string; payloadValue: string };
 
 const draftOf = (e: Emp): Draft => ({
   full_name: e.full_name, phone: e.phone ?? "", emp_id: e.emp_id,
   department_code: e.department_code ?? "", role_code: e.role_code,
+  designation: e.designation ?? "",
 });
 
 function StatusChip({ e }: { e: Emp }) {
@@ -47,8 +48,13 @@ function Editor({ emp, depts, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [history, setHistory] = useState<any[] | null>(null);
+  const [desigList, setDesigList] = useState<string[]>([]);
 
   const set = (k: keyof Draft, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+
+  useEffect(() => {
+    api("/admin/designations").then((r) => setDesigList(r.designations)).catch(() => {});
+  }, []);
 
   // ---- validation + diff ----
   const phoneNorm = draft.phone.trim() === "" ? (emp.phone ? null : "") : normPhone(draft.phone);
@@ -71,6 +77,9 @@ function Editor({ emp, depts, onClose, onSaved }: {
       out.push({ field: t("department"), old: emp.department_code ?? "—", next: draft.department_code, payloadKey: "department_code", payloadValue: draft.department_code });
     if (draft.role_code !== emp.role_code)
       out.push({ field: t("emps_role"), old: emp.role_code, next: draft.role_code, payloadKey: "role_code", payloadValue: draft.role_code });
+    const desig = draft.designation.trim();
+    if (desig && desig !== (emp.designation ?? ""))
+      out.push({ field: t("wiz_desig"), old: emp.designation ?? "—", next: desig, payloadKey: "designation", payloadValue: desig });
     return out;
   }, [draft, emp, phoneBad, empIdBad, phoneNorm, t]);
 
@@ -150,6 +159,30 @@ function Editor({ emp, depts, onClose, onSaved }: {
                 </select>
               </div>
             </div>
+
+            <div style={label}>{t("wiz_desig")}</div>
+            <input data-testid="emp-field-desig" style={inputStyle} value={draft.designation} list="emp-desig-options"
+              placeholder={t("wiz_desig_hint")} onChange={(e) => set("designation", e.target.value)} />
+            <datalist id="emp-desig-options">
+              {desigList.map((d) => <option key={d} value={d} />)}
+            </datalist>
+            {desigList.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                {desigList
+                  .filter((d) => !draft.designation.trim() || (d.toLowerCase().includes(draft.designation.trim().toLowerCase()) && d !== draft.designation))
+                  .slice(0, 8)
+                  .map((d) => (
+                    <button key={d} data-testid={`emp-desig-opt-${d}`} type="button" onClick={() => set("designation", d)}
+                      style={{
+                        padding: "6px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer",
+                        border: draft.designation === d ? "2px solid var(--primary)" : "2px solid var(--border)",
+                        background: "var(--surface)",
+                      }}>
+                      {d}
+                    </button>
+                  ))}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
               <button onClick={onClose} style={{ padding: "10px 18px", borderRadius: 10, border: "2px solid var(--border)", background: "var(--surface)" }}>
@@ -314,7 +347,7 @@ export default function Employees() {
               <thead>
                 <tr>
                   <th>{t("empId")}</th><th>{t("name")}</th><th>{t("department")}</th>
-                  <th>{t("emps_role")}</th><th>{t("emps_phone")}</th><th>{t("emps_status")}</th>
+                  <th>{t("wiz_desig")}</th><th>{t("emps_role")}</th><th>{t("emps_phone")}</th><th>{t("emps_status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -329,6 +362,7 @@ export default function Employees() {
                     <td style={{ fontWeight: 700 }}>{e.emp_id}</td>
                     <td>{e.full_name}</td>
                     <td>{e.department_code ?? "—"}</td>
+                    <td>{e.designation ?? "—"}</td>
                     <td>{e.role_code}</td>
                     <td>{e.phone ?? "—"}</td>
                     <td><StatusChip e={e} /></td>

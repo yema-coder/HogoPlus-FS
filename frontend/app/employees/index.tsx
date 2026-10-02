@@ -96,7 +96,8 @@ export default function EmployeesScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowName}>{item.full_name}</Text>
                 <Text style={styles.rowSub}>
-                  {item.emp_id} · {item.role_code} · {item.department_code}
+                  {item.emp_id}
+                  {item.designation ? ` · ${item.designation}` : ""} · {item.department_code}
                 </Text>
               </View>
               <ChevronRight size={20} color={colors.muted} strokeWidth={2.2} />

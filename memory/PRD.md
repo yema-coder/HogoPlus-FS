@@ -1441,3 +1441,15 @@ snapshot, worker timeline + animated trail replay.
 - Verified: webdash wizard step-2 screenshot (typing "Field" filters to "Fieldman"); mobile wizard
   step-2 screenshot (chips filter); mobile edit screenshot (prefill "Demo Worker — Agriculture");
   curl POST create w/ designation + PATCH designation round-trip OK.
+
+## 2026-06 fork — Designation visibility everywhere
+User reported designations (Slipboy/Fieldman/Agriculture Overseer/etc.) were invisible. Data was
+already in DB + backend (employee_profile returns designation; PATCH accepts it; GET /admin/designations
+feeds pickers). Gaps were UI-only, now fixed:
+- Webdash Employees table (`webdash/src/screens/Employees.tsx`): added "Designation" column (reuses i18n `wiz_desig`).
+- Webdash Edit-Employee form: added designation field — type-to-search input + datalist + quick-pick chips
+  from /admin/designations, included in the change-diff/confirm flow.
+- Mobile employee list (`frontend/app/employees/index.tsx`): row subtitle now shows designation.
+- Add-employee wizard + mobile Add/Edit form already had designation (unchanged).
+- Rebuilt webdash (npm run build → backend/webdash_dist). Verified live via MD login.
+- NOTE: sandbox DB restore reverted MD dashboard password → reset to `Hogo@123` again.
