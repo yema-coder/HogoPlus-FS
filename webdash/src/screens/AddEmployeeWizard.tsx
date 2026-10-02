@@ -3,8 +3,21 @@ import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { localName, useI18n } from "../i18n";
 
-const ROLES = ["Worker", "Staff", "Clerk", "Manager", "CGM", "MD"];
 const EMP_ID_RE = /^[A-Za-z0-9]{1,20}$/;
+// Core job titles we always want offered even before the server list loads.
+const CORE_TITLES = [
+  "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
+  "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
+  "Driver", "Manager", "Supervisor",
+];
+// Derive the login/permission role from the chosen job title. Everyone defaults
+// to Worker; only an explicit "Manager"/"Clerk" title lifts the access level.
+const roleFromTitle = (title: string): string => {
+  const d = title.trim().toLowerCase();
+  if (/\bmanager\b/.test(d)) return "Manager";
+  if (/\bclerk\b/.test(d)) return "Clerk";
+  return "Worker";
+};
 const normPhone = (raw: string): string | null => {
   const d = raw.replace(/\D/g, "");
   const ten =
@@ -25,8 +38,8 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
   const [name, setName] = useState("");
   const [empId, setEmpId] = useState("");
   const [dept, setDept] = useState("");
-  const [role, setRole] = useState("Worker");
   const [desig, setDesig] = useState("");
+  const [desigCustom, setDesigCustom] = useState(false);
   const [desigList, setDesigList] = useState<string[]>([]);
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,11 +50,21 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
     api("/admin/designations").then((r) => setDesigList(r.designations)).catch(() => {});
   }, []);
 
+  // Merge server titles with the core list so the dropdown is never empty.
+  const titleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const d of [...desigList, ...CORE_TITLES]) {
+      if (d && !seen.has(d)) { seen.add(d); out.push(d); }
+    }
+    return out;
+  }, [desigList]);
+
   const phoneNorm = useMemo(() => normPhone(phone), [phone]);
   const stepValid = [
     name.trim().length >= 2,
     EMP_ID_RE.test(empId.trim()),
-    dept !== "" && role !== "",
+    dept !== "" && desig.trim() !== "",
     phoneNorm !== null,
     true,
   ][step];
@@ -77,7 +100,7 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
         method: "POST",
         body: JSON.stringify({
           full_name: name.trim(), emp_id: empId.trim(), department_code: dept,
-          role_code: role, phone: phoneNorm,
+          role_code: roleFromTitle(desig), phone: phoneNorm,
           ...(desig.trim() ? { designation: desig.trim() } : {}),
         }),
       });
@@ -135,31 +158,23 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
               {depts.map((d) => <option key={d.code} value={d.code}>{localName(d, lang)}</option>)}
             </select>
             <div style={label}>{t("emps_role")}</div>
-            <select data-testid="wiz-role" style={inputStyle} value={role} onChange={(e) => setRole(e.target.value)}>
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            <select
+              data-testid="wiz-role"
+              style={inputStyle}
+              value={desigCustom ? "__custom__" : desig}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__custom__") { setDesigCustom(true); setDesig(""); }
+                else { setDesigCustom(false); setDesig(v); }
+              }}
+            >
+              <option value="">— {t("emps_role")} —</option>
+              {titleOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+              <option value="__custom__">➕ {t("wiz_desig_other")}</option>
             </select>
-            <div style={label}>{t("wiz_desig")} <span style={{ color: "var(--muted)", fontWeight: 400 }}>({t("wiz_optional")})</span></div>
-            <input data-testid="wiz-desig" style={inputStyle} value={desig} list="desig-options"
-              placeholder={t("wiz_desig_hint")} onChange={(e) => setDesig(e.target.value)} />
-            <datalist id="desig-options">
-              {desigList.map((d) => <option key={d} value={d} />)}
-            </datalist>
-            {desigList.length > 0 && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                {desigList
-                  .filter((d) => !desig.trim() || (d.toLowerCase().includes(desig.trim().toLowerCase()) && d !== desig))
-                  .slice(0, 8)
-                  .map((d) => (
-                    <button key={d} data-testid={`wiz-desig-opt-${d}`} type="button" onClick={() => setDesig(d)}
-                      style={{
-                        padding: "6px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer",
-                        border: desig === d ? "2px solid var(--primary)" : "2px solid var(--border)",
-                        background: "var(--surface)",
-                      }}>
-                      {d}
-                    </button>
-                  ))}
-              </div>
+            {desigCustom && (
+              <input data-testid="wiz-role-custom" style={{ ...inputStyle, marginTop: 8 }} value={desig} autoFocus
+                placeholder={t("wiz_desig_hint")} onChange={(e) => setDesig(e.target.value)} />
             )}
           </>
         )}
@@ -179,8 +194,7 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
               <tr><td style={{ fontWeight: 600 }}>{t("wiz_name")}</td><td>{name.trim()}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("empId")}</td><td>{empId.trim()}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("department")}</td><td>{dept}</td></tr>
-              <tr><td style={{ fontWeight: 600 }}>{t("emps_role")}</td><td>{role}</td></tr>
-              <tr><td style={{ fontWeight: 600 }}>{t("wiz_desig")}</td><td>{desig.trim() || "—"}</td></tr>
+              <tr><td style={{ fontWeight: 600 }}>{t("emps_role")}</td><td>{desig.trim() || "—"}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("wiz_phone")}</td><td>{phoneNorm}</td></tr>
             </tbody>
           </table>

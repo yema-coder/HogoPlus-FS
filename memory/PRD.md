@@ -1453,3 +1453,17 @@ feeds pickers). Gaps were UI-only, now fixed:
 - Add-employee wizard + mobile Add/Edit form already had designation (unchanged).
 - Rebuilt webdash (npm run build → backend/webdash_dist). Verified live via MD login.
 - NOTE: sandbox DB restore reverted MD dashboard password → reset to `Hogo@123` again.
+
+## 2026-06 fork — Job titles merged INTO the "Role" dropdown (user directive)
+Per explicit user decision ("add fieldman/agriculture overseer in the role dropdown; don't add
+designation"), the webdash forms + table now use a SINGLE "Role" field = the job title (stored in
+`designation`). The separate permission dropdown (Worker/Staff/Clerk/Manager/CGM/MD) was removed from
+the dashboard UI; role_code is now derived on ADD via roleFromTitle() (Manager/Clerk/else→Worker) and
+PRESERVED untouched on EDIT so permissions never change by editing a title.
+- AddEmployeeWizard.tsx: "Role" dropdown = CORE_TITLES ∪ /admin/designations list + "➕ Other"; review row shows job title.
+- Employees.tsx Editor: "Role" dropdown = job titles; removed role_code select + the separate Designation field. Save verified (Fieldman↔Agriculture Overseer persists).
+- Employees.tsx table: single "Role" column shows designation (falls back to role_code if null). Removed the extra Designation column.
+- Mobile EmployeeForm still has role chips + designation (left as-is this round).
+- DEPLOY NOTE: webdash served by backend at /api/dash. Emergent Publish ships the current workspace
+  snapshot (not last git commit), so user MUST republish AFTER agent finishes, then hard-refresh. User's
+  mobile .env EXPO_PUBLIC_API_URL=https://api.hogoplus.in is a SEPARATE custom prod backend.
