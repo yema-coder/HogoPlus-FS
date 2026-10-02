@@ -193,6 +193,7 @@ const D: Record<string, [string, string, string]> = {
   wiz_desig: ["Designation", "पद", "हुद्दा"],
   wiz_optional: ["optional", "वैकल्पिक", "ऐच्छिक"],
   wiz_desig_hint: ["e.g. Fieldman, Slipboy", "जैसे फील्डमैन, स्लिपबॉय", "उदा. फील्डमन, स्लिपबॉय"],
+  wiz_desig_other: ["Other (type new)", "अन्य (नया लिखें)", "इतर (नवीन लिहा)"],
   accessDenied: ["Access restricted", "पहुँच प्रतिबंधित", "प्रवेश मर्यादित"],
   accessDeniedMsg: [
     "The Command Center is for Managers, CGM and MD only.",

@@ -5,8 +5,14 @@ import { Chip, Empty, Loading } from "../components";
 import { localName, useI18n } from "../i18n";
 import AddEmployeeWizard from "./AddEmployeeWizard";
 
-const ROLES = ["Worker", "Staff", "Clerk", "Manager", "CGM", "MD"];
 const EMP_ID_RE = /^[A-Za-z0-9]{1,20}$/;
+// Core job titles always offered in the "Role" dropdown, even before the
+// server list loads.
+const CORE_TITLES = [
+  "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
+  "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
+  "Driver", "Manager", "Supervisor",
+];
 
 /** +91XXXXXXXXXX — the exact format the login flow matches on (employee-0061 lesson). */
 const normPhone = (raw: string): string | null => {
@@ -20,15 +26,16 @@ const normPhone = (raw: string): string | null => {
 
 type Emp = {
   id: string; emp_id: string; full_name: string; phone: string | null;
-  department_code: string | null; role_code: string; is_active: boolean;
-  onboarding_status: string;
+  department_code: string | null; role_code: string; designation: string | null;
+  is_active: boolean; onboarding_status: string;
 };
-type Draft = { full_name: string; phone: string; emp_id: string; department_code: string; role_code: string };
+type Draft = { full_name: string; phone: string; emp_id: string; department_code: string; role_code: string; designation: string };
 type Change = { field: string; old: string; next: string; payloadKey: string; payloadValue: string };
 
 const draftOf = (e: Emp): Draft => ({
   full_name: e.full_name, phone: e.phone ?? "", emp_id: e.emp_id,
   department_code: e.department_code ?? "", role_code: e.role_code,
+  designation: e.designation ?? "",
 });
 
 function StatusChip({ e }: { e: Emp }) {
@@ -47,8 +54,24 @@ function Editor({ emp, depts, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [history, setHistory] = useState<any[] | null>(null);
+  const [desigList, setDesigList] = useState<string[]>([]);
+  const [desigCustom, setDesigCustom] = useState(false);
 
   const set = (k: keyof Draft, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+
+  useEffect(() => {
+    api("/admin/designations").then((r) => setDesigList(r.designations)).catch(() => {});
+  }, []);
+
+  // Merge server titles + core list so the "Role" dropdown is never empty.
+  const titleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const d of [...desigList, ...CORE_TITLES]) {
+      if (d && !seen.has(d)) { seen.add(d); out.push(d); }
+    }
+    return out;
+  }, [desigList]);
 
   // ---- validation + diff ----
   const phoneNorm = draft.phone.trim() === "" ? (emp.phone ? null : "") : normPhone(draft.phone);
@@ -69,8 +92,9 @@ function Editor({ emp, depts, onClose, onSaved }: {
       out.push({ field: t("empId"), old: emp.emp_id, next: eid, payloadKey: "emp_id", payloadValue: eid });
     if (draft.department_code && draft.department_code !== (emp.department_code ?? ""))
       out.push({ field: t("department"), old: emp.department_code ?? "—", next: draft.department_code, payloadKey: "department_code", payloadValue: draft.department_code });
-    if (draft.role_code !== emp.role_code)
-      out.push({ field: t("emps_role"), old: emp.role_code, next: draft.role_code, payloadKey: "role_code", payloadValue: draft.role_code });
+    const desig = draft.designation.trim();
+    if (desig && desig !== (emp.designation ?? ""))
+      out.push({ field: t("emps_role"), old: emp.designation ?? "—", next: desig, payloadKey: "designation", payloadValue: desig });
     return out;
   }, [draft, emp, phoneBad, empIdBad, phoneNorm, t]);
 
@@ -142,14 +166,30 @@ function Editor({ emp, depts, onClose, onSaved }: {
                   {depts.map((d) => <option key={d.code} value={d.code}>{localName(d, lang)}</option>)}
                 </select>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={label}>{t("emps_role")}</div>
-                <select data-testid="emp-role-select" style={inputStyle} value={draft.role_code}
-                  onChange={(e) => set("role_code", e.target.value)}>
-                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
             </div>
+
+            <div style={label}>{t("emps_role")}</div>
+            <select
+              data-testid="emp-role-select"
+              style={inputStyle}
+              value={desigCustom ? "__custom__" : draft.designation}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "__custom__") { setDesigCustom(true); set("designation", ""); }
+                else { setDesigCustom(false); set("designation", v); }
+              }}
+            >
+              <option value="">— {t("emps_role")} —</option>
+              {(draft.designation && !titleOptions.includes(draft.designation)) && (
+                <option value={draft.designation}>{draft.designation}</option>
+              )}
+              {titleOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+              <option value="__custom__">➕ {t("wiz_desig_other")}</option>
+            </select>
+            {desigCustom && (
+              <input data-testid="emp-role-custom" style={{ ...inputStyle, marginTop: 8 }} value={draft.designation} autoFocus
+                placeholder={t("wiz_desig_hint")} onChange={(e) => set("designation", e.target.value)} />
+            )}
 
             <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
               <button onClick={onClose} style={{ padding: "10px 18px", borderRadius: 10, border: "2px solid var(--border)", background: "var(--surface)" }}>
@@ -329,7 +369,7 @@ export default function Employees() {
                     <td style={{ fontWeight: 700 }}>{e.emp_id}</td>
                     <td>{e.full_name}</td>
                     <td>{e.department_code ?? "—"}</td>
-                    <td>{e.role_code}</td>
+                    <td>{e.designation ?? e.role_code}</td>
                     <td>{e.phone ?? "—"}</td>
                     <td><StatusChip e={e} /></td>
                   </tr>
