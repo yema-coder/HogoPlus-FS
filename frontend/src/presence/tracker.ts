@@ -4,8 +4,9 @@
  * HARD RULES (owner-mandated):
  *  - Tracking runs ONLY between punch-in and punch-out, auto-stops at
  *    shift end + 30 min grace (server refuses pings outside a shift anyway).
- *  - FOREGROUND service only: no ACCESS_BACKGROUND_LOCATION, no iOS background
- *    modes. On iOS tracking runs while the app is open (honest limitation).
+ *  - FOREGROUND-ONLY (all platforms): no Android foreground service, no
+ *    ACCESS_BACKGROUND_LOCATION, no iOS background modes. Tracking runs only
+ *    while the app is open on screen and resumes on focus (honest limitation).
  *  - BLE zone first, GPS only when no beacon is heard.
  *  - Change-based upload + 5-min heartbeat; offline queue replays idempotently
  *    (client_ping_id dedupe server-side).
@@ -14,7 +15,6 @@
 import * as Battery from "expo-battery";
 import Constants from "expo-constants";
 import * as Location from "expo-location";
-import { Platform } from "react-native";
 
 import { ApiError } from "@/src/api/client";
 import { presenceMyStatus, presencePing } from "@/src/api/endpoints";
@@ -22,7 +22,7 @@ import { getBleScanner } from "@/src/ble/BleScanner";
 import { getRegistryFast } from "@/src/ble/zoneSession";
 import { storage } from "@/src/utils/storage";
 
-export const PRESENCE_TASK = "hogo-presence-track";
+export const PRESENCE_TASK = "hogo-presence-track"; // retained for storage keys / compat
 const Q_KEY = "hogo.presence.queue.v1";
 const ST_KEY = "hogo.presence.state.v1";
 const HEARTBEAT_MS = 290_000; // resend even without change (5 min − jitter)
@@ -162,14 +162,23 @@ export async function presenceCycle(loc: Location.LocationObject | null): Promis
   await flushQueue();
 }
 
-let webTimer: ReturnType<typeof setInterval> | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-async function nativeUpdatesRunning(): Promise<boolean> {
-  try {
-    return await Location.hasStartedLocationUpdatesAsync(PRESENCE_TASK);
-  } catch {
-    return false;
-  }
+/** Foreground poll loop — used on every platform now that the Android
+ * foreground service has been removed. It pauses naturally when the app is
+ * backgrounded (JS timers freeze); resumeIfNeeded restarts it on focus. */
+function startPollTimer(): void {
+  if (pollTimer) clearInterval(pollTimer);
+  const tick = async () => {
+    let loc: Location.LocationObject | null = null;
+    try {
+      loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    } catch {
+      loc = null;
+    }
+    await presenceCycle(loc);
+  };
+  pollTimer = setInterval(() => void tick(), 90_000);
 }
 
 /** Start tracking. Assumes consent already recorded — the server re-checks
@@ -198,37 +207,7 @@ export async function startTracking(): Promise<boolean> {
     lastSentAt: 0,
   });
 
-  if (Platform.OS === "web") {
-    if (webTimer) clearInterval(webTimer);
-    const tick = async () => {
-      let loc: Location.LocationObject | null = null;
-      try {
-        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      } catch {
-        loc = null;
-      }
-      await presenceCycle(loc);
-    };
-    webTimer = setInterval(() => void tick(), 90_000);
-    void tick();
-    return true;
-  }
-
-  if (!(await nativeUpdatesRunning())) {
-    await Location.startLocationUpdatesAsync(PRESENCE_TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 90_000,
-      distanceInterval: 60,
-      pausesUpdatesAutomatically: false,
-      showsBackgroundLocationIndicator: false,
-      foregroundService: {
-        notificationTitle: "HogoPlus — शिफ्ट ट्रॅकिंग चालू",
-        notificationBody: "फक्त तुमच्या शिफ्ट दरम्यान · Only during your shift",
-        notificationColor: "#0B4F6C",
-        killServiceOnDestroy: true,
-      },
-    });
-  }
+  startPollTimer();
   // immediate first ping so the dashboard sees the worker within seconds
   try {
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -246,16 +225,9 @@ export async function stopTracking(
   _reason: "punch_out" | "shift_end" | "server_refused" | "user",
   sendStopped = false,
 ): Promise<void> {
-  if (webTimer) {
-    clearInterval(webTimer);
-    webTimer = null;
-  }
-  if (Platform.OS !== "web" && (await nativeUpdatesRunning())) {
-    try {
-      await Location.stopLocationUpdatesAsync(PRESENCE_TASK);
-    } catch {
-      // already stopped
-    }
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
   await writeState({ ...IDLE });
   if (sendStopped) {
@@ -307,7 +279,7 @@ export async function resumeIfNeeded(): Promise<"active" | "restarted" | "stoppe
       }
       return "idle";
     }
-    if (state.active && Platform.OS !== "web" && (await nativeUpdatesRunning())) return "active";
+    if (state.active && pollTimer) return "active";
     return (await startTracking()) ? "restarted" : "idle";
   } catch {
     return state.active ? "active" : "idle";

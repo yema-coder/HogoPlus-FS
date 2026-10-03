@@ -9,7 +9,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import "@/src/i18n";
-import "@/src/presence/task";
 import { ToastHost } from "@/src/components/Toast";
 import { OfflineStrip } from "@/src/components/OfflineStrip";
 import { UpdateGate } from "@/src/components/UpdateGate";
