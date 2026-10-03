@@ -24,9 +24,11 @@ export default function IdCardScreen() {
   const dept = profile?.department
     ? tri(profile.department as unknown as Record<string, unknown>, "name")
     : (profile?.department_code ?? "—");
-  const role = profile?.role
-    ? tri(profile.role as unknown as Record<string, unknown>, "label")
-    : (profile?.role_code ?? "—");
+  const role = profile?.designation?.trim()
+    ? profile.designation
+    : profile?.role
+      ? tri(profile.role as unknown as Record<string, unknown>, "label")
+      : (profile?.role_code ?? "—");
   const selfie = profile?.selfie_url ?? null;
 
   const share = async () => {

@@ -14,11 +14,24 @@ import { adminDesignations, listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { tri } from "@/src/i18n";
-import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
 const SHIFTS = ["GEN", "A", "B", "C"];
 const PHONE_REGEX = /^\+91[6-9]\d{9}$/;
+// Core job titles always offered in the Role picker, even before the server list loads.
+const CORE_TITLES = [
+  "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
+  "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
+  "Driver", "Manager", "Supervisor",
+];
+// Derive the login/permission role from the chosen job title (only used when
+// CREATING). Everyone defaults to Worker; an explicit Manager/Clerk title lifts it.
+const roleFromTitle = (title: string): string => {
+  const d = title.trim().toLowerCase();
+  if (/\bmanager\b/.test(d)) return "Manager";
+  if (/\bclerk\b/.test(d)) return "Clerk";
+  return "Worker";
+};
 export interface EmployeeFormValues {
   full_name: string;
   phone: string;
@@ -43,15 +56,6 @@ interface Props {
  * (the backend enforces this regardless). */
 export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit }: Props) {
   const { t } = useTranslation();
-  const rank = useAuthStore((s) => s.profile?.role?.rank ?? 6);
-  const isTimeOffice = useAuthStore(
-    (s) => s.profile?.role_code === "Manager" && s.profile?.department_code === "TIME_OFFICE",
-  );
-  // Prompt 21: Time Office may grant the Manager role (installing HODs); CGM/MD roles stay top-only.
-  const roles =
-    rank <= 2 || isTimeOffice
-      ? ["Worker", "Staff", "Clerk", "Manager"]
-      : ["Worker", "Staff", "Clerk"];
   // edit mode defaults to KEEP: never overwrite today's shift unless explicitly changed
   const shifts = mode === "edit" ? ["KEEP", ...SHIFTS] : SHIFTS;
 
@@ -87,15 +91,17 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
     setValues((v) => ({ ...v, [key]: val }));
 
   const phoneOk = PHONE_REGEX.test(values.phone.trim());
-  // designation type-ahead: top suggestions, filtered as the user types
+  // Merge core titles first so Fieldman/Slipboy etc. are always offered.
+  const titleOptions = Array.from(new Set([...CORE_TITLES, ...desigList]));
+  // job-title type-ahead: top suggestions, filtered as the user types
   const desigSuggestions = (
     values.designation.trim()
-      ? desigList.filter(
+      ? titleOptions.filter(
           (d) =>
             d.toLowerCase().includes(values.designation.trim().toLowerCase()) &&
             d !== values.designation,
         )
-      : desigList
+      : titleOptions
   ).slice(0, 8);
   const canSubmit =
     values.full_name.trim().length >= 2 &&
@@ -175,24 +181,6 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
         </View>
 
         <Text style={styles.label}>{t("emp.role")}</Text>
-        <View style={styles.chipsWrap}>
-          {roles.map((r) => (
-            <Pressable
-              key={r}
-              testID={`emp-role-${r}`}
-              onPress={() => set("role_code", r)}
-              style={[styles.chip, values.role_code === r && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, values.role_code === r && styles.chipTextActive]}>
-                {r}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Text style={styles.label}>
-          {t("emp.designation")} ({t("emp.optional")})
-        </Text>
         <TextInput
           testID="emp-desig-input"
           style={styles.input}
@@ -251,7 +239,13 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
           label={submitLabel}
           loading={submitting}
           disabled={!canSubmit}
-          onPress={() => onSubmit({ ...values, phone: values.phone.trim() })}
+          onPress={() =>
+            onSubmit({
+              ...values,
+              role_code: mode === "edit" ? values.role_code : roleFromTitle(values.designation),
+              phone: values.phone.trim(),
+            })
+          }
         />
     </KeyboardAwareScrollView>
   );

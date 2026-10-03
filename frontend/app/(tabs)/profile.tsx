@@ -44,9 +44,11 @@ export default function ProfileScreen() {
     },
     {
       label: t("profile.role"),
-      value: profile?.role
-        ? tri(profile.role as unknown as Record<string, unknown>, "label")
-        : (profile?.role_code ?? "—"),
+      value: profile?.designation?.trim()
+        ? profile.designation
+        : profile?.role
+          ? tri(profile.role as unknown as Record<string, unknown>, "label")
+          : (profile?.role_code ?? "—"),
     },
   ];
 
