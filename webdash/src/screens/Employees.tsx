@@ -67,7 +67,7 @@ function Editor({ emp, depts, onClose, onSaved }: {
   const titleOptions = useMemo(() => {
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const d of [...desigList, ...CORE_TITLES]) {
+    for (const d of [...CORE_TITLES, ...desigList]) {
       if (d && !seen.has(d)) { seen.add(d); out.push(d); }
     }
     return out;
