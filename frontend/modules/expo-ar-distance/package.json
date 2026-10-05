@@ -1,0 +1,9 @@
+{
+  "name": "expo-ar-distance",
+  "version": "1.0.0",
+  "description": "On-device AR object-distance (ARKit + ARCore) for HogoPlus-FS",
+  "main": "index.ts",
+  "author": "HogoPlus-FS",
+  "license": "MIT",
+  "homepage": "https://hogoplus.in"
+}

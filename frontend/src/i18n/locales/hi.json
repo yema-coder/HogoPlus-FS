@@ -114,6 +114,7 @@
     "cameraPermissionBody": "शिकायत के लिए फ़ोटो लें",
     "locationHelps": "लोकेशन से मैनेजर को जगह जल्दी मिलती है",
     "captureHint": "समस्या की फ़ोटो लें",
+    "distanceLabel": "दूरी: {{d}}",
     "voiceNote": "आवाज़ संदेश (वैकल्पिक)",
     "aiCardTitle": "क्या यह सही है?",
     "aiWaiting": "आपकी शिकायत जाँची जा रही है…",
@@ -687,5 +688,22 @@
     "otpSent": "OTP भेजा गया",
     "confirmBtn": "हमेशा के लिए हटाएँ",
     "done": "खाता हट गया"
+  },
+  "ar": {
+    "needsBuild": "दूरी के लिए पूरा ऐप बिल्ड चाहिए",
+    "installArcore": "मापने के लिए Google Play Services for AR इंस्टॉल करें",
+    "notSupported": "इस फ़ोन पर दूरी समर्थित नहीं है",
+    "measuring": "माप रहे हैं…",
+    "tapToMeasure": "मापने के लिए किसी वस्तु पर टैप करें",
+    "torch": "टॉर्च",
+    "hint": {
+      "low_light": "कम रोशनी — टॉर्च चालू",
+      "no_texture": "किसी किनारे या कोने पर निशाना लगाएँ",
+      "hold_steady": "फ़ोन स्थिर रखें",
+      "initializing": "फ़ोन धीरे-धीरे अगल-बगल घुमाएँ",
+      "too_close": "बहुत पास",
+      "too_far": "मापने के लिए बहुत दूर",
+      "tracking_lost": "फ़ोन धीरे-धीरे अगल-बगल घुमाएँ"
+    }
   }
 }
