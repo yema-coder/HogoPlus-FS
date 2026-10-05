@@ -17,22 +17,53 @@
    crashes, never migrates) when the DB is behind. **Production MUST set this flag and apply
    migrations manually.**
 
-## EC2 deploy order  (auto-migrate is OFF in prod → migrations are MANUAL)
+## Rollback point WITHOUT an RDS console snapshot (user's choice)
+The app itself takes a **4-hourly `pg_dump` → gzip → R2** at `backups/YYYY-MM-DD/HHMM.sql.gz`
+(IST), keeps the newest 14, created by the IN-APP APScheduler job `run_backup_sync` (app/tasks.py)
+— there is NO OS cron. The prod image ships `postgresql-client-18`, so it is a real schema+data
+`pg_dump` (not the Python fallback). Restore with `scripts/restore_latest.py`.
+
+**BEFORE migrating, verify the latest dump is real and from RDS (run on the host):**
 ```bash
-# 0. TAKE AN RDS SNAPSHOT FIRST (you already do this).
-git pull                                   # pull main FIRST (standing rule)
-docker compose build api                   # prefetch_models.py runs INSIDE the build (bakes ONNX)
-# 1. Apply schema migrations MANUALLY, with the OLD container still serving:
-docker compose run --rm api alembic current             # see where the DB is
-docker compose run --rm api alembic history | head -30  # review the chain
-docker compose run --rm api alembic upgrade head        # -> 0023 (idempotent)
-# 2. Cut over:
-docker compose up -d api
-docker compose logs --tail=20 api | grep -i "auto-migrate\|revision"
-#   expect: "auto-migrate disabled, current revision = 0023 (code head = 0023)"
+# 1) Confirm the DB the backup dumps is RDS, NOT the legacy Neon (password redacted):
+docker compose run --rm backend sh -lc 'echo "$DATABASE_URL" | sed -E "s#//[^@]*@#//***@#"'
+#    host MUST end in .rds.amazonaws.com  — if it ends in .neon.tech, STOP.
+# 2) List the newest R2 dumps with timestamp + size:
+docker compose run --rm backend python - <<'PY'
+from app.storage import S3Storage
+s=S3Storage(); r=s.client.list_objects_v2(Bucket=s.bucket, Prefix="backups/")
+for o in sorted(r.get("Contents",[]), key=lambda x:x["LastModified"])[-6:]:
+    print(o["LastModified"].isoformat(), f'{o["Size"]/1024:.0f} KB', o["Key"])
+PY
 ```
-If step-1 is skipped and the DB is behind, the app still BOOTS and logs a WARNING; requests that
-touch the new columns/tables fail until you run `alembic upgrade head`. It will NOT auto-migrate.
+PASS if the newest key is dated today (IST, within ~4h) and the size is sensible for a live
+factory DB (expect hundreds of KB to several MB gz — a few-KB file = data missing → STOP).
+To force a fresh one now: `docker compose run --rm backend python -c "from app.tasks import run_backup_sync; print(run_backup_sync())"`.
+If the newest dump is MISSING, OLD, or SUSPICIOUSLY SMALL → STOP and take a console snapshot.
+
+## Pre-build host prep (run on EC2)
+```bash
+sudo sysctl -w vm.swappiness=10 && echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-hogoplus.conf
+#   NOTE: swappiness only matters if a swap device exists; t3.medium has none by default.
+docker builder prune -f                                   # reclaim build cache
+docker tag hogoplus-backend:latest hogoplus-backend:rollback-20261006   # image rollback point
+```
+
+## EC2 deploy order  (service = `backend`; auto-migrate OFF → migrations are MANUAL)
+```bash
+git pull                                      # pull main FIRST (standing rule)
+docker compose build backend                  # prefetch_models.py runs INSIDE the build (bakes ONNX)
+# DB is at 0019 → this applies 0020,0021,0022,0023, with the OLD container still serving:
+docker compose run --rm backend alembic current             # expect 0019
+docker compose run --rm backend alembic upgrade head        # -> 0023 (idempotent)
+docker compose up -d backend
+docker compose logs --tail=20 backend | grep -i "auto-migrate\|revision"
+#   expect: "auto-migrate disabled, current revision = 0023 (code head = 0023)"
+# KEEP PLATES OFF (migration default is ON). Face stays ON for smoke test:
+#   PATCH /api/admin/settings {"plate_detection_enabled": false}  (CGM/MD token)
+```
+If step-1 (upgrade) is skipped and the DB is behind, the app still BOOTS and logs a WARNING;
+requests touching the new columns/tables fail until you upgrade. It will NOT auto-migrate.
 
 ## Alembic migrations (ordered; revision id == filename prefix; head = 0023)
 0001_initial_schema · 0002_fix_shift_timings · 0003_phase4_ai_storage · 0004_ux_pack ·
@@ -52,13 +83,26 @@ touch the new columns/tables fail until you run `alembic upgrade head`. It will 
   was already added for RAG embeddings.
 
 ## Flags / settings (all new feature flags default OFF/FALSE)
-- **Backend:** no new settings flags this round. Face/plate pipelines are gated by the EXISTING DB
-  flags `settings.face_detection_enabled` / `settings.plate_detection_enabled` (default ON).
-- **Env:** **`DISABLE_AUTO_MIGRATE=true`** — NEW; production ALWAYS sets this. Unset/false = legacy
-  auto-migrate behaviour (sandbox only).
-- **Mobile (client-only, no backend flag):** AR Debug HUD + `/ar-calibration` are gated to
-  `__DEV__ || role.rank ≤ 2` (admins/dev). Normal workers never see them. Calibration scale is
-  stored per-device in AsyncStorage (`hogo.ar.calib`), default ×1.000 (no correction).
+- **Backend:** no new settings flag this round. ⚠️ Face/plate are gated by the `settings` table
+  columns `face_detection_enabled` / `plate_detection_enabled`, both **server_default TRUE** (added
+  by migration 0021). So **after you apply 0020-0023, plate detection defaults ON.** Per the owner's
+  instruction plates stay OFF for this deploy and NO code workaround was added — you MUST turn it
+  off at runtime: `PATCH /api/admin/settings {"plate_detection_enabled": false}` (CGM/MD). Face
+  stays ON (smoke test ok). `broadcasts_enabled` already defaults FALSE.
+- **Env:** **`DISABLE_AUTO_MIGRATE=true`** — NEW; production ALWAYS sets this.
+- **Mobile (client-only):** AR Debug HUD + reprojection dot + `/ar-calibration` gated to
+  `__DEV__ || role.rank ≤ 2`.
+
+## docker-compose.yml diff (worker override as a `command:` line — fits 4 GB)
+```diff
+   backend:
+     image: hogoplus-backend:latest
+     env_file: .env
++    # 2 vCPU / 4 GB box: ONE uvicorn worker so only one copy of the ONNX models is
++    # resident (+~160 MB). Mirrors the Dockerfile CMD with --workers 1.
++    command: ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8001",
++              "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+```
 
 ## Exact EC2 env vars (add/confirm)
 ```
