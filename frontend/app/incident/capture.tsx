@@ -99,6 +99,10 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
+  // AR debug HUD/dot: admins/dev AND anyone in the demo bubble (any rank). Real
+  // workers on real accounts never match → they never see it.
+  const isDemo = profile?.is_demo === true;
+  const arDebug = __DEV__ || isDemo || rank <= 2;
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 
@@ -504,7 +508,7 @@ function IncidentCaptureInner() {
             caps={arCaps}
             target={target}
             torchOn={torch}
-            debug={__DEV__ || rank <= 2}
+            debug={arDebug}
             onCalibrate={() => router.push("/ar-calibration")}
             onTapMeasure={(x, y) => {
               setTarget({ x, y });
