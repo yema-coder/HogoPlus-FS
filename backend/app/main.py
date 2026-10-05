@@ -98,6 +98,42 @@ from starlette.middleware.gzip import GZipMiddleware  # noqa: E402
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
+async def _run_db_migrations() -> None:
+    """Apply any pending Alembic migrations so the deployed DB schema always
+    matches the code. Root cause of the production crash
+    `UndefinedColumnError: column departments.beacon_exempt does not exist`:
+    a managed Postgres that never received migrations 0017+ (and 0020 broadcast
+    tables). Runs `alembic upgrade head` in a SUBPROCESS — the async env.py uses
+    asyncio.run(), which cannot be nested inside FastAPI's running event loop.
+    Idempotent (no-op when already at head) and non-fatal (never blocks boot)."""
+    import asyncio as _asyncio
+    import subprocess as _subprocess
+    import sys as _sys
+
+    backend_dir = Path(__file__).resolve().parent.parent
+
+    def _upgrade():
+        proc = _subprocess.run(
+            [_sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=str(backend_dir),
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        return proc.returncode, ((proc.stdout or "") + (proc.stderr or "")).strip()
+
+    try:
+        loop = _asyncio.get_running_loop()
+        code, out = await loop.run_in_executor(None, _upgrade)
+        tail = out.splitlines()[-1] if out else ""
+        if code == 0:
+            logger.info("DB migrations: alembic upgrade head OK — %s", tail or "already at head")
+        else:
+            logger.error("DB migrations FAILED (exit %d):\n%s", code, out[-2000:])
+    except Exception as e:  # noqa: BLE001 — never block boot on migration tooling
+        logger.error("DB migrations could not run: %s", e)
+
+
 @app.on_event("startup")
 async def _startup():
     # Build/config guard: fail fast if any env value still contains an unfilled
@@ -193,6 +229,13 @@ async def _startup():
         from app.redis_client import redis_write_probe
 
         await redis_write_probe()
+    # Apply pending Alembic migrations BEFORE touching the schema so a freshly
+    # provisioned or stale managed DB is brought to head on deploy (prevents the
+    # production UndefinedColumnError seen when the DB lagged behind the code).
+    if not os.environ.get("TESTING") and os.environ.get(
+        "DISABLE_AUTO_MIGRATE", ""
+    ).strip().lower() not in ("1", "true", "yes"):
+        await _run_db_migrations()
     # DB integrity check: pod recycles have wiped PostgreSQL before. Never auto-restore.
     try:
         from sqlalchemy import text as sqltext

@@ -1510,3 +1510,27 @@ locked/background.
   dept ENGINEERING, designation "Evaporator Operator" — NOT CGM. Almost certainly a leftover
   mutation from the previous role/designation QA. Production (Neon) 0001 likely still CGM. If the
   user's phone (pointed at the preview backend) should show CGM, restore 0001 to CGM/ADMIN.
+
+## 2026-10-05 — Production deploy fix: auto-migrate on startup (ROOT CAUSE)
+- DEPLOY FAILURE root cause (from deployment logs): backend crashed at runtime with
+  `UndefinedColumnError: column departments.beacon_exempt does not exist` (and
+  `settings.broadcasts_enabled does not exist`). The deployed managed Postgres was STALE —
+  it never received migrations 0017 (beacon_exempt/geofence_exempt) through 0020 (broadcast
+  tables), while the deployed CODE expects them. The app never ran `alembic upgrade head` on boot.
+- FIX (code-level, backend/app/main.py): added `_run_db_migrations()` — runs `alembic upgrade head`
+  in a SUBPROCESS (the async alembic env.py uses asyncio.run which can't nest in FastAPI's loop)
+  during startup, BEFORE the DB integrity check. Idempotent (no-op at head), non-fatal (logs + boots
+  anyway), guarded by TESTING and an escape hatch DISABLE_AUTO_MIGRATE. On the next redeploy the
+  production DB is auto-brought to head → beacon_exempt + broadcast tables appear, crash resolved.
+  Verified in sandbox: startup log "DB migrations: alembic upgrade head OK"; 24 targeted pytests green.
+- The other deployment_agent "BLOCKERS" are INTENTIONAL architecture, NOT bugs — do NOT change:
+  Postgres+Redis stack (runs on the user's own managed Neon/Upstash via Deployment Secrets; the
+  platform's Atlas Mongo is unused), raw Expo Push (verified working to a real device), lazy local
+  embeddings (memory-optimised), demo_cleanup sweep (only purges is_demo & !is_demo_seed rows),
+  `.env` in .gitignore (secrets come from Deployment Secrets), client.ts pinning release builds to
+  https://api.hogoplus.in (deliberate v1.0.13 field-failure guard — the user's own prod domain),
+  committed eas.json (used by the build pipeline).
+- The EAS Android app-bundle build SUCCEEDED in the shared logs (exit 0, submitted). The
+  `script: line 199: expo: command not found` line is benign (resolved config already written).
+- NOTE: sandbox Postgres/supervisor dropped mid-session again; recovered via
+  `sudo bash /app/scripts/sandbox_recover.sh` (restore from R2 + alembic upgrade head).
