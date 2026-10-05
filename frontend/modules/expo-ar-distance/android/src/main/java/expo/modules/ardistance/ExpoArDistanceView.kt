@@ -199,7 +199,7 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
       frame.acquireDepthImage16Bits().use { img ->
         val w = img.width; val h = img.height
         val plane = img.planes[0]
-        val buf = plane.buffer.order(ByteOrder.nativeEndian())
+        val buf = plane.buffer.order(ByteOrder.nativeOrder())
         val rowStride = plane.rowStride
         val cx = (targetX * w).toInt(); val cy = (targetY * h).toInt()
         val samples = ArrayList<Double>()

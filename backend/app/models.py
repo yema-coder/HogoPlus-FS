@@ -821,6 +821,27 @@ class BroadcastReceipt(Base):
     )
 
 
+class BroadcastTemplate(TimestampMixin, Base):
+    """A reusable trilingual message template for the Broadcast composer. Built-in
+    factory templates are served from code (never stored here); these rows are the
+    custom templates a manager saves. Scoped to the actor's demo bubble."""
+
+    __tablename__ = "broadcast_templates"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    title_en: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    title_hi: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    title_mr: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    body_en: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    body_hi: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    body_mr: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    priority: Mapped[str] = mapped_column(String(12), default="normal", nullable=False)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+
 
 class PhotoAnalysis(Base):
     """One analysed photo (Step 3). Owns the face + plate detections for a single

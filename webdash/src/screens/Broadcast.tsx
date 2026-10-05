@@ -21,7 +21,26 @@ type BroadcastRow = {
   failed_recipients?: { emp_id: string; name: string; department_code: string | null; status: string; error: string | null }[];
 };
 
+type Template = {
+  id: string; is_builtin: boolean; priority: Priority;
+  title_en: string; title_hi: string; title_mr: string;
+  body_en: string; body_hi: string; body_mr: string;
+};
+
+type Receipt = {
+  emp_id: string; name: string; department_code: string | null;
+  status: string; error: string | null; updated_at: string | null;
+};
+
 const PRIO_TONE: Record<Priority, "green" | "amber" | "red"> = { normal: "green", important: "amber", emergency: "red" };
+const PRIO_EMOJI: Record<Priority, string> = { normal: "📢", important: "❗", emergency: "🚨" };
+const STATUS_KEY: Record<string, string> = {
+  opened: "bc_status_opened", delivered: "bc_status_delivered", sent: "bc_status_sent",
+  failed: "bc_status_failed", no_token: "bc_status_no_token", suppressed: "bc_status_suppressed", queued: "bc_status_queued",
+};
+const STATUS_TONE: Record<string, "green" | "amber" | "red"> = {
+  opened: "green", delivered: "green", sent: "amber", suppressed: "amber", queued: "amber", failed: "red", no_token: "red",
+};
 const roleLabel = (r: RoleOpt, lang: string) => (r as any)[`label_${lang}`] || r.label_en;
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
@@ -74,12 +93,14 @@ function Compose({ goHistory }: { goHistory: () => void }) {
   const [err, setErr] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [dupWarn, setDupWarn] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
 
   useEffect(() => {
     api("/broadcasts/meta").then(setMeta).catch(() => {});
     api("/departments").then(setDepts).catch(() => {});
     api("/admin/roles").then((r) => setRoles(r.roles || [])).catch(() => {});
     api("/admin/designations").then((r) => setDesigs(r.designations || [])).catch(() => {});
+    api("/broadcasts/templates").then((r) => setTemplates(r.items || [])).catch(() => {});
   }, []);
 
   // employee search (debounced)
@@ -164,6 +185,35 @@ function Compose({ goHistory }: { goHistory: () => void }) {
     finally { setBusy(false); }
   };
 
+  const applyTemplate = (tpl: Template) => {
+    setTitle({ mr: tpl.title_mr, hi: tpl.title_hi, en: tpl.title_en });
+    setBody({ mr: tpl.body_mr, hi: tpl.body_hi, en: tpl.body_en });
+    setPriority(tpl.priority);
+    setErr(""); setMsg("");
+  };
+
+  const saveTemplate = async () => {
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await api("/broadcasts/templates", { method: "POST", body: JSON.stringify({
+        title_mr: title.mr, title_hi: title.hi, title_en: title.en,
+        body_mr: body.mr, body_hi: body.hi, body_en: body.en, priority,
+      }) });
+      setMsg(t("bc_template_saved"));
+      const r = await api("/broadcasts/templates");
+      setTemplates(r.items || []);
+    } catch (e: any) { handleErr(e); }
+    finally { setBusy(false); }
+  };
+
+  const deleteTemplate = async (id: string) => {
+    if (!window.confirm(t("bc_template_delete_confirm"))) return;
+    try {
+      await api(`/broadcasts/templates/${id}`, { method: "DELETE" });
+      setTemplates((prev) => prev.filter((x) => x.id !== id));
+    } catch { /* best effort */ }
+  };
+
   if (!meta) return <Loading />;
 
   const audBtn = (v: AudType, label: string) => (
@@ -181,6 +231,29 @@ function Compose({ goHistory }: { goHistory: () => void }) {
             ⚠️ {t("bc_disabled")}
           </div>
         )}
+
+        <div className="card" data-testid="bc-templates">
+          <div style={label}>⚡ {t("bc_templates")}</div>
+          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>{t("bc_templates_hint")}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {templates.map((tpl) => {
+              const lbl = (tpl as any)[`title_${lang}`] || tpl.title_mr || tpl.title_en;
+              return (
+                <span key={tpl.id} data-testid={`bc-tpl-${tpl.id}`}
+                  className="btn ghost"
+                  style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+                  onClick={() => applyTemplate(tpl)}>
+                  <span>{PRIO_EMOJI[tpl.priority]} {lbl}</span>
+                  {!tpl.is_builtin && (
+                    <span data-testid={`bc-tpl-del-${tpl.id}`} aria-label="delete template"
+                      onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }}
+                      style={{ color: "var(--danger)", fontWeight: 700, marginLeft: 2 }}>✕</span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        </div>
 
         <div className="card">
           <div style={label}>{t("bc_audience")}</div>
@@ -331,6 +404,7 @@ function Compose({ goHistory }: { goHistory: () => void }) {
 
         <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
           <button className="btn ghost" data-testid="bc-send-test" disabled={busy || !contentReady} onClick={sendTest}>🧪 {t("bc_send_test")}</button>
+          <button className="btn ghost" data-testid="bc-save-template" disabled={busy || !contentReady} onClick={saveTemplate}>💾 {t("bc_save_template")}</button>
           <button className="btn primary" data-testid="bc-review-send" disabled={busy || !canSend} onClick={() => setConfirm(true)}>
             {when === "schedule" ? t("bc_schedule_btn") : t("bc_review_send")}
           </button>
@@ -443,8 +517,24 @@ function DetailModal({ row, onClose, onChanged }: { row: BroadcastRow; onClose: 
   const [full, setFull] = useState<BroadcastRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [showReceipts, setShowReceipts] = useState(false);
+  const [receipts, setReceipts] = useState<Receipt[] | null>(null);
+  const [rFilter, setRFilter] = useState<string>("");
 
   useEffect(() => { api(`/broadcasts/${row.id}`).then(setFull).catch((e) => setErr(e.message)); }, [row.id]);
+
+  const loadReceipts = (status: string) => {
+    setRFilter(status);
+    setReceipts(null);
+    const qs = status ? `?status=${status}` : "";
+    api(`/broadcasts/${row.id}/receipts${qs}`).then((d) => setReceipts(d.items || [])).catch(() => setReceipts([]));
+  };
+
+  const toggleReceipts = () => {
+    const next = !showReceipts;
+    setShowReceipts(next);
+    if (next && receipts === null) loadReceipts("");
+  };
 
   const resend = async (failedOnly: boolean) => {
     setBusy(true); setErr("");
@@ -488,6 +578,46 @@ function DetailModal({ row, onClose, onChanged }: { row: BroadcastRow; onClose: 
                 {f.name} <span style={{ color: "var(--muted)" }}>#{f.emp_id} · {f.status}{f.error ? ` · ${f.error}` : ""}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 12 }}>
+          <button className="btn ghost" data-testid="bc-view-receipts" onClick={toggleReceipts}>
+            📋 {showReceipts ? t("bc_hide_receipts") : t("bc_view_receipts")}
+          </button>
+        </div>
+        {showReceipts && (
+          <div className="card" data-testid="bc-receipts-panel" style={{ marginTop: 10 }}>
+            <b>{t("bc_receipts")}</b>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" }}>
+              {([
+                ["", t("bc_receipts_all"), r.recipient_count],
+                ["delivered", t("bc_status_delivered"), r.delivered_count],
+                ["opened", t("bc_status_opened"), r.opened_count],
+                ["sent", t("bc_status_sent"), r.sent_count],
+                ["failed", t("bc_status_failed"), r.failed_count],
+                ["no_token", t("bc_status_no_token"), r.no_token_count],
+                ["suppressed", t("bc_status_suppressed"), r.suppressed_count],
+              ] as [string, string, number][]).map(([st, lbl, n]) => (
+                <button key={st || "all"} data-testid={`bc-rfilter-${st || "all"}`}
+                  className={`btn ${rFilter === st ? "primary" : "ghost"}`} style={{ fontSize: 12 }}
+                  onClick={() => loadReceipts(st)}>
+                  {lbl} ({n})
+                </button>
+              ))}
+            </div>
+            {receipts === null ? <Loading /> : receipts.length === 0 ? (
+              <div style={{ color: "var(--muted)", fontSize: 13, padding: "6px 0" }}>{t("bc_no_receipts")}</div>
+            ) : (
+              <div data-testid="bc-receipts-list" style={{ maxHeight: 260, overflowY: "auto" }}>
+                {receipts.map((rc) => (
+                  <div key={rc.emp_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, fontSize: 13, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                    <span>{rc.name} <span style={{ color: "var(--muted)" }}>#{rc.emp_id} · {rc.department_code || "—"}</span></span>
+                    <Chip tone={STATUS_TONE[rc.status] || "amber"}>{t(STATUS_KEY[rc.status] || "bc_status_queued")}</Chip>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {err && <div style={{ color: "var(--danger)", fontWeight: 600, marginTop: 8 }}>{err}</div>}
