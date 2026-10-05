@@ -1914,3 +1914,34 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
   (0001/8483029039) via scripts/seed_ar_debug_allowlist.py (manual, idempotent). Matcher unit-
   tested (5 cases pass); /me + verify-otp return ar_debug; tsc+lint clean. Kept the earlier
   is_demo /me field + CGM/MD /incident/capture home tile. DEPLOY_ORDER_v1.0.26.md updated.
+
+
+### Gallery test upload for AR-debug allowlist (fork round, 2026-06)
+- Purpose: let the allowlisted tester (0001 / +918483029039) run hundreds of self-shot
+  vehicle/person photos through the face+plate pipeline to measure REAL accuracy before the
+  factory gate relies on it. Separate from the deferred screen-detection work.
+- Migration 0025 adds incidents.source (String(10), NOT NULL, server_default 'field'). Values:
+  'field' = normal camera/video capture; 'gallery' = photo-library test upload.
+- Schema IncidentCreateIn.source ('field'|'gallery', validator). create_incident: source=='gallery'
+  is gated SERVER-SIDE by security.ar_debug_allowlisted(employee, settings.ar_debug_emp_ids) → 403
+  for any non-allowlisted account (defence in depth; UI button is also allowlist-gated). _out()
+  returns source.
+- Full analysis FORCED for gallery: run_incident_ai_background(id, with_plate, force=True) →
+  _analyze_photos_async(force=True) overrides the global face/plate switches (which stay OFF for
+  real captures this batch) so faces+plates actually run. ANPR fallback + classification unchanged.
+- Per user (Q2): gallery captures are treated like NORMAL complaints operationally — routed +
+  manager notified + visible in feeds/detail/plate-search (tagged source). BUT excluded from
+  STATISTICS: dashboard.factory_pulse open/crit counts, _pending_counts + overview p_inc_q,
+  overview inc_q (KPIs/tiles), approvals_aging incident query, and home.py open_incidents all add
+  `Incident.source != "gallery"`. Feed/detail/plate_search output carry source for tagging.
+- Mobile app/incident/capture.tsx: "Choose from gallery (test)" pill on the camera screen, shown
+  ONLY when arDebug (same gate). expo-image-picker@17 (added to app.json plugins w/ photosPermission).
+  Gallery path: original pixels (NO watermark burn-in), NO device GPS/zone (gps null), NO AR
+  distance, source='gallery'; still flows through the outbox + preview + submit. Retake clears
+  fromGallery. Preview shows a "Gallery test upload · not counted in statistics" note.
+- Webdash Incidents.tsx: amber "🧪 Test upload" chip (i18n gallery_test) on feed rows + detail
+  modal when source=='gallery'.
+- Verified (no SMS, direct JWT vs localhost): allowlisted gallery→200 source=gallery+null gps+routed;
+  non-allowlisted gallery→403; non-allowlisted field→200 source=field; invalid source→422; SECURITY
+  open-incident KPI increments only for the field one (gallery excluded); feed shows gallery tagged.
+  Lint + web bundle clean. Native picker + capture flow require the APK build (like AR) to QA on device.

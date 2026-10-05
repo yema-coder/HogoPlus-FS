@@ -148,6 +148,7 @@ function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
 
         <h2 style={{ marginTop: 10 }}>{item.category} · {item.department_code}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
+          {item.source === "gallery" ? <Chip tone="amber">🧪 {t("gallery_test")}</Chip> : null}
           <Chip tone={item.severity === "critical" ? "red" : item.severity === "high" ? "amber" : undefined}>{item.severity}</Chip>
           <Chip tone="blue">{item.status}</Chip>
           <AgeChip hours={item.age_hours} />
@@ -287,6 +288,7 @@ export default function Incidents() {
                   : i.address_text ? <div className="m">📍 {i.address_text}</div> : null}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                {i.source === "gallery" ? <Chip tone="amber">🧪 {t("gallery_test")}</Chip> : null}
                 <Chip tone={i.severity === "critical" ? "red" : i.severity === "high" ? "amber" : undefined}>{i.severity}</Chip>
                 <AgeChip hours={i.age_hours} />
               </div>

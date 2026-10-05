@@ -308,6 +308,10 @@ class Incident(TimestampMixin, Base):
     )
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # capture source: 'field' = normal in-app camera/video; 'gallery' = test upload
+    # picked from the photo library by an AR-debug allowlisted account. Gallery rows
+    # route/analyse like normal complaints but are excluded from factory statistics.
+    source: Mapped[str] = mapped_column(String(10), default="field", server_default="field", nullable=False)
 
 
 class IncidentTimeline(Base):

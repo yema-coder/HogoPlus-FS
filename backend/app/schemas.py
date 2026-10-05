@@ -156,6 +156,8 @@ class IncidentCreateIn(BaseModel):
     description: str | None = None
     voice_note_key: str | None = None
     severity: str = "normal"
+    # capture source: 'field' (normal camera) or 'gallery' (allowlisted test upload).
+    source: str = "field"
     # AR object distance measured on-device at capture (Step 3; may be null).
     distance_m: float | None = Field(default=None, ge=0, le=100)
     distance_method: str | None = None
@@ -186,6 +188,13 @@ class IncidentCreateIn(BaseModel):
     def _sev(cls, v):
         if v not in ("normal", "high", "critical"):
             raise ValueError("severity must be normal/high/critical")
+        return v
+
+    @field_validator("source")
+    @classmethod
+    def _source(cls, v):
+        if v not in ("field", "gallery"):
+            raise ValueError("source must be field/gallery")
         return v
 
 

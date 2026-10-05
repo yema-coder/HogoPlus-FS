@@ -151,6 +151,7 @@ export interface Incident {
   distance_method: "lidar" | "depth" | "ar_plane" | "ar_point" | "feature" | "none" | null;
   distance_confidence: "high" | "medium" | "low" | null;
   distance_uncertainty_m: number | null;
+  source: "field" | "gallery";
   created_at: string | null;
 }
 
