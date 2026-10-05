@@ -160,6 +160,57 @@ export interface IncidentDetail extends Incident {
   timeline: TimelineEntry[];
 }
 
+export interface DetectedFace {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  score: number | null;
+}
+
+export interface DetectedPlate {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string | null;
+  det_confidence: number | null;
+  ocr_confidence: number | null;
+  region: string | null;
+  source: string;
+  edited: boolean;
+}
+
+export interface AnalyzedPhotoItem {
+  id: string;
+  photo_key: string;
+  photo_url: string | null;
+  slot: string;
+  status: "pending" | "done" | "failed" | "skipped";
+  face_count: number;
+  plate_count: number;
+  faces: DetectedFace[];
+  plates: DetectedPlate[];
+}
+
+export interface IncidentAnalysis {
+  incident_id: string;
+  distance: {
+    distance_m: number | null;
+    distance_method: string | null;
+    distance_confidence: string | null;
+    distance_uncertainty_m: number | null;
+  };
+  detected_plate: string | null;
+  plate_status: string | null;
+  face_count: number;
+  plate_count: number;
+  pending: boolean;
+  photos: AnalyzedPhotoItem[];
+}
+
 export type VerificationLevel = "verified_plus" | "verified" | "flagged";
 
 export interface AttendanceRecord {

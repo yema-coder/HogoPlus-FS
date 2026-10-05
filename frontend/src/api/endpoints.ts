@@ -8,6 +8,8 @@ import type {
   FlaggedAttendance,
   FormDefinitionItem,
   GaugeResult,
+  IncidentAnalysis,
+  DetectedPlate,
   OnboardingHistoryRow,
   PendingRegistration,
   Incident,
@@ -93,6 +95,15 @@ export const confirmIncidentRouting = (
   id: string,
   body: { category?: string; department_code?: string; severity?: string } = {},
 ) => api<Incident>(`/incidents/${id}/confirm-routing`, { method: "POST", body });
+
+export const incidentAnalysis = (id: string) =>
+  api<IncidentAnalysis>(`/incidents/${id}/analysis`);
+
+export const editIncidentPlate = (id: string, plateId: string, text: string) =>
+  api<DetectedPlate>(`/incidents/${id}/plates/${plateId}`, {
+    method: "PATCH",
+    body: { text },
+  });
 
 export const punchIn = (body: Record<string, unknown>) =>
   api<AttendanceRecord>("/attendance/punch-in", { method: "POST", body });

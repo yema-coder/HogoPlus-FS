@@ -4,6 +4,7 @@ import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Ruler, Smart
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -15,8 +16,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
 import { ApiError, fileUrl, uploadFile } from "@/src/api/client";
-import { changeIncidentStatus, incidentDetail, unlinkDuplicate } from "@/src/api/endpoints";
-import type { IncidentDetail, TimelineEntry } from "@/src/api/types";
+import {
+  changeIncidentStatus,
+  editIncidentPlate,
+  incidentAnalysis,
+  incidentDetail,
+  unlinkDuplicate,
+} from "@/src/api/endpoints";
+import type { DetectedPlate, IncidentAnalysis, IncidentDetail, TimelineEntry } from "@/src/api/types";
+import { AnalyzedPhoto } from "@/src/components/AnalyzedPhoto";
 import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
@@ -45,6 +53,10 @@ export default function IncidentDetailScreen() {
   const adjustApprovals = useApprovalsStore((s) => s.adjust);
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
+  const [analysis, setAnalysis] = useState<IncidentAnalysis | null>(null);
+  const [editingPlate, setEditingPlate] = useState<DetectedPlate | null>(null);
+  const [plateInput, setPlateInput] = useState("");
+  const [savingPlate, setSavingPlate] = useState(false);
   const [failed, setFailed] = useState(false);
   const [acting, setActing] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -63,9 +75,30 @@ export default function IncidentDetailScreen() {
     }
   }, [id]);
 
+  const loadAnalysis = useCallback(async () => {
+    if (!id) return;
+    try {
+      setAnalysis(await incidentAnalysis(id));
+    } catch {
+      // analysis is best-effort — never block the detail screen
+    }
+  }, [id]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadAnalysis();
+  }, [load, loadAnalysis]);
+
+  // faces + plates land async after capture — re-poll lightly while pending
+  const analysisPolls = useRef(0);
+  useEffect(() => {
+    if (!analysis || !analysis.pending || analysisPolls.current >= 6) return;
+    const timer = setTimeout(() => {
+      analysisPolls.current += 1;
+      void loadAnalysis();
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [analysis, loadAnalysis]);
 
   // AI severity + ANPR land async — re-poll lightly (max 5x) while either is pending
   const pollCount = useRef(0);
@@ -148,6 +181,34 @@ export default function IncidentDetailScreen() {
   const plateDetected =
     detail?.detected_plate && (detail.plate_status === "detected" || !detail.plate_status);
 
+  const canEditPlate = rank <= 3;
+  const primaryPhoto = analysis?.photos.find((p) => p.photo_key === detail?.photo_key) ?? null;
+
+  const openPlateEditor = (p: DetectedPlate) => {
+    setEditingPlate(p);
+    setPlateInput(p.text ?? "");
+  };
+  const savePlate = async () => {
+    if (!id || !editingPlate || savingPlate) return;
+    const text = plateInput.trim().toUpperCase();
+    if (!text) {
+      showToast(t("incident.plateRequired"), "error");
+      return;
+    }
+    setSavingPlate(true);
+    try {
+      await editIncidentPlate(id, editingPlate.id, text);
+      setEditingPlate(null);
+      await Promise.all([load(), loadAnalysis()]);
+      showToast(t("incident.plateUpdated"), "success");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) showToast(t("errors.generic"), "error");
+      else showToast(t("errors.server"), "error");
+    } finally {
+      setSavingPlate(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]} testID="incident-detail-screen">
       <ScreenHeader title={def ? t(def.tKey) : t("reports.title")} />
@@ -163,12 +224,25 @@ export default function IncidentDetailScreen() {
           keyboardShouldPersistTaps="handled"
           bottomOffset={24}
         >
-          {detail.video_key || detail.photo_key ? (
+          {detail.video_key ? (
             <View testID="incident-media-card">
               <MediaCard
-                uri={fileUrl((detail.video_key ?? detail.photo_key) as string)}
-                kind={detail.video_key ? "video" : "photo"}
+                uri={fileUrl(detail.video_key)}
+                kind="video"
                 height={220}
+                testID="incident-media"
+              />
+              <View style={styles.mediaBadge}>
+                <StatusChip status={detail.status} />
+              </View>
+            </View>
+          ) : detail.photo_key ? (
+            <View testID="incident-media-card">
+              <AnalyzedPhoto
+                photoUrl={fileUrl(detail.photo_key)}
+                faces={primaryPhoto?.faces ?? []}
+                plates={primaryPhoto?.plates ?? []}
+                onPlatePress={canEditPlate ? openPlateEditor : undefined}
                 testID="incident-media"
               />
               <View style={styles.mediaBadge}>
@@ -517,6 +591,47 @@ export default function IncidentDetailScreen() {
           }}
         />
       ) : null}
+
+      <Modal
+        visible={!!editingPlate}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingPlate(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditingPlate(null)}>
+          <Pressable style={styles.modalCard} onPress={() => undefined} testID="plate-edit-modal">
+            <Text style={styles.modalTitle}>{t("incident.editPlateTitle")}</Text>
+            <TextInput
+              testID="plate-edit-input"
+              value={plateInput}
+              onChangeText={(v) => setPlateInput(v.toUpperCase())}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={20}
+              placeholder="MH12AB1234"
+              placeholderTextColor={colors.muted}
+              style={styles.modalInput}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnGhost]}
+                onPress={() => setEditingPlate(null)}
+                testID="plate-edit-cancel"
+              >
+                <Text style={styles.modalBtnGhostText}>{t("common.cancel")}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnPrimary, savingPlate && { opacity: 0.6 }]}
+                onPress={() => void savePlate()}
+                disabled={savingPlate}
+                testID="plate-edit-save"
+              >
+                <Text style={styles.modalBtnPrimaryText}>{t("common.save")}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -655,4 +770,44 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlignVertical: "top",
   },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: { fontFamily: fonts.bold, fontSize: type.lg, color: colors.text },
+  modalInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontFamily: fonts.bold,
+    fontSize: type.lg,
+    letterSpacing: 2,
+    color: colors.text,
+  },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: spacing.md },
+  modalBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.pill,
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnGhost: { borderWidth: 1.5, borderColor: colors.border },
+  modalBtnGhostText: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.muted },
+  modalBtnPrimary: { backgroundColor: colors.primary },
+  modalBtnPrimaryText: { fontFamily: fonts.bold, fontSize: type.base, color: "#FFFFFF" },
 });

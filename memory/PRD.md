@@ -1618,3 +1618,28 @@ Delivers the user's "backend face-detector + number-plate reader" + "Save Distan
   CGM plate edit → MH14GH7777 source=manual; worker 403). App boots + detail screen renders clean.
 - NOT TESTABLE without a native build: on-device AR distance capture (Step 2). Faces/plates display UI = Step 4.
 
+
+## Camera AI — STEP 4: faces/plates overlay on report + edit-plate + blur-faces share (2026-10-05) ✅ code complete, pending user review
+- NEW `frontend/src/components/AnalyzedPhoto.tsx`: renders the incident's primary photo with
+  overlay boxes computed from the Step-3 analysis (boxes are FRACTIONS → mapped via onLayout width
+  + image aspect from Image.onLoad, resizeMode cover → exact mapping). Plate boxes (accent) are
+  TAPPABLE with a text tag (→ edit); face boxes (amber outline). "Blur faces" toggle swaps face
+  outlines for opaque frosted privacy masks on-screen. "Share" exports via react-native-view-shot
+  (off-screen capture surface, faces ALWAYS redacted with opaque patches regardless of the toggle)
+  + expo-sharing (native only; web → "sharing unavailable" toast). Tap image → MediaViewerModal.
+- `app/incident/[id].tsx`: fetches GET /incidents/{id}/analysis (loadAnalysis, re-polls ≤6×8s while
+  pending); photo incidents now render AnalyzedPhoto (video keeps MediaCard); plate boxes wired to a
+  centred edit Modal (TextInput, auto-upper, Cancel/Save) → PATCH /incidents/{id}/plates/{plate_id}
+  (managers rank≤3 only — onPlatePress passed only when canEditPlate) → toast + reloads detail+analysis.
+  Distance row already added in Step 3 (shows "Distance: 4.2 m ±0.4").
+- api: endpoints.incidentAnalysis + editIncidentPlate; types IncidentAnalysis/AnalyzedPhotoItem/
+  DetectedFace/DetectedPlate. i18n +10 keys ×3 (common.save, incident.blurFaces/facesBlurred/
+  facesHiddenShare/share/shareUnavailable/tapPlateToEdit/editPlateTitle/plateRequired/plateUpdated);
+  parity GREEN (621 each).
+- LIVE VERIFIED (preview, demo CGM D500 viewing a demo-worker incident with a face+plate photo):
+  face box + plate tag "MH12AB1234" render; blur toggle masks the face; tapping the plate opens the
+  edit modal; saving "MH20CD4455" → PATCH 200 → "Number plate updated" toast + plate tag + detected-
+  plate card both update; distance row shows 4.2 m ±0.4. Lint clean. (Share = native-only; web toasts.)
+- SCOPE NOTE: overlay boxes shown on the PRIMARY photo only (resolution photo still plain). Existing
+  seeded demo incidents have no analysis rows (created before Step 3) → boxes only appear on NEW captures.
+
