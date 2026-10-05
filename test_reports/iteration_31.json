@@ -1,0 +1,23 @@
+{
+  "summary": "FRONTEND ONLY. Tested the revamped Incident Detail screen (/incident/ccb08a39-6c35-480b-8e48-81f693c84ccc) as Demo CGM D500 (+919000000500 / OTP 123456 via native-setter injection). All critical acceptance criteria PASSED: (1) Clean MediaCard photo at top (testID incident-media) with no overlays, (2) 'Tap the photo to see detections' hint shown (incident-detect-hint), (3) 2-column MetaGrid with meta-status (Escalated StatusChip), meta-severity (Normal SeverityChip, testID incident-severity-chip), meta-captured. meta-distance correctly ABSENT because this incident has no distance_m (component is conditional — matches spec), (4) People detected (2) section with horizontal face-strip and 2 clear (unblurred) face crops (face-crop-<id> x2), (5) Number plates (1) section with plate row showing MH12AB1234 and 91% confidence (CORRECT — not the 1% regression; ocr_confidence 0.91 fraction × 100 rounded), (6) Tapping incident-media opens analyzed-photo-viewer with 2 face boxes (#1 #2) + 1 plate tag (MH12AB1234) overlaid on the image; analyzed-viewer-close dismisses, (7) Tapping a face crop also opens the same analyzed viewer, (8) As CGM (rank<=3) tapping plate-row opens plate-edit-modal; editing to MH12XY9999 + plate-edit-save persists and shows 'Edited' badge; reverted to MH12AB1234 cleanly. Trilingual verified: switched to Marathi (mr) and Hindi (hi) via Profile; all new section titles/labels translated correctly (People detected → आढळलेली माणसे / पहचाने गए लोग; Number plates → नंबर प्लेट; hints and edit instructions translated); NO raw i18n key leaks (incident.peopleDetected / incident.numberPlates / incident.tapPhotoDetections / incident.tapPlateToEdit all resolved in all 3 languages). Existing functionality intact: object-location + device-location blocks, AI severity reason card, timeline, manager action buttons rendered. Note: the seeded demo photo renders as a dark purple block in the headless browser (Devanagari watermark falls back to tofu), as documented in the request — cosmetic, image loads correctly and boxes line up on it.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: faces/plates sections rely on analysis fetch which can take ~5-10s on first load; the detail screen already lacks these sections on first paint for ~5s. UX is acceptable because the detect-hint only appears once analysis loads. No action needed.",
+    "Minor: console warning 'shadow* style props are deprecated. Use boxShadow' observed on web (RN-Web deprecation). Not blocking but worth cleaning across themed shadow usages later."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "None — used existing demo incident ccb08a39-6c35-480b-8e48-81f693c84ccc. Plate was briefly edited to MH12XY9999 and REVERTED back to MH12AB1234 during the test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login flow for sandbox mobile web preview: pick English language on first screen, enter 9000000500 in [data-testid=phone-input], tap send-otp-button, then inject OTP via native value setter on [data-testid=otp-input] (fill/type don't work; 6 digits auto-verify). Incident analysis endpoint takes ~5-8s to resolve after detail load — wait for [data-testid=face-strip] (up to 25s). AnalyzedPhotoViewer modal (testID analyzed-photo-viewer) is opened by tapping incident-media OR any face-crop-<id>. Plate editing is gated on rank<=3 (CGM/MD/Manager). Trilingual Profile language switcher labels: मराठी / हिंदी / English.",
+  "rca_of_issue": "N/A — no bugs found. All 8 acceptance items from the review request pass end-to-end on the sandbox preview."
+}

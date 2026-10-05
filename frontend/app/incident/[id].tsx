@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Ruler, Smartphone } from "lucide-react-native";
+import { Camera as CameraIcon, Car, CircleDot, Copy, MapPin, Ruler, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
@@ -24,13 +24,16 @@ import {
   unlinkDuplicate,
 } from "@/src/api/endpoints";
 import type { DetectedPlate, IncidentAnalysis, IncidentDetail, TimelineEntry } from "@/src/api/types";
-import { AnalyzedPhoto } from "@/src/components/AnalyzedPhoto";
+import { AnalyzedPhotoViewer } from "@/src/components/AnalyzedPhotoViewer";
 import { AudioPlayerCard } from "@/src/components/AudioPlayerCard";
 import { BigButton } from "@/src/components/BigButton";
 import { ErrorRetry } from "@/src/components/ErrorRetry";
 import { EscalateModal } from "@/src/components/EscalateModal";
 import { EyeLoader } from "@/src/components/EyeLoader";
+import { FaceStrip } from "@/src/components/FaceStrip";
 import { MediaCard } from "@/src/components/MediaCard";
+import { MetaGrid, type MetaItem } from "@/src/components/MetaGrid";
+import { PlateSection } from "@/src/components/PlateSection";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { SeverityChip } from "@/src/components/SeverityChip";
@@ -64,6 +67,7 @@ export default function IncidentDetailScreen() {
   const [resolutionUri, setResolutionUri] = useState<string | null>(null);
   const [photoModal, setPhotoModal] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
+  const [boxViewerOpen, setBoxViewerOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -183,6 +187,15 @@ export default function IncidentDetailScreen() {
 
   const canEditPlate = rank <= 3;
   const primaryPhoto = analysis?.photos.find((p) => p.photo_key === detail?.photo_key) ?? null;
+  const faces = primaryPhoto?.faces ?? [];
+  const plates = primaryPhoto?.plates ?? [];
+  const distanceText =
+    detail?.distance_m != null && detail.distance_method && detail.distance_method !== "none"
+      ? `${detail.distance_m.toFixed(1)} m` +
+        (detail.distance_uncertainty_m != null && detail.distance_uncertainty_m >= 0.1
+          ? ` ±${detail.distance_uncertainty_m.toFixed(1)}`
+          : "")
+      : null;
 
   const openPlateEditor = (p: DetectedPlate) => {
     setEditingPlate(p);
@@ -226,30 +239,25 @@ export default function IncidentDetailScreen() {
         >
           {detail.video_key ? (
             <View testID="incident-media-card">
-              <MediaCard
-                uri={fileUrl(detail.video_key)}
-                kind="video"
-                height={220}
-                testID="incident-media"
-              />
-              <View style={styles.mediaBadge}>
-                <StatusChip status={detail.status} />
-              </View>
+              <MediaCard uri={fileUrl(detail.video_key)} kind="video" height={240} testID="incident-media" />
             </View>
           ) : detail.photo_key ? (
             <View testID="incident-media-card">
-              <AnalyzedPhoto
-                photoUrl={fileUrl(detail.photo_key)}
-                faces={primaryPhoto?.faces ?? []}
-                plates={primaryPhoto?.plates ?? []}
-                onPlatePress={canEditPlate ? openPlateEditor : undefined}
+              <MediaCard
+                uri={fileUrl(detail.photo_key)}
+                kind="photo"
+                height={260}
+                onPress={() => setBoxViewerOpen(true)}
                 testID="incident-media"
               />
-              <View style={styles.mediaBadge}>
-                <StatusChip status={detail.status} />
-              </View>
+              {faces.length > 0 || plates.length > 0 ? (
+                <Text style={styles.detectHint} testID="incident-detect-hint">
+                  {t("incident.tapPhotoDetections")}
+                </Text>
+              ) : null}
             </View>
           ) : null}
+
           <View style={styles.headRow}>
             <View style={[styles.catIcon, { backgroundColor: `${def?.tint ?? colors.muted}18` }]}>
               <CatIcon size={26} color={def?.tint ?? colors.muted} strokeWidth={2.2} />
@@ -258,11 +266,55 @@ export default function IncidentDetailScreen() {
               <Text style={styles.catTitle}>{def ? t(def.tKey) : detail.category}</Text>
               <Text style={styles.meta}>{formatDateTime(detail.created_at)}</Text>
             </View>
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
-              {!detail.video_key && !detail.photo_key ? <StatusChip status={detail.status} /> : null}
-              <SeverityChip severity={detail.severity} testID="incident-severity-chip" />
-            </View>
           </View>
+
+          <MetaGrid
+            items={
+              [
+                {
+                  key: "status",
+                  label: t("incident.labelStatus"),
+                  value: <StatusChip status={detail.status} />,
+                },
+                {
+                  key: "severity",
+                  label: t("incident.labelSeverity"),
+                  value: <SeverityChip severity={detail.severity} testID="incident-severity-chip" />,
+                },
+                {
+                  key: "captured",
+                  label: t("incident.labelCaptured"),
+                  value: formatDateTime(detail.created_at),
+                },
+                ...(distanceText
+                  ? [{ key: "distance", label: t("incident.labelDistance"), value: distanceText }]
+                  : []),
+              ] as MetaItem[]
+            }
+          />
+
+          {faces.length > 0 ? (
+            <View style={styles.section} testID="incident-people-section">
+              <Text style={styles.sectionTitle}>
+                {t("incident.peopleDetected")} ({faces.length})
+              </Text>
+              <FaceStrip
+                photoUrl={fileUrl(detail.photo_key as string)}
+                faces={faces}
+                onPress={() => setBoxViewerOpen(true)}
+              />
+            </View>
+          ) : null}
+
+          {plates.length > 0 ? (
+            <View style={styles.section} testID="incident-plates-section">
+              <Text style={styles.sectionTitle}>
+                {t("incident.numberPlates")} ({plates.length})
+              </Text>
+              <PlateSection plates={plates} canEdit={canEditPlate} onEdit={openPlateEditor} />
+              {canEditPlate ? <Text style={styles.hint}>{t("incident.tapPlateToEdit")}</Text> : null}
+            </View>
+          ) : null}
 
           {plateDetected ? (
             <View style={styles.plateCard} testID="incident-plate-card">
@@ -346,28 +398,6 @@ export default function IncidentDetailScreen() {
                 ) : null}
               </View>
             </>
-          ) : null}
-
-          <View style={styles.capturedRow} testID="incident-captured-at">
-            <Clock size={15} color={colors.muted} strokeWidth={2.2} />
-            <Text style={styles.capturedText}>
-              {t("incident.capturedAt")}: {formatDateTime(detail.created_at)}
-            </Text>
-          </View>
-
-          {detail.distance_m != null && detail.distance_method && detail.distance_method !== "none" ? (
-            <View style={styles.capturedRow} testID="incident-distance-row">
-              <Ruler size={15} color={colors.primary} strokeWidth={2.2} />
-              <Text style={styles.capturedText}>
-                {t("incident.distanceLabel", {
-                  d:
-                    `${detail.distance_m.toFixed(1)} m` +
-                    (detail.distance_uncertainty_m != null && detail.distance_uncertainty_m >= 0.1
-                      ? ` ±${detail.distance_uncertainty_m.toFixed(1)}`
-                      : ""),
-                })}
-              </Text>
-            </View>
           ) : null}
 
           {analysis?.plate_scale ? (
@@ -604,6 +634,13 @@ export default function IncidentDetailScreen() {
         />
       ) : null}
 
+      <AnalyzedPhotoViewer
+        uri={boxViewerOpen && detail?.photo_key ? fileUrl(detail.photo_key) : null}
+        faces={faces}
+        plates={plates}
+        onClose={() => setBoxViewerOpen(false)}
+      />
+
       <Modal
         visible={!!editingPlate}
         transparent
@@ -652,12 +689,14 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, alignItems: "center", justifyContent: "center" },
   scroll: { padding: sizes.screenPadding, gap: spacing.md, paddingBottom: spacing.xxl },
-  photo: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceTertiary,
+  detectHint: {
+    fontFamily: fonts.medium,
+    fontSize: type.xs,
+    color: colors.muted,
+    marginTop: spacing.xs,
+    textAlign: "center",
   },
+  section: { gap: spacing.xs },
   headRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   catIcon: {
     width: 48,
@@ -684,6 +723,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: spacing.sm,
   },
+  hint: { fontFamily: fonts.regular, fontSize: type.xs, color: colors.muted, marginTop: 2 },
   timeline: { gap: spacing.md },
   timelineRow: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   timelineDot: { width: 14, height: 14, borderRadius: 7, marginTop: 5 },
@@ -691,14 +731,6 @@ const styles = StyleSheet.create({
   timelineTime: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   actions: { gap: spacing.md, marginTop: spacing.md },
   resolveBox: { gap: spacing.sm },
-  mediaCard: {
-    borderRadius: radius.lg,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceTertiary,
-  },
-  mediaBadge: { position: "absolute", top: spacing.sm, right: spacing.sm },
   plateCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.md,

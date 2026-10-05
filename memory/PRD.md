@@ -1803,3 +1803,67 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - SANDBOX: broadcasts_enabled remains ON (rate 50). i18n webdash: +13 keys (bc_update_template/
   bc_template_updated/bc_cancel_edit/bc_export_xlsx + diag_*).
 
+
+## Camera-AI device-feedback round (Parts A/B/C + Docker prefetch) — 2026-06 fork
+### Part B — Incident Photo Detail revamp (SHIPPED, E2E tested iteration_31, all pass)
+- `app/incident/[id].tsx` rebuilt: photo now CLEAN/unobstructed at top (MediaCard, testID
+  incident-media). All text/metadata moved BELOW the photo. Deleted the old on-photo overlay
+  component `src/components/AnalyzedPhoto.tsx`.
+- New components: `MetaGrid.tsx` (clean 2-col grid — Status chip | Severity chip, Captured,
+  Distance-when-present), `FaceStrip.tsx` ("People detected (N)" horizontal strip of CLEAR
+  client-cropped square face thumbnails — uniform-scale + centred via Image.getSize dims),
+  `PlateSection.tsx` ("Number plates (N)" rows: plate text + confidence% + Edited badge,
+  tap→edit when rank<=3), `AnalyzedPhotoViewer.tsx` (full-screen boxes-overlay viewer opened
+  by tapping the photo OR a face crop; MediaCard gained an optional `onPress` override so the
+  main card opens this viewer instead of the plain one).
+- Plate confidence fix: photo_plates det/ocr_confidence are 0..1 fractions → PlateSection shows
+  Math.round(conf*100)% (was showing 1% for a 0.91 value).
+- i18n +8 keys ×3 (incident.peopleDetected/numberPlates/tapPhotoDetections/labelStatus/
+  labelSeverity/labelDistance/labelCaptured/plateEdited). Parity 630→... GREEN.
+- Test seed (demo bubble, visible to Demo CGM D500): incident ccb08a39-6c35-480b-8e48-81f693c84ccc
+  has a photo_analyses row (2 faces + 1 plate MH12AB1234 @ 91%). Re-seed if the demo cleanup
+  sweep purges it (it's is_demo, not is_demo_seed).
+
+### Part A — AR distance fixes (CODE COMPLETE; AR math/HUD are DEVICE-BUILD-ONLY to verify)
+- A1 tap→depth mapping (the root cause of wrong-point readings):
+  * Android `ExpoArDistanceView.kt`: new `viewToTexture()` uses ARCore
+    `frame.transformCoordinates2d(Coordinates2d.VIEW → TEXTURE_NORMALIZED)`; depthPatchMedian now
+    samples at the correctly-projected pixel (× depth w/h, uses plane.pixelStride), returns null
+    when the tap falls in the cropped/invalid depth area.
+  * iOS `ExpoArDistanceView.swift`: depthPatchMedian now maps the portrait view-normalized target
+    → landscape LiDAR depthMap pixel via `frame.displayTransform(for:.portrait,viewportSize:).inverted()`
+    (handles rotation + aspect-fill crop), returns nil when outside [0,1].
+- A2 filtering/uncertainty: BOTH native views now emit the RAW per-frame reading on the live
+  stream (kept the native window ONLY for the still-capture metadata). The JS filter
+  `src/ar/distanceFilter.ts` (unchanged — already had rolling window + MAD + median + ±
+  uncertainty + low-confidence suppression) now produces a REAL ± because it sees raw samples
+  (previously native pre-medianed, so JS stdev was ~0). 14 node --test cases still green.
+- A3 HUD + banner + calibration (admin/dev gated):
+  * `ArDistanceOverlay.tsx` rewritten: live distance moved to a FIXED top banner (clear of the
+    bottom shutter/video controls — the user's overlap complaint); crosshair keeps a
+    confidence-coloured dot (no number under it). Debug HUD (testID ar-debug-hud) shows
+    tier/tracking/samples/spread/confidence + a Calibrate button — only when debug=true
+    (capture.tsx passes `__DEV__ || rank<=2`).
+  * `src/ar/calibration.ts` (new): persistent multiplicative scale in AsyncStorage
+    (hogo.ar.calib), computeScale = median(truth/measured) clamped 0.2–5, applyCalibration()
+    used on the live reading in DistanceCamera AND on the captured distance meta.
+  * `app/ar-calibration.tsx` (new route, admin-gate rank<=2 else "Admins only" — verified via
+    screenshot both as Demo CGM D500 and Demo Worker D001): tape-measure flow — aim, enter true
+    distance, Record samples, Save/Reset. typedRoutes picks up the new file automatically.
+  * i18n +ar.hud.* (8) +ar.calib.* (13) ×3. Parity 651×3 GREEN.
+- CANNOT be validated in Expo Go/web (AR native module absent → DistanceCamera falls back to
+  plain CameraView, overlay shows ar.needsBuild). User must build the APK to verify A1/A2/HUD.
+
+### Part C — fresh profiling (reported to user)
+- Sandbox has 16 vCPUs (EC2 t3.medium = 2 vCPU; prior 2-vCPU figure was ~281ms/+110MB). Fresh
+  synthetic 12MP (4000×3000) run: baseline RSS 105MB; cold analyze (load+first inference) 336ms;
+  warm faces+plates median ~200ms (187 faces-only / 118 plates-only); model working-set +158MB,
+  peak +261MB (ru_maxrss high-water incl. 12MP decode + ONNX arenas). release_models() frees it.
+
+### Docker model prefetch (backlog item — DONE)
+- `backend/scripts/prefetch_models.py`: instantiates the YOLOv9 plate detector + CCT-XS OCR
+  (triggers download to $HOME/.cache/{open-image-models,fast-plate-ocr}) and verifies the vendored
+  YuNet; exits non-zero if any model is missing. Verified: YuNet 0.2MB + YOLOv9 7.4MB + CCT-XS 3.2MB.
+- `Dockerfile`: added `RUN python scripts/prefetch_models.py` after the backend COPY so the ONNX
+  weights bake into the image layer → NO runtime HTTP egress on the restricted EC2 host.
+

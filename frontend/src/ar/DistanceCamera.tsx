@@ -27,8 +27,9 @@ import {
   startSession,
   stopSession,
 } from "./arDistance";
+import { applyCalibration, getCalibrationSync, loadCalibration } from "./calibration";
 import { evaluateDistance } from "./distanceFilter";
-import type { ArCapabilities, DistanceReading, DistanceSample } from "./types";
+import type { ArCapabilities, CaptureDistanceMeta, DistanceReading, DistanceSample } from "./types";
 
 const WINDOW_MS = 500;
 
@@ -79,6 +80,7 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
   // runtime capability check each mount (RULE 5)
   useEffect(() => {
     let alive = true;
+    void loadCalibration(); // admin tape-measure correction (A3), applied below
     void getArCapabilities().then((c) => {
       if (!alive) return;
       setCaps(c);
@@ -98,14 +100,16 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
       const now = Date.now();
       if (u.distanceM != null) windowRef.current.push({ value: u.distanceM, timestamp: now });
       windowRef.current = windowRef.current.filter((s) => now - s.timestamp <= WINDOW_MS);
-      const reading = evaluateDistance({
-        samples: windowRef.current,
-        now,
-        method: u.method,
-        trackingState: u.trackingState,
-        windowMs: WINDOW_MS,
-        hint: u.hint,
-      });
+      const reading = applyCalibration(
+        evaluateDistance({
+          samples: windowRef.current,
+          now,
+          method: u.method,
+          trackingState: u.trackingState,
+          windowMs: WINDOW_MS,
+          hint: u.hint,
+        }),
+      );
       lastReadingRef.current = reading;
       onReading?.(reading);
     });
@@ -140,11 +144,20 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
       if (useAr) {
         const res = await captureStill();
         if (res.uri) {
+          // apply the admin calibration to the persisted measurement too (A3)
+          const cal = getCalibrationSync();
+          const meta = res.distance as CaptureDistanceMeta;
+          if (cal.scale !== 1 && meta?.distance_m != null) {
+            meta.distance_m = Math.round(meta.distance_m * cal.scale * 100) / 100;
+            if (meta.sample_spread_m != null) {
+              meta.sample_spread_m = Math.round(meta.sample_spread_m * cal.scale * 100) / 100;
+            }
+          }
           return {
             uri: res.uri,
             width: res.width || 1200,
             height: res.height || 1600,
-            distanceMeta: res.distance,
+            distanceMeta: meta,
             intrinsics: res.intrinsics,
           };
         }

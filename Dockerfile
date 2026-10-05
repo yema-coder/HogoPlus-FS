@@ -53,6 +53,13 @@ RUN pip install --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ 
 # application code (server:app -> app.main:app)
 COPY backend/ /app/backend/
 
+# Pre-bake the plate-detection (YOLOv9) + OCR (CCT-XS) ONNX models into this image
+# layer so the runtime container NEVER needs HTTP egress to fetch them (the EC2 host
+# has restricted egress). Models download to /root/.cache and are committed here;
+# the YuNet face model is already vendored at ml_models/yunet.onnx. The build FAILS
+# if a model cannot be fetched (loud failure beats a silent runtime download).
+RUN python scripts/prefetch_models.py
+
 # webdash static bundle — FastAPI serves it from ../webdash_dist at /api/dash/
 COPY --from=webdash /webdash_dist /app/backend/webdash_dist
 

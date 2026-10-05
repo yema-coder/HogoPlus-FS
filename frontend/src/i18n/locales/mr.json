@@ -154,7 +154,15 @@
     "editPlateTitle": "नंबर प्लेट संपादित करा",
     "plateRequired": "प्लेट नंबर टाका",
     "plateUpdated": "नंबर प्लेट अपडेट झाली",
-    "plateScaleLabel": "प्लेट-स्केल तपासणी: ~{{d}}"
+    "plateScaleLabel": "प्लेट-स्केल तपासणी: ~{{d}}",
+    "peopleDetected": "आढळलेली माणसे",
+    "numberPlates": "नंबर प्लेट",
+    "tapPhotoDetections": "ओळख पाहण्यासाठी फोटोला स्पर्श करा",
+    "labelStatus": "स्थिती",
+    "labelSeverity": "तीव्रता",
+    "labelDistance": "अंतर",
+    "labelCaptured": "घेतले",
+    "plateEdited": "संपादित"
   },
   "status": {
     "submitted": "पाठवले",
@@ -715,6 +723,31 @@
       "too_close": "खूप जवळ",
       "too_far": "मोजण्यासाठी खूप दूर",
       "tracking_lost": "फोन हळू हळू बाजूला हलवा"
+    },
+    "hud": {
+      "title": "AR डीबग",
+      "tier": "स्तर",
+      "tracking": "ट्रॅकिंग",
+      "samples": "नमुने",
+      "spread": "पसरण",
+      "confidence": "विश्वास",
+      "calibrate": "कॅलिब्रेट",
+      "calibrated": "कॅलिब्रेटेड ×{{s}}"
+    },
+    "calib": {
+      "title": "AR कॅलिब्रेशन",
+      "intro": "ज्ञात अंतरावरील वस्तूवर नेम धरा, टेपने मोजलेले अंतर टाका, मग काही नमुने नोंदवा.",
+      "trueDistance": "मोजलेले अंतर (मी)",
+      "record": "नमुना नोंदवा",
+      "scale": "स्केल",
+      "save": "कॅलिब्रेशन जतन करा",
+      "reset": "रीसेट",
+      "saved": "कॅलिब्रेशन जतन झाले",
+      "needReading": "आधी स्थिर रीडिंगची वाट पाहा",
+      "needTruth": "मोजलेले अंतर टाका",
+      "adminOnly": "फक्त अॅडमिन",
+      "current": "लाइव्ह रीडिंग",
+      "none": "कॅलिब्रेशन नाही (×1.000)"
     }
   }
 }

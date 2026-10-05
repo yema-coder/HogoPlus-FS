@@ -98,6 +98,7 @@ function IncidentCaptureInner() {
   const router = useRouter();
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
+  const rank = profile?.role?.rank ?? 6;
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 
@@ -503,6 +504,8 @@ function IncidentCaptureInner() {
             caps={arCaps}
             target={target}
             torchOn={torch}
+            debug={__DEV__ || rank <= 2}
+            onCalibrate={() => router.push("/ar-calibration")}
             onTapMeasure={(x, y) => {
               setTarget({ x, y });
               cameraRef.current?.setTarget(x, y);
