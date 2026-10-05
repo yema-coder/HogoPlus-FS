@@ -38,6 +38,7 @@ from app.schemas import (
     PurgeDemoIn,
     RejectIn,
     SetPasswordIn,
+    PlateScaleCalibrateIn,
     SettingsPatchIn,
     TestSmsIn,
 )
@@ -92,6 +93,10 @@ async def get_settings(
     s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
     if s is None:
         raise HTTPException(status_code=404, detail="Settings not seeded")
+    return _settings_out(s)
+
+
+def _settings_out(s: FactorySettings) -> dict:
     return {
         "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
         "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
@@ -103,6 +108,12 @@ async def get_settings(
         "dup_same_category": s.dup_same_category,
         "broadcasts_enabled": s.broadcasts_enabled,
         "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
+        "ar_distance_enabled": s.ar_distance_enabled,
+        "face_detection_enabled": s.face_detection_enabled,
+        "plate_detection_enabled": s.plate_detection_enabled,
+        "plate_scale_enabled": s.plate_scale_enabled,
+        "plate_ref_width_m": s.plate_ref_width_m,
+        "plate_scale_k": s.plate_scale_k,
     }
 
 
@@ -121,6 +132,8 @@ async def patch_settings(
         "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
         "dup_window_minutes", "dup_same_zone", "dup_same_category",
         "broadcasts_enabled", "broadcast_rate_per_hour",
+        "ar_distance_enabled", "face_detection_enabled", "plate_detection_enabled",
+        "plate_scale_enabled", "plate_ref_width_m", "plate_scale_k",
     ):
         val = getattr(body, field)
         if val is not None:
@@ -128,18 +141,103 @@ async def patch_settings(
             setattr(s, field, val)
     await write_audit(session, employee.id, "settings.updated", "settings", str(s.id), changes)
     await session.commit()
-    return {
-        "factory_lat": s.factory_lat, "factory_lng": s.factory_lng,
-        "radius_meters": s.radius_meters, "beacon_first_mode": s.beacon_first_mode,
-        "home_config_enabled": s.home_config_enabled,
-        "vehicle_log_enabled": s.vehicle_log_enabled,
-        "notif_batching_enabled": s.notif_batching_enabled,
-        "dup_window_minutes": s.dup_window_minutes,
-        "dup_same_zone": s.dup_same_zone,
-        "dup_same_category": s.dup_same_category,
-        "broadcasts_enabled": s.broadcasts_enabled,
-        "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
-    }
+    return _settings_out(s)
+
+
+@router.post("/plate-scale/calibrate")
+async def calibrate_plate_scale(
+    body: PlateScaleCalibrateIn,
+    employee: Employee = Depends(require_real_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Derive and persist the plate-scale constant k from a trusted capture."""
+    from app.models import Incident, PhotoAnalysis, PhotoPlate
+    from app.plate_scale import calibrate_k
+
+    s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+    if s is None:
+        raise HTTPException(status_code=404, detail="Settings not seeded")
+
+    distance_m = body.distance_m
+    plate_w = body.plate_width_fraction
+    source = "manual"
+    if body.incident_id is not None:
+        incident = await session.get(Incident, body.incident_id)
+        if incident is None or incident.is_demo != employee.is_demo:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        if not incident.distance_m:
+            raise HTTPException(status_code=400, detail="Incident has no AR distance to calibrate against")
+        plate = (
+            await session.execute(
+                select(PhotoPlate)
+                .join(PhotoAnalysis, PhotoPlate.analysis_id == PhotoAnalysis.id)
+                .where(PhotoAnalysis.incident_id == incident.id)
+                .where(PhotoPlate.w > 0)
+                .order_by(PhotoPlate.det_confidence.desc().nullslast())
+                .limit(1)
+            )
+        ).scalars().first()
+        if plate is None:
+            raise HTTPException(status_code=400, detail="Incident has no detected plate")
+        distance_m = incident.distance_m
+        plate_w = plate.w
+        source = f"incident:{incident.id}"
+
+    if not distance_m or not plate_w:
+        raise HTTPException(status_code=400, detail="Provide incident_id, or distance_m + plate_width_fraction")
+
+    k = calibrate_k(ar_distance_m=distance_m, plate_w_frac=plate_w, ref_width_m=s.plate_ref_width_m)
+    old = s.plate_scale_k
+    s.plate_scale_k = k
+    s.plate_scale_enabled = True
+    await write_audit(
+        session, employee.id, "settings.plate_scale_calibrated", "settings", str(s.id),
+        {"old_k": old, "new_k": k, "distance_m": distance_m, "plate_w": plate_w, "source": source},
+    )
+    await session.commit()
+    return {"plate_scale_k": k, "ref_width_m": s.plate_ref_width_m, "distance_m": distance_m,
+            "plate_width_fraction": round(plate_w, 4), "source": source}
+
+
+@router.get("/plate-scale/candidates")
+async def plate_scale_candidates(
+    employee: Employee = Depends(require_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reports usable for calibration: a trusted AR distance + a detected plate."""
+    from app.models import Incident, PhotoAnalysis, PhotoPlate
+
+    rows = (
+        await session.execute(
+            select(Incident, PhotoPlate)
+            .join(PhotoAnalysis, PhotoAnalysis.incident_id == Incident.id)
+            .join(PhotoPlate, PhotoPlate.analysis_id == PhotoAnalysis.id)
+            .where(Incident.is_demo == employee.is_demo)
+            .where(Incident.distance_m.isnot(None))
+            .where(PhotoPlate.w > 0)
+            .order_by(Incident.created_at.desc())
+            .limit(40)
+        )
+    ).all()
+    seen: set = set()
+    out = []
+    for inc, plate in rows:
+        if inc.id in seen:
+            continue
+        seen.add(inc.id)
+        out.append({
+            "id": str(inc.id),
+            "category": inc.category,
+            "department_code": inc.department_code,
+            "distance_m": inc.distance_m,
+            "distance_confidence": inc.distance_confidence,
+            "plate_text": plate.plate_text,
+            "plate_width_fraction": round(plate.w, 4),
+            "created_at": inc.created_at.isoformat() if inc.created_at else None,
+        })
+        if len(out) >= 20:
+            break
+    return out
 
 
 # ---------------- employees ----------------

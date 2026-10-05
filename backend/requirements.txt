@@ -157,3 +157,6 @@ wcwidth==0.8.2
 websockets==16.0
 yarl==1.24.2
 zipp==4.1.0
+fast-plate-ocr==1.1.0
+open-image-models==0.6.0
+opencv-python-headless==5.0.0.93

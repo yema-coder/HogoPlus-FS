@@ -9,9 +9,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import write_audit
 from app.database import get_session
 from app.demo import get_role_holder, resolve_dept_manager_id
-from app.models import Department, Employee, Incident, IncidentTimeline, Role
+from app.models import (
+    Department,
+    Employee,
+    FactorySettings,
+    Incident,
+    IncidentTimeline,
+    PhotoAnalysis,
+    PhotoFace,
+    PhotoPlate,
+    Role,
+)
 from app.notify import dispatcher, template
-from app.schemas import ConfirmRoutingIn, EscalateIn, IncidentCreateIn, IncidentStatusIn
+from app.plate_scale import compute_plate_scale
+from app.schemas import (
+    ConfirmRoutingIn,
+    EscalateIn,
+    IncidentCreateIn,
+    IncidentStatusIn,
+    PlatePatchIn,
+)
 from app.security import get_approved_employee, get_current_employee, is_dept_manager
 
 router = APIRouter(tags=["incidents"])
@@ -56,6 +73,10 @@ def _out(i: Incident) -> dict:
         "plate_confidence": i.plate_confidence,
         "plate_source": i.plate_source,
         "plate_reason": i.plate_reason,
+        "distance_m": i.distance_m,
+        "distance_method": i.distance_method,
+        "distance_confidence": i.distance_confidence,
+        "distance_uncertainty_m": i.distance_uncertainty_m,
         "duplicate_of": str(i.duplicate_of) if i.duplicate_of else None,
         "created_at": i.created_at.isoformat() if i.created_at else None,
     }
@@ -68,6 +89,46 @@ def _timeline_out(t: IncidentTimeline) -> dict:
         "event": t.event,
         "detail_json": t.detail_json,
         "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+_DISTANCE_METHODS = {"lidar", "depth", "ar_plane", "ar_point", "feature", "none"}
+_DISTANCE_CONF = {"high", "medium", "low"}
+
+
+def _distance_fields(body: IncidentCreateIn) -> dict:
+    """Validate+coerce the on-device distance payload. A malformed value is dropped
+    (never rejects the incident); 'none' method means no usable measurement."""
+    method = body.distance_method if body.distance_method in _DISTANCE_METHODS else None
+    if method in (None, "none") or body.distance_m is None:
+        return {}
+    conf = body.distance_confidence if body.distance_confidence in _DISTANCE_CONF else None
+    return {
+        "distance_m": round(float(body.distance_m), 2),
+        "distance_method": method,
+        "distance_confidence": conf,
+        "distance_uncertainty_m": (
+            round(float(body.distance_uncertainty_m), 2)
+            if body.distance_uncertainty_m is not None
+            else None
+        ),
+    }
+
+
+def _face_out(f: PhotoFace) -> dict:
+    return {"id": str(f.id), "x": f.x, "y": f.y, "w": f.w, "h": f.h, "score": f.score}
+
+
+def _plate_out(p: PhotoPlate) -> dict:
+    return {
+        "id": str(p.id),
+        "x": p.x, "y": p.y, "w": p.w, "h": p.h,
+        "text": p.plate_text,
+        "det_confidence": p.det_confidence,
+        "ocr_confidence": p.ocr_confidence,
+        "region": p.region,
+        "source": p.source,
+        "edited": p.edited,
     }
 
 
@@ -134,6 +195,7 @@ async def create_incident(
         plate_status="pending" if body.photo_key else None,
         ble_beacon_id=ble_ref,
         ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
+        **_distance_fields(body),
     )
     session.add(incident)
     await session.flush()
@@ -425,6 +487,129 @@ async def incident_detail(
     return {**_out(incident), "timeline": [_timeline_out(t) for t in timeline]}
 
 
+async def _load_visible_incident(incident_id, employee, session) -> Incident:
+    incident = await session.get(Incident, incident_id)
+    if incident is None or incident.is_demo != employee.is_demo:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    allowed = (
+        incident.reported_by == employee.id
+        or incident.assigned_manager_id == employee.id
+        or incident.escalated_to == employee.id
+        or await is_dept_manager(session, employee, incident.department_code)
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    return incident
+
+
+@router.get("/incidents/{incident_id}/analysis")
+async def incident_analysis(
+    incident_id: uuid.UUID,
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Faces + number plates detected in the incident's photos, plus the on-device
+    distance measured at capture. Role-scoped exactly like the incident detail."""
+    incident = await _load_visible_incident(incident_id, employee, session)
+    rows = (
+        await session.execute(
+            select(PhotoAnalysis)
+            .where(PhotoAnalysis.incident_id == incident.id)
+            .order_by(PhotoAnalysis.created_at.asc())
+        )
+    ).scalars().all()
+    photos = [
+        {
+            "id": str(a.id),
+            "photo_key": a.photo_key,
+            "photo_url": f"/api/files/{a.photo_key}" if a.photo_key else None,
+            "slot": a.slot,
+            "status": a.status,
+            "face_count": a.face_count,
+            "plate_count": a.plate_count,
+            "faces": [_face_out(f) for f in a.faces],
+            "plates": [_plate_out(p) for p in a.plates],
+        }
+        for a in rows
+    ]
+    pending = bool(incident.photo_key) and not any(
+        a.slot == "primary" and a.status in ("done", "failed") for a in rows
+    )
+    # plate-scale cross-check from the strongest detected plate (Step 5)
+    plate_scale = None
+    best_plate = None
+    for a in rows:
+        for p in a.plates:
+            if p.w and p.w > 0 and (best_plate is None or (p.det_confidence or 0) > (best_plate.det_confidence or 0)):
+                best_plate = p
+    if best_plate is not None:
+        s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+        if s is not None:
+            plate_scale = compute_plate_scale(
+                enabled=s.plate_scale_enabled, k=s.plate_scale_k, ref_width_m=s.plate_ref_width_m,
+                plate_w_frac=best_plate.w, ar_distance_m=incident.distance_m,
+            )
+    return {
+        "incident_id": str(incident.id),
+        "distance": {
+            "distance_m": incident.distance_m,
+            "distance_method": incident.distance_method,
+            "distance_confidence": incident.distance_confidence,
+            "distance_uncertainty_m": incident.distance_uncertainty_m,
+        },
+        "plate_scale": plate_scale,
+        "detected_plate": incident.detected_plate,
+        "plate_status": incident.plate_status,
+        "face_count": sum(a.face_count for a in rows),
+        "plate_count": sum(a.plate_count for a in rows),
+        "pending": pending,
+        "photos": photos,
+    }
+
+
+@router.patch("/incidents/{incident_id}/plates/{plate_id}")
+async def edit_incident_plate(
+    incident_id: uuid.UUID,
+    plate_id: uuid.UUID,
+    body: PlatePatchIn,
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reviewer correction of a detected number plate. Managers (rank ≤ 3) or the
+    department manager only — reporters cannot edit. The corrected value becomes
+    the incident's authoritative detected_plate and is never auto-overwritten."""
+    incident = await _load_visible_incident(incident_id, employee, session)
+    is_manager = employee.role.rank <= 3 or await is_dept_manager(
+        session, employee, incident.department_code
+    )
+    if not is_manager:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    plate = await session.get(PhotoPlate, plate_id)
+    if plate is None:
+        raise HTTPException(status_code=404, detail="Plate not found")
+    analysis = await session.get(PhotoAnalysis, plate.analysis_id)
+    if analysis is None or analysis.incident_id != incident.id:
+        raise HTTPException(status_code=404, detail="Plate not found")
+    old = plate.plate_text
+    plate.plate_text = body.text
+    plate.edited = True
+    plate.edited_by = employee.id
+    plate.edited_at = datetime.now(timezone.utc)
+    # the hand-corrected value is authoritative on the incident
+    incident.detected_plate = body.text[:20]
+    incident.plate_status = "detected"
+    incident.plate_source = "manual"
+    await write_audit(
+        session, employee.id, "incident.plate_edited", "incident", str(incident.id),
+        {"plate_id": str(plate.id), "old": old, "new": body.text},
+        is_demo=employee.is_demo,
+    )
+    await session.commit()
+    await session.refresh(plate)
+    return _plate_out(plate)
+
+
+
 @router.get("/incidents")
 async def list_incidents(
     department_code: str | None = None,
@@ -541,7 +726,9 @@ async def change_status(
     await session.commit()
     await session.refresh(incident)
     if body.status == "resolved" and incident.resolution_photo_key and not os.environ.get("TESTING"):
-        from app.tasks import run_plate_detection_background
+        from app.tasks import run_photo_analysis_background
 
-        background.add_task(run_plate_detection_background, "incident", str(incident.id))
+        # local faces + plate analysis of the resolution photo (idempotent — the
+        # primary photo, already analysed at create time, is skipped)
+        background.add_task(run_photo_analysis_background, "incident", str(incident.id))
     return _out(incident)

@@ -139,8 +139,12 @@ export interface Incident {
   detected_plate: string | null;
   plate_status: "pending" | "detected" | "not_detected" | null;
   plate_confidence: number | null;
-  plate_source: "rekognition" | "llm_vision" | null;
+  plate_source: "rekognition" | "llm_vision" | "local_onnx" | "manual" | null;
   plate_reason: string | null;
+  distance_m: number | null;
+  distance_method: "lidar" | "depth" | "ar_plane" | "ar_point" | "feature" | "none" | null;
+  distance_confidence: "high" | "medium" | "low" | null;
+  distance_uncertainty_m: number | null;
   created_at: string | null;
 }
 
@@ -154,6 +158,65 @@ export interface TimelineEntry {
 
 export interface IncidentDetail extends Incident {
   timeline: TimelineEntry[];
+}
+
+export interface DetectedFace {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  score: number | null;
+}
+
+export interface DetectedPlate {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string | null;
+  det_confidence: number | null;
+  ocr_confidence: number | null;
+  region: string | null;
+  source: string;
+  edited: boolean;
+}
+
+export interface AnalyzedPhotoItem {
+  id: string;
+  photo_key: string;
+  photo_url: string | null;
+  slot: string;
+  status: "pending" | "done" | "failed" | "skipped";
+  face_count: number;
+  plate_count: number;
+  faces: DetectedFace[];
+  plates: DetectedPlate[];
+}
+
+export interface IncidentAnalysis {
+  incident_id: string;
+  distance: {
+    distance_m: number | null;
+    distance_method: string | null;
+    distance_confidence: string | null;
+    distance_uncertainty_m: number | null;
+  };
+  plate_scale: {
+    est_distance_m: number;
+    ref_width_m: number;
+    k: number;
+    ar_distance_m?: number;
+    delta_pct?: number;
+    consistent?: boolean;
+  } | null;
+  detected_plate: string | null;
+  plate_status: string | null;
+  face_count: number;
+  plate_count: number;
+  pending: boolean;
+  photos: AnalyzedPhotoItem[];
 }
 
 export type VerificationLevel = "verified_plus" | "verified" | "flagged";

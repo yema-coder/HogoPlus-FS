@@ -1573,3 +1573,108 @@ Goal (user PRD): add to ALL camera captures — (1) live AR object distance (cus
 - RESTORED emp 0001 Amey Ghadge → role_code=CGM, designation="Chief General Manager", dept=ADMIN
   (was Manager/"Wireman A"/CIVIL — leftover from earlier role/designation QA). (0428 Pathan Irfan
   Husen remains CGM too; both real CGMs now.)
+
+## Camera AI — STEP 3: backend face + plate analysis + distance persistence (2026-10-05) ✅ code complete, pending user review
+Delivers the user's "backend face-detector + number-plate reader" + "Save Distance".
+- NEW LOCAL VISION (CPU-only ONNX, no torch, no external API) `app/vision_local.py`:
+  * Faces — OpenCV `cv2.FaceDetectorYN` (YuNet, bundled `backend/ml_models/yunet.onnx`, 227KB).
+    We only count/locate faces (boxes + score), never identify.
+  * Plates — `open-image-models` `create_detector("yolo-v9-t-384-license-plate-end2end")` crops
+    each plate → `fast-plate-ocr` `LicensePlateRecognizer("cct-xs-v2-global-model")` reads text.
+  * `analyze_image(bytes, do_faces, do_plates)` → boxes as FRACTIONS (0..1) of the image; NEVER
+    raises (missing model/decode → empty). Lazy singletons + `release_models()` (gc+malloc_trim)
+    called after each run (small-container RSS hygiene; spike ~300-400MB → back to ~135MB).
+  * Deps added to requirements.txt: fast-plate-ocr==1.1.0, open-image-models==0.6.0,
+    opencv-python-headless==5.0.0.93 (onnxruntime/numpy/pillow/PyYAML already present).
+  * MODEL CACHE: yolo (7.4MB) + cct (3.2MB) auto-download from HF to ~/.cache on FIRST inference
+    (one-time, needs outbound internet). yunet is bundled in the repo. If download fails the pipeline
+    degrades gracefully (analysis status=failed, incident still fine). Sandbox has them cached.
+- DB (alembic 0021, applied to sandbox; auto-applied in prod via main.py startup upgrade):
+  * incidents: distance_m / distance_method / distance_confidence / distance_uncertainty_m.
+  * settings flags (default ON): ar_distance_enabled / face_detection_enabled / plate_detection_enabled
+    (in admin GET/PATCH /settings + SettingsPatchIn).
+  * photo_analyses (one per analysed photo, idempotent per incident+photo_key) + photo_faces
+    (x,y,w,h,score) + photo_plates (box, plate_text, det/ocr confidence, region, source, edited,
+    edited_by/at). CASCADE on incident/submission delete.
+- PIPELINE (`app/tasks.py`): `_analyze_photos_async(kind, record_id)` runs faces+plates on each photo
+  (primary + resolution), writes rows, and for incidents sets detected_plate/plate_confidence(×100)/
+  plate_source='local_onnx'/plate_status='detected' from the strongest local plate. `run_incident_ai_background`
+  now = local analysis FIRST → Rekognition/LLM ANPR ONLY as fallback when local found nothing AND
+  plate flag ON → classification. Resolution photo (status→resolved) enqueues `run_photo_analysis_background`.
+  All in-process FastAPI BackgroundTasks (prod has no Celery). plate flag OFF ⇒ plate_status cleared to NULL.
+- API (`app/routers/incidents.py`): GET /api/incidents/{id}/analysis (role-scoped like detail →
+  {distance, detected_plate, plate_status, face_count, plate_count, pending, photos:[{faces,plates}]});
+  PATCH /api/incidents/{id}/plates/{plate_id} {text} (managers rank≤3 / dept mgr ONLY; reporter 403;
+  normalises upper, edited=True, becomes incident.detected_plate source='manual', never auto-overwritten).
+- FRONTEND: capture.tsx now sends distance_{m,method,confidence,uncertainty_m} in the incident payload
+  (travels through the offline outbox too). incident/[id].tsx shows a compact distance row (Ruler icon,
+  incident.distanceLabel) when a real measurement exists. src/api/types.ts Incident extended.
+  (Faces/plates OVERLAY on the detail screen is STEP 4 — not built yet.)
+- TESTS: tests/test_step3_camera_ai.py (11) — distance persist/validate/none-drop, analysis empty+pending,
+  cross-worker 403, pipeline writes rows + sets plate (vision_local monkeypatched, no models in CI),
+  idempotent re-run, manager-edit/worker-403/empty-422, flags exposed, plate-flag-off skips plates.
+  FULL SUITE: 354 passed, 1 skipped (was 354 baseline + new). Lint clean. Real-model e2e verified via
+  curl (demo worker upload→incident→analysis: face score 0.907 + plate MH12AB1234 det0.41/ocr1.0;
+  CGM plate edit → MH14GH7777 source=manual; worker 403). App boots + detail screen renders clean.
+- NOT TESTABLE without a native build: on-device AR distance capture (Step 2). Faces/plates display UI = Step 4.
+
+
+## Camera AI — STEP 4: faces/plates overlay on report + edit-plate + blur-faces share (2026-10-05) ✅ code complete, pending user review
+- NEW `frontend/src/components/AnalyzedPhoto.tsx`: renders the incident's primary photo with
+  overlay boxes computed from the Step-3 analysis (boxes are FRACTIONS → mapped via onLayout width
+  + image aspect from Image.onLoad, resizeMode cover → exact mapping). Plate boxes (accent) are
+  TAPPABLE with a text tag (→ edit); face boxes (amber outline). "Blur faces" toggle swaps face
+  outlines for opaque frosted privacy masks on-screen. "Share" exports via react-native-view-shot
+  (off-screen capture surface, faces ALWAYS redacted with opaque patches regardless of the toggle)
+  + expo-sharing (native only; web → "sharing unavailable" toast). Tap image → MediaViewerModal.
+- `app/incident/[id].tsx`: fetches GET /incidents/{id}/analysis (loadAnalysis, re-polls ≤6×8s while
+  pending); photo incidents now render AnalyzedPhoto (video keeps MediaCard); plate boxes wired to a
+  centred edit Modal (TextInput, auto-upper, Cancel/Save) → PATCH /incidents/{id}/plates/{plate_id}
+  (managers rank≤3 only — onPlatePress passed only when canEditPlate) → toast + reloads detail+analysis.
+  Distance row already added in Step 3 (shows "Distance: 4.2 m ±0.4").
+- api: endpoints.incidentAnalysis + editIncidentPlate; types IncidentAnalysis/AnalyzedPhotoItem/
+  DetectedFace/DetectedPlate. i18n +10 keys ×3 (common.save, incident.blurFaces/facesBlurred/
+  facesHiddenShare/share/shareUnavailable/tapPlateToEdit/editPlateTitle/plateRequired/plateUpdated);
+  parity GREEN (621 each).
+- LIVE VERIFIED (preview, demo CGM D500 viewing a demo-worker incident with a face+plate photo):
+  face box + plate tag "MH12AB1234" render; blur toggle masks the face; tapping the plate opens the
+  edit modal; saving "MH20CD4455" → PATCH 200 → "Number plate updated" toast + plate tag + detected-
+  plate card both update; distance row shows 4.2 m ±0.4. Lint clean. (Share = native-only; web toasts.)
+- SCOPE NOTE: overlay boxes shown on the PRIMARY photo only (resolution photo still plain). Existing
+  seeded demo incidents have no analysis rows (created before Step 3) → boxes only appear on NEW captures.
+
+
+## Camera AI — STEP 5: dashboard views + plate-scale cross-check + calibration (2026-10-05) ✅ code complete + live verified
+- PLATE-SCALE CROSS-CHECK (`app/plate_scale.py`): independent distance estimate from a plate's
+  apparent width. distance ≈ k · ref_width_m / plate_width_fraction, where k ≡ f_px/image_width_px
+  (single per-camera constant, resolution-independent). compute_plate_scale() returns est + (vs AR)
+  delta_pct + consistent (±33% tol). calibrate_k() derives k from a trusted (AR distance, plate-w) pair.
+- DB (alembic 0022): settings.plate_scale_enabled (ON), plate_ref_width_m (0.5), plate_scale_k (1.2).
+- API:
+  * GET /incidents/{id}/analysis now returns `plate_scale` (computed from the strongest detected plate
+    + the incident's AR distance + settings).
+  * POST /api/admin/plate-scale/calibrate {incident_id | distance_m+plate_width_fraction} (require_real_role
+    2; demo accounts 403 by design) → derives+persists k, enables cross-check, audited.
+  * GET /api/admin/plate-scale/candidates → recent incidents with BOTH AR distance + a detected plate.
+  * admin GET/PATCH /settings refactored to _settings_out(); PATCH accepts the 3 new fields.
+- WEBDASH (`webdash/`, built → backend/webdash_dist, served at /api/dash):
+  * Incidents DetailModal rewritten: fetches analysis, overlays face/plate boxes on the photo
+    (% positioning), plate box TAPPABLE → inline edit → PATCH; "Blur faces" toggle (CSS backdropFilter
+    blur); distance row + plate-scale cross-check row (green ✓ matches / red ⚠ differs N%); face count chip.
+  * Admin "📷 Camera AI & plate-scale calibration" card: 4 flag toggles (ar_distance/face/plate/
+    plate_scale), ref-width + k inputs + Save, and "Calibrate from a report" dropdown (candidates) → calibrate.
+  * i18n ps_*/an_* keys ×3 langs (webdash D dict).
+- MOBILE (`incident/[id].tsx`): plate-scale cross-check line under the distance row
+  (incident.plateScaleLabel + ✓ / ⚠ Δ%). IncidentAnalysis type gained plate_scale.
+- TESTS: tests/test_step5_plate_scale.py (9) — estimate/consistency/disabled, calibrate_k roundtrip,
+  analysis returns plate_scale, settings expose fields, calibrate-from-incident (k=1.8), candidates list,
+  manual calibrate + 400 validation, worker 403. FULL SUITE 362 passed, 2 skipped. Webdash tsc (my files
+  clean; pre-existing Presence.tsx warnings only) + vite build OK. Lint clean. i18n parity 622 each.
+- LIVE VERIFIED (dashboard, demo CGM): plate box "MH12AB1234 ✎" + face box render; blur toggle →
+  backdrop-blurred face; Distance "4.2 m ±0.2 · lidar"; "Plate-scale check: ~1.4 m ⚠ differs from AR
+  (67.6%)"; Admin card + candidate dropdown populated. (Mismatch expected — synthetic test plate is huge;
+  real plates calibrate to consistent.)
+
+### Camera AI feature (Steps 1–5) — DELIVERY COMPLETE. All 5 steps done + reviewed/verified.
+  Remaining real-device-only validation: on-device AR distance capture + native Share (need APK/IPA build).
+
