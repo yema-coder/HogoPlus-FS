@@ -134,6 +134,51 @@ async def _run_db_migrations() -> None:
         logger.error("DB migrations could not run: %s", e)
 
 
+async def _log_migration_status_disabled() -> None:
+    """DISABLE_AUTO_MIGRATE path: make ZERO schema changes. Read the DB's current
+    Alembic revision + the code's head, log ONE clear line, and WARN (never crash,
+    never migrate) when the DB is behind so an operator applies migrations manually."""
+    backend_dir = Path(__file__).resolve().parent.parent
+    db_rev = None
+    head_rev = None
+    try:
+        from sqlalchemy import text as sqltext
+
+        from app.database import engine
+
+        async with engine.connect() as conn:
+            db_rev = (
+                await conn.execute(sqltext("SELECT version_num FROM alembic_version"))
+            ).scalar()
+    except Exception as e:  # table missing (unmigrated DB) or DB unreachable
+        logger.warning(
+            "auto-migrate disabled — could not read alembic_version (%s); DB may be unmigrated", e
+        )
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+
+        cfg = Config()
+        cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+        head_rev = ScriptDirectory.from_config(cfg).get_current_head()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("auto-migrate disabled — could not resolve code head revision (%s)", e)
+
+    logger.info(
+        "auto-migrate disabled, current revision = %s (code head = %s)",
+        db_rev or "none",
+        head_rev or "unknown",
+    )
+    if db_rev and head_rev and db_rev != head_rev:
+        logger.warning(
+            "DB revision %s is BEHIND code head %s — schema migrations are PENDING and "
+            "auto-migrate is disabled. Apply them manually on the host: "
+            "`alembic upgrade head`. Requests touching new columns/tables will fail until then.",
+            db_rev,
+            head_rev,
+        )
+
+
 @app.on_event("startup")
 async def _startup():
     # Build/config guard: fail fast if any env value still contains an unfilled
@@ -229,13 +274,16 @@ async def _startup():
         from app.redis_client import redis_write_probe
 
         await redis_write_probe()
-    # Apply pending Alembic migrations BEFORE touching the schema so a freshly
-    # provisioned or stale managed DB is brought to head on deploy (prevents the
-    # production UndefinedColumnError seen when the DB lagged behind the code).
-    if not os.environ.get("TESTING") and os.environ.get(
-        "DISABLE_AUTO_MIGRATE", ""
-    ).strip().lower() not in ("1", "true", "yes"):
-        await _run_db_migrations()
+    # Schema migrations. DISABLE_AUTO_MIGRATE=true (REQUIRED in production) means
+    # ZERO automatic schema changes — we only read + log the current revision and
+    # warn if the DB is behind. Otherwise bring a freshly-provisioned or stale
+    # managed DB to head (prevents the production UndefinedColumnError seen when the
+    # DB lagged behind the code).
+    if not os.environ.get("TESTING"):
+        if os.environ.get("DISABLE_AUTO_MIGRATE", "").strip().lower() in ("1", "true", "yes"):
+            await _log_migration_status_disabled()
+        else:
+            await _run_db_migrations()
     # DB integrity check: pod recycles have wiped PostgreSQL before. Never auto-restore.
     try:
         from sqlalchemy import text as sqltext

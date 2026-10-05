@@ -154,7 +154,15 @@
     "editPlateTitle": "Edit number plate",
     "plateRequired": "Enter the plate number",
     "plateUpdated": "Number plate updated",
-    "plateScaleLabel": "Plate-scale check: ~{{d}}"
+    "plateScaleLabel": "Plate-scale check: ~{{d}}",
+    "peopleDetected": "People detected",
+    "numberPlates": "Number plates",
+    "tapPhotoDetections": "Tap the photo to see detections",
+    "labelStatus": "Status",
+    "labelSeverity": "Severity",
+    "labelDistance": "Distance",
+    "labelCaptured": "Captured",
+    "plateEdited": "Edited"
   },
   "status": {
     "submitted": "Sent",
@@ -715,6 +723,32 @@
       "too_close": "Too close",
       "too_far": "Too far to measure",
       "tracking_lost": "Move the phone slowly side to side"
+    },
+    "hud": {
+      "title": "AR debug",
+      "tier": "Tier",
+      "tracking": "Tracking",
+      "samples": "Samples",
+      "spread": "Spread",
+      "confidence": "Confidence",
+      "calibrate": "Calibrate",
+      "calibrated": "Calibrated ×{{s}}",
+      "reproj": "Reproj ✕ (sampled pt)"
+    },
+    "calib": {
+      "title": "AR calibration",
+      "intro": "Aim at an object at a known distance, type the tape-measured distance, then record a few samples.",
+      "trueDistance": "Measured distance (m)",
+      "record": "Record sample",
+      "scale": "Scale",
+      "save": "Save calibration",
+      "reset": "Reset",
+      "saved": "Calibration saved",
+      "needReading": "Wait for a steady reading first",
+      "needTruth": "Enter the measured distance",
+      "adminOnly": "Admins only",
+      "current": "Live reading",
+      "none": "No calibration (×1.000)"
     }
   }
 }

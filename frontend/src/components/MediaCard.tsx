@@ -77,19 +77,22 @@ interface Props {
   kind?: "photo" | "video";
   height?: number;
   testID?: string;
+  /** When provided, tapping the card calls this instead of opening the built-in
+   * viewer (e.g. to open a boxes-overlay viewer). */
+  onPress?: () => void;
 }
 
 /**
  * Branded media card: 14px radius, 2px brand-blue border, soft shadow, expand
  * affordance + "HogoPlus" eye badge (UI-only). Tap opens the full-screen viewer.
  */
-export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-card" }: Props) {
+export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-card", onPress }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={() => (onPress ? onPress() : setOpen(true))}
         style={({ pressed }) => [styles.card, { opacity: pressed ? 0.9 : 1 }]}
         testID={testID}
         accessibilityRole="imagebutton"
@@ -112,7 +115,9 @@ export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-c
           <Text style={styles.brandText}>HogoPlus</Text>
         </View>
       </Pressable>
-      <MediaViewerModal uri={open ? uri : null} kind={kind} onClose={() => setOpen(false)} />
+      {onPress ? null : (
+        <MediaViewerModal uri={open ? uri : null} kind={kind} onClose={() => setOpen(false)} />
+      )}
     </>
   );
 }

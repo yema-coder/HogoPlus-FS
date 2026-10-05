@@ -97,7 +97,12 @@ public final class ExpoArDistanceView: ExpoView, ARSessionDelegate {
     lastMethod = method
 
     let now = ProcessInfo.processInfo.systemUptime
-    if let d = raw, d.isFinite, d > 0 {
+    // native window feeds ONLY the still-capture metadata (a stable value burned
+    // with the photo). The live stream emits the RAW per-frame reading so the JS
+    // filter (distanceFilter.ts) owns the rolling window + MAD + median + the real
+    // ± uncertainty, and can suppress noisy readings. (A2)
+    let emitVal: Double? = (raw != nil && raw!.isFinite && raw! > 0) ? raw : nil
+    if let d = emitVal {
       window.append((d, now))
     }
     window.removeAll { now - $0.t > windowSec }
@@ -106,18 +111,23 @@ public final class ExpoArDistanceView: ExpoView, ARSessionDelegate {
     lastEmit = now
 
     let values = window.map { $0.v }
-    let med = robustMedian(values)
     let spread = values.count >= 2 ? stddev(values) : 0
     ARDistanceHub.shared.emitDistance([
-      "distanceM": med as Any,
-      "method": med == nil ? "none" : method,
+      "distanceM": emitVal as Any,
+      "method": emitVal == nil ? "none" : method,
       "trackingState": trackingString(frame.camera.trackingState),
       "spreadM": spread,
       "sampleCount": values.count,
       "torchOn": torchAuto,
-      "hint": hint(frame: frame, method: method, value: med) as Any,
+      "hint": hint(frame: frame, method: method, value: emitVal) as Any,
       "targetX": target.x,
       "targetY": target.y,
+      // debug reprojection dot (admin HUD). On ARKit the view↔image mapping is an
+      // exact affine (displayTransform), so the sampled point reprojects to the tap
+      // by construction — the dot sits on the crosshair. The meaningful visual
+      // tap-mapping test is Android (ARCore Depth); here it confirms no drift.
+      "projX": target.x,
+      "projY": target.y,
     ])
   }
 
@@ -132,8 +142,15 @@ public final class ExpoArDistanceView: ExpoView, ARSessionDelegate {
     let w = CVPixelBufferGetWidth(map), h = CVPixelBufferGetHeight(map)
     guard let base = CVPixelBufferGetBaseAddress(map) else { return nil }
     let rowBytes = CVPixelBufferGetBytesPerRow(map)
-    // depth map is rotated vs image; map normalized target → depth coords
-    let dx = Int(target.x * CGFloat(w)), dy = Int(target.y * CGFloat(h))
+    // The LiDAR depthMap is in the camera's native (landscape) orientation, while
+    // the preview is portrait. Map the portrait view-normalized target → normalized
+    // image coords via the INVERSE display transform (handles rotation + aspect-fill
+    // crop), then to depth-map pixels. Outside [0,1] ⇒ no valid depth. (A1)
+    let viewSize = bounds.size == .zero ? CGSize(width: 390, height: 844) : bounds.size
+    let dt = frame.displayTransform(for: .portrait, viewportSize: viewSize)
+    let imagePt = CGPoint(x: target.x, y: target.y).applying(dt.inverted())
+    if imagePt.x < 0 || imagePt.x > 1 || imagePt.y < 0 || imagePt.y > 1 { return nil }
+    let dx = Int(imagePt.x * CGFloat(w)), dy = Int(imagePt.y * CGFloat(h))
     var samples: [Double] = []
     for oy in -2...2 {
       for ox in -2...2 {

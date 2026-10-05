@@ -154,7 +154,15 @@
     "editPlateTitle": "नंबर प्लेट संपादित करें",
     "plateRequired": "प्लेट नंबर दर्ज करें",
     "plateUpdated": "नंबर प्लेट अपडेट हुई",
-    "plateScaleLabel": "प्लेट-स्केल जाँच: ~{{d}}"
+    "plateScaleLabel": "प्लेट-स्केल जाँच: ~{{d}}",
+    "peopleDetected": "पहचाने गए लोग",
+    "numberPlates": "नंबर प्लेट",
+    "tapPhotoDetections": "पहचान देखने के लिए फ़ोटो टैप करें",
+    "labelStatus": "स्थिति",
+    "labelSeverity": "गंभीरता",
+    "labelDistance": "दूरी",
+    "labelCaptured": "लिया गया",
+    "plateEdited": "संपादित"
   },
   "status": {
     "submitted": "भेजा गया",
@@ -715,6 +723,32 @@
       "too_close": "बहुत पास",
       "too_far": "मापने के लिए बहुत दूर",
       "tracking_lost": "फ़ोन धीरे-धीरे अगल-बगल घुमाएँ"
+    },
+    "hud": {
+      "title": "AR डीबग",
+      "tier": "स्तर",
+      "tracking": "ट्रैकिंग",
+      "samples": "नमूने",
+      "spread": "फैलाव",
+      "confidence": "विश्वास",
+      "calibrate": "कैलिब्रेट",
+      "calibrated": "कैलिब्रेटेड ×{{s}}",
+      "reproj": "पुनःप्रक्षेप ✕ (नमूना बिंदु)"
+    },
+    "calib": {
+      "title": "AR कैलिब्रेशन",
+      "intro": "ज्ञात दूरी पर किसी वस्तु पर निशाना लगाएँ, टेप से मापी दूरी लिखें, फिर कुछ नमूने रिकॉर्ड करें।",
+      "trueDistance": "मापी गई दूरी (मी)",
+      "record": "नमूना रिकॉर्ड करें",
+      "scale": "स्केल",
+      "save": "कैलिब्रेशन सहेजें",
+      "reset": "रीसेट",
+      "saved": "कैलिब्रेशन सहेजा गया",
+      "needReading": "पहले स्थिर रीडिंग का इंतज़ार करें",
+      "needTruth": "मापी गई दूरी दर्ज करें",
+      "adminOnly": "केवल एडमिन",
+      "current": "लाइव रीडिंग",
+      "none": "कोई कैलिब्रेशन नहीं (×1.000)"
     }
   }
 }

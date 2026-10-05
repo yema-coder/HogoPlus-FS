@@ -44,6 +44,7 @@ how `vehicle_log_enabled` sat dark for days.
 
 | Toggle | Effect | Prod should be |
 |---|---|---|
+| `DISABLE_AUTO_MIGRATE` | `true` = app makes ZERO automatic schema changes on boot (logs `auto-migrate disabled, current revision = X (code head = Y)`, warns if behind, never migrates). Unset/false = legacy `alembic upgrade head` on boot | **true** (prod always; migrations applied manually — see DEPLOY_ORDER) |
 | `OTP_MODE` | demo / smsgatewayhub — unset = API refuses to start | smsgatewayhub |
 | `DEMO_OTP_ENABLED` | Fixed-OTP backdoor for whitelisted numbers | OFF (or whitelist-only, your standing config) |
 | `ALLOW_NEW_REGISTRATION` | Unknown numbers may self-register | ON |

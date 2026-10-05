@@ -54,6 +54,7 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
   private val windowMs = 450L
   private var lastEmit = 0L
   private var lastMethod = "none"
+  private var lastTracking = TrackingState.STOPPED
   private var tierSwitches = 0
   private var trackingResets = 0
   private var torchOn = false
@@ -170,43 +171,100 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
     if (method != lastMethod && lastMethod != "none" && method != "none") tierSwitches++
     lastMethod = method
 
+    // count every drop out of full tracking as a reset (HUD diagnostic)
+    val ts = cam.trackingState
+    if (ts != TrackingState.TRACKING && lastTracking == TrackingState.TRACKING) trackingResets++
+    lastTracking = ts
+
     val now = android.os.SystemClock.uptimeMillis()
-    if (raw != null && raw.isFinite() && raw > 0) window.add(Pair(raw, now))
+    // native window feeds ONLY the still-capture metadata (a stable value burned
+    // with the photo). The live stream emits the RAW per-frame reading so the JS
+    // filter (distanceFilter.ts) owns the rolling window + MAD + median + the real
+    // ± uncertainty, and can suppress noisy readings. (A2)
+    val emitVal = if (raw != null && raw.isFinite() && raw > 0) raw else null
+    if (emitVal != null) window.add(Pair(emitVal, now))
     window.removeAll { now - it.second > windowMs }
 
     if (now - lastEmit < 100) return
     lastEmit = now
-    val values = window.map { it.first }
-    val med = robustMedian(values)
-    val spread = if (values.size >= 2) stddev(values) else 0.0
+    // debug reprojection (admin HUD): back-project the EXACT point we sampled to
+    // VIEW-normalized so the overlay can draw a dot. On the depth tier this uses
+    // ARCore's own transform both ways — if the dot lands on the finger, the
+    // tap→depth mapping is correct (A1 verification). Other tiers follow the tap.
+    var projX = targetX
+    var projY = targetY
+    if (method == "depth") {
+      val tex = viewToTexture(frame, targetX, targetY)
+      if (tex != null) {
+        val back = textureToView(frame, tex.first, tex.second)
+        if (back != null) { projX = back.first; projY = back.second }
+      }
+    }
+    val wv = window.map { it.first }
     val payload = mapOf(
-      "distanceM" to med,
-      "method" to if (med == null) "none" else method,
-      "trackingState" to trackingString(cam.trackingState),
-      "spreadM" to spread,
-      "sampleCount" to values.size,
+      "distanceM" to emitVal,
+      "method" to if (emitVal == null) "none" else method,
+      "trackingState" to trackingString(ts),
+      "spreadM" to (if (wv.size >= 2) stddev(wv) else 0.0),
+      "sampleCount" to wv.size,
       "torchOn" to torchOn,
-      "hint" to hint(cam, med),
+      "hint" to hint(cam, emitVal),
       "targetX" to targetX,
       "targetY" to targetY,
+      "projX" to projX,
+      "projY" to projY,
     )
     main.post { Hub.emitDistance(payload) }
   }
 
-  /** Tier 1 — median of a 5×5 patch of the Depth API image (mm → m). */
+  /** Inverse of [viewToTexture]: map a camera/depth TEXTURE-normalized point back
+   * to VIEW-normalized (0..1 of the preview), for the debug reprojection dot. */
+  private fun textureToView(frame: Frame, u: Float, v: Float): Pair<Double, Double>? {
+    return try {
+      if (viewW <= 0f || viewH <= 0f) return null
+      val inArr = floatArrayOf(u, v)
+      val outArr = FloatArray(2)
+      frame.transformCoordinates2d(
+        com.google.ar.core.Coordinates2d.TEXTURE_NORMALIZED, inArr,
+        com.google.ar.core.Coordinates2d.VIEW, outArr,
+      )
+      Pair((outArr[0] / viewW).toDouble(), (outArr[1] / viewH).toDouble())
+    } catch (_: Throwable) { null }
+  }
+
+  /** Map a VIEW-normalized tap (0..1 of the preview) to the camera/depth texture's
+   * normalized coordinates, accounting for display rotation + the aspect-fill crop.
+   * Returns null when the tap falls outside the valid (cropped) depth area. (A1) */
+  private fun viewToTexture(frame: Frame, nx: Double, ny: Double): Pair<Float, Float>? {
+    return try {
+      val inArr = floatArrayOf((nx * viewW).toFloat(), (ny * viewH).toFloat())
+      val outArr = FloatArray(2)
+      frame.transformCoordinates2d(
+        com.google.ar.core.Coordinates2d.VIEW, inArr,
+        com.google.ar.core.Coordinates2d.TEXTURE_NORMALIZED, outArr,
+      )
+      val u = outArr[0]; val v = outArr[1]
+      if (u.isNaN() || v.isNaN() || u < 0f || u > 1f || v < 0f || v > 1f) null else Pair(u, v)
+    } catch (_: Throwable) { null }
+  }
+
+  /** Tier 1 — median of a 5×5 patch of the Depth API image (mm → m), sampled at the
+   * correctly-projected target pixel (A1). */
   private fun depthPatchMedian(frame: Frame): Double? {
+    val tex = viewToTexture(frame, targetX, targetY) ?: return null
     return try {
       frame.acquireDepthImage16Bits().use { img ->
         val w = img.width; val h = img.height
         val plane = img.planes[0]
         val buf = plane.buffer.order(ByteOrder.nativeOrder())
         val rowStride = plane.rowStride
-        val cx = (targetX * w).toInt(); val cy = (targetY * h).toInt()
+        val pxStride = if (plane.pixelStride > 0) plane.pixelStride else 2
+        val cx = (tex.first * w).toInt(); val cy = (tex.second * h).toInt()
         val samples = ArrayList<Double>()
         for (oy in -2..2) for (ox in -2..2) {
           val x = cx + ox; val y = cy + oy
           if (x < 0 || y < 0 || x >= w || y >= h) continue
-          val mm = (buf.getShort(y * rowStride + x * 2).toInt() and 0xFFFF)
+          val mm = (buf.getShort(y * rowStride + x * pxStride).toInt() and 0xFFFF)
           if (mm in 50..20000) samples.add(mm / 1000.0)
         }
         if (samples.isEmpty()) null else robustMedian(samples)
