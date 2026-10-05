@@ -34,6 +34,9 @@ export interface EmployeeProfile {
   /** true when this account lives in the demo bubble — used only to widen the
    * admin/dev AR debug HUD gate; real (non-demo) accounts omit/false. */
   is_demo?: boolean;
+  /** server-computed AR debug allowlist flag (settings.ar_debug_emp_ids). Lets a
+   * specific real account see the AR debug HUD/dot without an app rebuild. */
+  ar_debug?: boolean;
 }
 
 /** v1.0.20: pending registration enriched with the evidence an approver needs. */

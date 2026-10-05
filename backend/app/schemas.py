@@ -255,6 +255,7 @@ class SettingsPatchIn(BaseModel):
     plate_scale_enabled: bool | None = None
     plate_ref_width_m: float | None = Field(default=None, ge=0.1, le=2.0)
     plate_scale_k: float | None = Field(default=None, ge=0.1, le=5.0)
+    ar_debug_emp_ids: str | None = None
 
 
 class PlateScaleCalibrateIn(BaseModel):

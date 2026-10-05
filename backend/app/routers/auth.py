@@ -46,6 +46,7 @@ from app.schemas import (
 )
 from app.storage import get_storage
 from app.security import (
+    ar_debug_allowlisted,
     create_registration_token,
     create_token_pair,
     decode_token,
@@ -184,7 +185,7 @@ async def verify_otp(body: VerifyOtpIn, session: AsyncSession = Depends(get_sess
     await write_audit(session, employee.id, "auth.login", "employee", str(employee.id), {"phone": phone})
     await session.commit()
     tokens = create_token_pair(employee)
-    return {**tokens, "is_new": False, "employee": employee_profile(employee)}
+    return {**tokens, "is_new": False, "employee": await _own_profile(session, employee)}
 
 
 @router.post("/auth/register")
@@ -490,9 +491,21 @@ async def refresh(body: RefreshIn, session: AsyncSession = Depends(get_session))
     return create_token_pair(employee)
 
 
+async def _own_profile(session: AsyncSession, employee: Employee) -> dict:
+    """The caller's OWN profile incl. the server-computed `ar_debug` flag (AR debug
+    HUD allowlist). Used by login + /me + update_me so the app learns ar_debug with
+    no rebuild. Other employee_profile() callers (admin listings) default to False."""
+    s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+    raw = s.ar_debug_emp_ids if s else ""
+    return employee_profile(employee, ar_debug=ar_debug_allowlisted(employee, raw))
+
+
 @router.get("/auth/me")
-async def me(employee: Employee = Depends(get_current_employee)):
-    return employee_profile(employee)
+async def me(
+    employee: Employee = Depends(get_current_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    return await _own_profile(session, employee)
 
 
 @router.patch("/employees/me")
@@ -507,7 +520,7 @@ async def update_me(
         employee.expo_push_token = body.expo_push_token
     await session.commit()
     await session.refresh(employee)
-    return employee_profile(employee)
+    return await _own_profile(session, employee)
 
 
 @router.post("/employees/me/face-enroll")

@@ -99,10 +99,11 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
-  // AR debug HUD/dot: admins/dev AND anyone in the demo bubble (any rank). Real
-  // workers on real accounts never match → they never see it.
+  // AR debug HUD/dot: dev build, OR demo bubble (any rank), OR real admin (rank ≤ 2),
+  // OR a server-allowlisted account (settings.ar_debug_emp_ids — no rebuild needed).
+  // Real workers on real accounts match none of these → they never see it.
   const isDemo = profile?.is_demo === true;
-  const arDebug = __DEV__ || isDemo || rank <= 2;
+  const arDebug = __DEV__ || isDemo || rank <= 2 || profile?.ar_debug === true;
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 

@@ -1904,3 +1904,13 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
   tests + lint all green. Native not compilable in sandbox (device build required). Nothing else
   changed per user instruction.
 
+
+### Server-driven AR debug allowlist (fork round)
+- Migration 0024 adds settings.ar_debug_emp_ids (TEXT, default ""). security.ar_debug_allowlisted()
+  matches emp_id (exact) or phone (last-10 digits). employee_profile(ar_debug=) + new auth._own_profile
+  helper computes it for login (verify-otp) + /auth/me + update_me → EmployeeProfile.ar_debug.
+  admin PATCH /settings accepts ar_debug_emp_ids; _settings_out returns it. Client gate in
+  app/incident/capture.tsx: __DEV__ || is_demo || rank<=2 || profile.ar_debug. Seeded Amey
+  (0001/8483029039) via scripts/seed_ar_debug_allowlist.py (manual, idempotent). Matcher unit-
+  tested (5 cases pass); /me + verify-otp return ar_debug; tsc+lint clean. Kept the earlier
+  is_demo /me field + CGM/MD /incident/capture home tile. DEPLOY_ORDER_v1.0.26.md updated.

@@ -163,7 +163,30 @@ async def is_dept_manager(session: AsyncSession, employee: Employee, department_
     return False
 
 
-def employee_profile(employee: Employee) -> dict:
+def _digits(s: str) -> str:
+    return "".join(ch for ch in s if ch.isdigit())
+
+
+def ar_debug_allowlisted(employee: Employee, raw_ids: str | None) -> bool:
+    """True when this employee's emp_id (exact) or phone (last-10-digit match) is in
+    the server AR-debug allowlist (comma/newline separated). Empty ⇒ False. Widens
+    the on-device AR debug HUD gate WITHOUT a rebuild; real workers never match."""
+    if not raw_ids:
+        return False
+    tokens = [t.strip() for t in raw_ids.replace("\n", ",").split(",") if t.strip()]
+    if not tokens:
+        return False
+    phone_digits = _digits(employee.phone or "")
+    for tok in tokens:
+        if tok == employee.emp_id:
+            return True
+        td = _digits(tok)
+        if len(td) >= 10 and phone_digits and phone_digits.endswith(td[-10:]):
+            return True
+    return False
+
+
+def employee_profile(employee: Employee, ar_debug: bool = False) -> dict:
     dept = employee.department
     role = employee.role
     return {
@@ -200,5 +223,7 @@ def employee_profile(employee: Employee) -> dict:
         # drives the admin/dev-only AR debug HUD gate on the client: any account in
         # the demo bubble may see it regardless of rank; real workers never do.
         "is_demo": bool(employee.is_demo),
+        # server-computed: widens the AR debug HUD gate for allowlisted accounts.
+        "ar_debug": bool(ar_debug),
         "has_face_reference": bool(employee.reference_selfie_key),
     }
