@@ -37,3 +37,10 @@ test("the server allowlist lets a specific emp_id in regardless of rank", () => 
 test("a dev build always shows it", () => {
   assert.equal(evaluateArDebug({ rank: 6 }, false, true), true);
 });
+
+test("the demo bubble widens the real gate (upstream rule, preserved)", () => {
+  const gate = (ctx: Parameters<typeof evaluateArDebug>[0]) => evaluateArDebug(ctx, false, false);
+  assert.equal(gate({ rank: 6, isDemo: true }), true); // demo worker
+  assert.equal(gate({ rank: 6, isDemo: false }), false); // real worker
+  assert.equal(gate({ rank: 6 }), false);
+});

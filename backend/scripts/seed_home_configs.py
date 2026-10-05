@@ -91,6 +91,9 @@ MGMT_HOME = {
         {
             "type": "action_grid",
             "items": [
+                {"icon": "AlertTriangle", "route": "/incident/capture", "color": "#B3261E",
+                 "testID": "w-mgmt-incident",
+                 "label": {"en": "Report incident", "hi": "शिकायत दर्ज करें", "mr": "तक्रार नोंदवा"}},
                 {"icon": "Megaphone", "route": "/announce",
                  "label": {"en": "Announce", "hi": "घोषणा", "mr": "घोषणा"}},
                 {"icon": "Building2", "route": "/(tabs)/department",

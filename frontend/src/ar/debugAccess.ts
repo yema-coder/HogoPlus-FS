@@ -21,6 +21,8 @@ export interface ArDebugContext {
   empId?: string | null;
   /** emp_ids the server says may use AR debug (settings.ar_debug_emp_ids) */
   allowlist?: string[] | null;
+  /** account lives in the sealed demo bubble — real workers never match */
+  isDemo?: boolean | null;
 }
 
 function isDev(): boolean {
@@ -37,7 +39,8 @@ export function evaluateArDebug(
 ): boolean {
   if (forEveryone) return true;
   if (dev) return true;
-  const { rank, empId, allowlist } = ctx;
+  const { rank, empId, allowlist, isDemo } = ctx;
+  if (isDemo) return true; // demo bubble: any rank, real workers never match
   if (empId && allowlist?.length) {
     const wanted = empId.trim().toUpperCase();
     if (allowlist.some((id) => String(id).trim().toUpperCase() === wanted)) return true;

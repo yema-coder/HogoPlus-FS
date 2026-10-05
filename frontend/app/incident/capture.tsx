@@ -100,6 +100,11 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
+  // AR debug HUD/dot. For THIS test build everyone sees it (the owner's own
+  // account is rank 3); the real gate — dev, demo bubble, rank <= 2 or the
+  // server allowlist — is intact behind AR_DEBUG_FOR_EVERYONE in src/ar/debugAccess.
+  const isDemo = profile?.is_demo === true;
+  const arDebug = isArDebugEnabled({ rank, empId: profile?.emp_id, isDemo });
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 
@@ -505,7 +510,7 @@ function IncidentCaptureInner() {
             caps={arCaps}
             target={target}
             torchOn={torch}
-            debug={isArDebugEnabled({ rank, empId: profile?.emp_id })}
+            debug={arDebug}
             onCalibrate={() => router.push("/ar-calibration")}
             onTapMeasure={(x, y) => {
               setTarget({ x, y });

@@ -197,5 +197,8 @@ def employee_profile(employee: Employee) -> dict:
         "onboarding_status": employee.onboarding_status,
         "selfie_url": employee.selfie_url,
         "is_active": employee.is_active,
+        # drives the admin/dev-only AR debug HUD gate on the client: any account in
+        # the demo bubble may see it regardless of rank; real workers never do.
+        "is_demo": bool(employee.is_demo),
         "has_face_reference": bool(employee.reference_selfie_key),
     }

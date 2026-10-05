@@ -93,8 +93,13 @@ already handle display rotation and the aspect-fill crop, and both expect a
   showed nothing. It is now dropped (the diagnostics are kept).
 - **Debug dot + HUD visible to everyone** (`src/ar/debugAccess.ts`): your own
   account is `0001 / Manager / rank 3`, which the old `rank <= 2` gate locked
-  out. The rank and server-allowlist logic is intact behind one constant —
-  set `AR_DEBUG_FOR_EVERYONE = false` to restore the real gate.
+  out. The rank, demo-bubble and server-allowlist logic is intact behind one
+  constant — set `AR_DEBUG_FOR_EVERYONE = false` to restore the real gate.
+  While I worked, the code agent pushed its own fix for this (widening the gate
+  to the demo bubble via a new `is_demo` field on the profile). I merged it and
+  folded its rule into the same helper, but note **its approach needs a backend
+  deploy** to put `is_demo` in the profile payload — mine does not, so your test
+  tomorrow works on the server exactly as it stands.
 - **HUD additions**: the tap fraction actually sent to native, and whether the
   window has converged.
 - **`ExpoArDistanceView.kt`**: passes the real display rotation to
@@ -201,9 +206,14 @@ any role change, and the AR calibration screen opens from it.
   and plate detection are local ONNX and unaffected, but AI classification,
   voice-to-text reporting and read-aloud are dead until a real key is set.
 - The plate normalisation improvement needs a backend deploy to take effect.
-- `webdash/package-lock.json` is still not committed although the Dockerfile
-  needs it; builds work only because an untracked copy sits on the EC2 box.
-- The repo's `docker-compose.yml` still has redis commented out. Production is
-  covered by an untracked override file I added; a fresh clone is not.
+- ~~`webdash/package-lock.json` is not committed.~~ Fixed upstream overnight
+  (`e0a0706`) — it is tracked now, so a fresh clone builds.
+- ~~The repo's `docker-compose.yml` still has redis commented out.~~ Fixed
+  upstream overnight (`81b7a0b`) — redis is now a tracked service. My untracked
+  override on the box still wins; harmless, but it can be deleted after the next
+  deploy so the tracked definition takes over.
 - Sahayak answers "not found" because 0 SOP documents are loaded.
 - Your account `0001` is Manager/rank 3 in the live DB while the PRD says CGM.
+- `scripts/seed_home_configs.py` now also adds `/incident/capture` to the CGM and
+  MD home configs (`26bb4f1`). I already made that change live for CGM by hand;
+  running the seed script after a deploy would additionally cover MD.
