@@ -75,6 +75,18 @@ async def _presence_alerts():
     return await _presence_alerts_sweep_async()
 
 
+async def _broadcast_schedule():
+    from app.routers.broadcasts import run_broadcast_schedule_sweep
+
+    return await run_broadcast_schedule_sweep()
+
+
+async def _broadcast_receipts():
+    from app.routers.broadcasts import run_broadcast_receipt_sweep
+
+    return await run_broadcast_receipt_sweep()
+
+
 async def _backup():
     from starlette.concurrency import run_in_threadpool
 
@@ -99,6 +111,8 @@ JOBS = [
     ("ai_suggestion_timeout_sweep", {"minute": "*/5"}, 4 * 60, _ai_timeout),
     ("punchout_reminder_sweep", {"minute": "*/15"}, 12 * 60, _punchout),
     ("presence_alerts_sweep", {"minute": "*"}, 50, _presence_alerts),
+    ("broadcast_schedule_sweep", {"minute": "*"}, 50, _broadcast_schedule),
+    ("broadcast_receipt_sweep", {"minute": "*/5"}, 4 * 60, _broadcast_receipts),
     ("demo_cleanup_sweep", {"minute": "7,22,37,52"}, 12 * 60, _demo_cleanup),
     ("vehicle_overstay_sweep", {"minute": "12"}, 50 * 60, _vehicle_overstay),
     ("nightly_backup", {"hour": "3,7,11,15,19,23", "minute": "0"}, 210 * 60, _backup),

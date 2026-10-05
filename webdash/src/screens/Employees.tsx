@@ -13,6 +13,8 @@ const CORE_TITLES = [
   "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
   "Driver", "Manager", "Supervisor",
 ];
+type RoleOpt = { code: string; rank: number; label_en: string; label_hi: string; label_mr: string; assignable: boolean };
+const roleLabel = (r: RoleOpt, lang: string) => (r as any)[`label_${lang}`] || r.label_en;
 
 /** +91XXXXXXXXXX — the exact format the login flow matches on (employee-0061 lesson). */
 const normPhone = (raw: string): string | null => {
@@ -56,11 +58,13 @@ function Editor({ emp, depts, onClose, onSaved }: {
   const [history, setHistory] = useState<any[] | null>(null);
   const [desigList, setDesigList] = useState<string[]>([]);
   const [desigCustom, setDesigCustom] = useState(false);
+  const [roles, setRoles] = useState<RoleOpt[]>([]);
 
   const set = (k: keyof Draft, v: string) => setDraft((d) => ({ ...d, [k]: v }));
 
   useEffect(() => {
     api("/admin/designations").then((r) => setDesigList(r.designations)).catch(() => {});
+    api("/admin/roles").then((r) => setRoles((r.roles || []).filter((x: RoleOpt) => x.assignable))).catch(() => {});
   }, []);
 
   // Merge server titles + core list so the "Role" dropdown is never empty.
@@ -92,9 +96,11 @@ function Editor({ emp, depts, onClose, onSaved }: {
       out.push({ field: t("empId"), old: emp.emp_id, next: eid, payloadKey: "emp_id", payloadValue: eid });
     if (draft.department_code && draft.department_code !== (emp.department_code ?? ""))
       out.push({ field: t("department"), old: emp.department_code ?? "—", next: draft.department_code, payloadKey: "department_code", payloadValue: draft.department_code });
+    if (draft.role_code && draft.role_code !== emp.role_code)
+      out.push({ field: t("emps_access_role"), old: emp.role_code, next: draft.role_code, payloadKey: "role_code", payloadValue: draft.role_code });
     const desig = draft.designation.trim();
     if (desig && desig !== (emp.designation ?? ""))
-      out.push({ field: t("emps_role"), old: emp.designation ?? "—", next: desig, payloadKey: "designation", payloadValue: desig });
+      out.push({ field: t("emps_designation"), old: emp.designation ?? "—", next: desig, payloadKey: "designation", payloadValue: desig });
     return out;
   }, [draft, emp, phoneBad, empIdBad, phoneNorm, t]);
 
@@ -168,9 +174,20 @@ function Editor({ emp, depts, onClose, onSaved }: {
               </div>
             </div>
 
-            <div style={label}>{t("emps_role")}</div>
+            <div style={label}>{t("emps_access_role")}</div>
             <select
               data-testid="emp-role-select"
+              style={inputStyle}
+              value={draft.role_code}
+              onChange={(e) => set("role_code", e.target.value)}
+            >
+              {roles.length === 0 && <option value={draft.role_code}>{draft.role_code}</option>}
+              {roles.map((r) => <option key={r.code} value={r.code}>{roleLabel(r, lang)}</option>)}
+            </select>
+
+            <div style={label}>{t("emps_designation")}</div>
+            <select
+              data-testid="emp-desig-select"
               style={inputStyle}
               value={desigCustom ? "__custom__" : draft.designation}
               onChange={(e) => {
@@ -179,7 +196,7 @@ function Editor({ emp, depts, onClose, onSaved }: {
                 else { setDesigCustom(false); set("designation", v); }
               }}
             >
-              <option value="">— {t("emps_role")} —</option>
+              <option value="">— {t("emps_designation")} —</option>
               {(draft.designation && !titleOptions.includes(draft.designation)) && (
                 <option value={draft.designation}>{draft.designation}</option>
               )}
@@ -187,7 +204,7 @@ function Editor({ emp, depts, onClose, onSaved }: {
               <option value="__custom__">➕ {t("wiz_desig_other")}</option>
             </select>
             {desigCustom && (
-              <input data-testid="emp-role-custom" style={{ ...inputStyle, marginTop: 8 }} value={draft.designation} autoFocus
+              <input data-testid="emp-desig-custom" style={{ ...inputStyle, marginTop: 8 }} value={draft.designation} autoFocus
                 placeholder={t("wiz_desig_hint")} onChange={(e) => set("designation", e.target.value)} />
             )}
 
@@ -354,7 +371,7 @@ export default function Employees() {
               <thead>
                 <tr>
                   <th>{t("empId")}</th><th>{t("name")}</th><th>{t("department")}</th>
-                  <th>{t("emps_role")}</th><th>{t("emps_phone")}</th><th>{t("emps_status")}</th>
+                  <th>{t("emps_designation")}</th><th>{t("emps_role")}</th><th>{t("emps_phone")}</th><th>{t("emps_status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -369,7 +386,8 @@ export default function Employees() {
                     <td style={{ fontWeight: 700 }}>{e.emp_id}</td>
                     <td>{e.full_name}</td>
                     <td>{e.department_code ?? "—"}</td>
-                    <td>{e.designation ?? e.role_code}</td>
+                    <td>{e.designation || "—"}</td>
+                    <td>{e.role_code}</td>
                     <td>{e.phone ?? "—"}</td>
                     <td><StatusChip e={e} /></td>
                   </tr>

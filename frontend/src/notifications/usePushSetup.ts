@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { AppState, Platform } from "react-native";
 
-import { patchMe } from "@/src/api/endpoints";
+import { markBroadcastOpened, patchMe } from "@/src/api/endpoints";
 import { useAuthStore } from "@/src/stores/authStore";
 import { storage } from "@/src/utils/storage";
 
@@ -46,6 +46,8 @@ export function usePushSetup(): void {
     return addNotificationTapListener((data) => {
       const type = String(data?.entity_type ?? "");
       const id = data?.entity_id ? String(data.entity_id) : "";
+      const broadcastId = data?.broadcast_id ? String(data.broadcast_id) : "";
+      if (broadcastId) void markBroadcastOpened(broadcastId).catch(() => undefined);
       if (String(data?.type ?? "") === "punchout_reminder") router.push("/attendance/punch");
       else if (type === "incident" && id) router.push(`/incident/${id}`);
       else if (type === "form_submission" && id) router.push(`/submission/${id}`);

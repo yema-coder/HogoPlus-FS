@@ -10,7 +10,9 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTranslation } from "react-i18next";
 
-import { adminDesignations, listDepartments } from "@/src/api/endpoints";
+import { adminDesignations, adminRoles } from "@/src/api/endpoints";
+import type { AssignableRole } from "@/src/api/endpoints";
+import { listDepartments } from "@/src/api/endpoints";
 import type { DepartmentItem } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { tri } from "@/src/i18n";
@@ -18,20 +20,14 @@ import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens"
 
 const SHIFTS = ["GEN", "A", "B", "C"];
 const PHONE_REGEX = /^\+91[6-9]\d{9}$/;
-// Core job titles always offered in the Role picker, even before the server list loads.
+// Common job titles always offered in the Designation picker, even before the
+// server list loads. These are DISPLAY-ONLY titles — they NEVER change the
+// permission role (which is chosen independently via the Access role picker).
 const CORE_TITLES = [
   "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
   "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
   "Driver", "Manager", "Supervisor",
 ];
-// Derive the login/permission role from the chosen job title (only used when
-// CREATING). Everyone defaults to Worker; an explicit Manager/Clerk title lifts it.
-const roleFromTitle = (title: string): string => {
-  const d = title.trim().toLowerCase();
-  if (/\bmanager\b/.test(d)) return "Manager";
-  if (/\bclerk\b/.test(d)) return "Clerk";
-  return "Worker";
-};
 export interface EmployeeFormValues {
   full_name: string;
   phone: string;
@@ -61,6 +57,7 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
 
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [desigList, setDesigList] = useState<string[]>([]);
+  const [roles, setRoles] = useState<AssignableRole[]>([]);
   const [values, setValues] = useState<EmployeeFormValues>({
     full_name: initial.full_name ?? "",
     phone: initial.phone ?? "+91",
@@ -84,6 +81,9 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
     void listDepartments().then(setDepartments).catch(() => undefined);
     void adminDesignations()
       .then((r) => setDesigList(r.designations))
+      .catch(() => undefined);
+    void adminRoles()
+      .then((r) => setRoles(r.roles.filter((x) => x.assignable)))
       .catch(() => undefined);
   }, []);
 
@@ -180,7 +180,23 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
           ))}
         </View>
 
-        <Text style={styles.label}>{t("emp.role")}</Text>
+        <Text style={styles.label}>{t("emp.accessRole")}</Text>
+        <View style={styles.chipsWrap}>
+          {roles.map((r) => (
+            <Pressable
+              key={r.code}
+              testID={`emp-role-${r.code}`}
+              onPress={() => set("role_code", r.code)}
+              style={[styles.chip, values.role_code === r.code && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, values.role_code === r.code && styles.chipTextActive]}>
+                {tri(r as unknown as Record<string, unknown>, "label")}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.label}>{t("emp.designation")}</Text>
         <TextInput
           testID="emp-desig-input"
           style={styles.input}
@@ -242,7 +258,6 @@ export function EmployeeForm({ mode, initial, submitLabel, submitting, onSubmit 
           onPress={() =>
             onSubmit({
               ...values,
-              role_code: mode === "edit" ? values.role_code : roleFromTitle(values.designation),
               phone: values.phone.trim(),
             })
           }

@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
-import { AuthProvider, canUseDashboard, isTopMgmt, useAuth } from "./auth";
+import { AuthProvider, canBroadcast, canUseDashboard, isTopMgmt, useAuth } from "./auth";
 import { LangSwitcher, Loading } from "./components";
 import eyeBase from "./eye-base.png";
 import { LangProvider, useI18n } from "./i18n";
 import Admin from "./screens/Admin";
 import Approvals from "./screens/Approvals";
 import Attendance from "./screens/Attendance";
+import Broadcast from "./screens/Broadcast";
 import Department from "./screens/Department";
 import Employees from "./screens/Employees";
 import Incidents from "./screens/Incidents";
@@ -137,6 +138,7 @@ function Layout() {
         <NavLink to="/approvals">✅ {t("nav_approvals")}</NavLink>
         <NavLink to="/reports">📊 {t("nav_reports")}</NavLink>
         <NavLink to="/vehicles">🚚 {t("nav_vehicles")}</NavLink>
+        {canBroadcast(user) && <NavLink to="/broadcast" data-testid="nav-broadcast">🔔 {t("nav_broadcast")}</NavLink>}
         {isTopMgmt(user) && <NavLink to="/employees">👥 {t("nav_employees")}</NavLink>}
         {isTopMgmt(user) && <NavLink to="/admin">⚙️ {t("nav_admin")}</NavLink>}
         <details className="nav-more">
@@ -202,6 +204,7 @@ export default function App() {
               <Route path="/attendance" element={<Attendance />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/vehicles" element={<Vehicles />} />
+              <Route path="/broadcast" element={<Broadcast />} />
               <Route path="/employees" element={<Employees />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="*" element={<Navigate to="/" replace />} />

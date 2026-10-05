@@ -1497,3 +1497,16 @@ locked/background.
 - Bumped version 1.0.26→1.0.27, android versionCode 10026→10027 — a NEW Android build is required to get
   these mobile changes onto devices/Play (webdash changes are live after republish).
 - Demo data: set D103 designation to 'Fieldman' during verification (harmless).
+
+## 2026-10-05 fork — Broadcast live-send verification (dashboard → mobile)
+- VERIFIED the Broadcast/Send-Notification engine end-to-end. settings.broadcasts_enabled flipped
+  ON (sandbox) — real sends/schedules now work (test-to-me + preview always worked regardless).
+- Live push PROVEN to a real device: only emp 0001 (+918483029039) has a registered Expo push
+  token. Sent a real broadcast from CGM 0428 (Pathan Irfan Husen) → audience employees=[0001].
+  Result: recipient_count=1, installed_count=1, sent_count=1, 0 failed. Expo getReceipts returned
+  {'status':'ok'} for ticket 01a10aec-... → push accepted + forwarded to FCM/APNs. Broadcast id
+  1ee7b8b7-e0ab-484b-bc96-c3fe583ce902.
+- ⚠️ SANDBOX DATA ANOMALY (flag for user): emp 0001 in the sandbox DB is now role=Manager (rank 3),
+  dept ENGINEERING, designation "Evaporator Operator" — NOT CGM. Almost certainly a leftover
+  mutation from the previous role/designation QA. Production (Neon) 0001 likely still CGM. If the
+  user's phone (pointed at the preview backend) should show CGM, restore 0001 to CGM/ADMIN.

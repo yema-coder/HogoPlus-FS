@@ -4,20 +4,16 @@ import { api } from "../api";
 import { localName, useI18n } from "../i18n";
 
 const EMP_ID_RE = /^[A-Za-z0-9]{1,20}$/;
-// Core job titles we always want offered even before the server list loads.
+// Common job titles we always want offered even before the server list loads.
+// DISPLAY-ONLY designations — they NEVER change the permission role.
 const CORE_TITLES = [
   "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
   "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
   "Driver", "Manager", "Supervisor",
 ];
-// Derive the login/permission role from the chosen job title. Everyone defaults
-// to Worker; only an explicit "Manager"/"Clerk" title lifts the access level.
-const roleFromTitle = (title: string): string => {
-  const d = title.trim().toLowerCase();
-  if (/\bmanager\b/.test(d)) return "Manager";
-  if (/\bclerk\b/.test(d)) return "Clerk";
-  return "Worker";
-};
+type RoleOpt = { code: string; rank: number; label_en: string; label_hi: string; label_mr: string; assignable: boolean };
+const roleLabel = (r: RoleOpt, lang: string) =>
+  (r as any)[`label_${lang}`] || r.label_en;
 const normPhone = (raw: string): string | null => {
   const d = raw.replace(/\D/g, "");
   const ten =
@@ -41,6 +37,8 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
   const [desig, setDesig] = useState("");
   const [desigCustom, setDesigCustom] = useState(false);
   const [desigList, setDesigList] = useState<string[]>([]);
+  const [roles, setRoles] = useState<RoleOpt[]>([]);
+  const [roleCode, setRoleCode] = useState("Worker");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -48,6 +46,7 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
   useEffect(() => {
     api("/admin/emp-id-suggest").then((r) => setEmpId((v) => v || r.suggested_emp_id)).catch(() => {});
     api("/admin/designations").then((r) => setDesigList(r.designations)).catch(() => {});
+    api("/admin/roles").then((r) => setRoles((r.roles || []).filter((x: RoleOpt) => x.assignable))).catch(() => {});
   }, []);
 
   // Merge server titles with the core list so the dropdown is never empty.
@@ -64,7 +63,7 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
   const stepValid = [
     name.trim().length >= 2,
     EMP_ID_RE.test(empId.trim()),
-    dept !== "" && desig.trim() !== "",
+    dept !== "" && roleCode !== "" && desig.trim() !== "",
     phoneNorm !== null,
     true,
   ][step];
@@ -100,7 +99,7 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
         method: "POST",
         body: JSON.stringify({
           full_name: name.trim(), emp_id: empId.trim(), department_code: dept,
-          role_code: roleFromTitle(desig), phone: phoneNorm,
+          role_code: roleCode, phone: phoneNorm,
           ...(desig.trim() ? { designation: desig.trim() } : {}),
         }),
       });
@@ -157,9 +156,13 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
               <option value="">—</option>
               {depts.map((d) => <option key={d.code} value={d.code}>{localName(d, lang)}</option>)}
             </select>
-            <div style={label}>{t("emps_role")}</div>
+            <div style={label}>{t("emps_access_role")}</div>
+            <select data-testid="wiz-role" style={inputStyle} value={roleCode} onChange={(e) => setRoleCode(e.target.value)}>
+              {roles.map((r) => <option key={r.code} value={r.code}>{roleLabel(r, lang)}</option>)}
+            </select>
+            <div style={label}>{t("emps_designation")}</div>
             <select
-              data-testid="wiz-role"
+              data-testid="wiz-desig"
               style={inputStyle}
               value={desigCustom ? "__custom__" : desig}
               onChange={(e) => {
@@ -168,12 +171,12 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
                 else { setDesigCustom(false); setDesig(v); }
               }}
             >
-              <option value="">— {t("emps_role")} —</option>
+              <option value="">— {t("emps_designation")} —</option>
               {titleOptions.map((d) => <option key={d} value={d}>{d}</option>)}
               <option value="__custom__">➕ {t("wiz_desig_other")}</option>
             </select>
             {desigCustom && (
-              <input data-testid="wiz-role-custom" style={{ ...inputStyle, marginTop: 8 }} value={desig} autoFocus
+              <input data-testid="wiz-desig-custom" style={{ ...inputStyle, marginTop: 8 }} value={desig} autoFocus
                 placeholder={t("wiz_desig_hint")} onChange={(e) => setDesig(e.target.value)} />
             )}
           </>
@@ -194,7 +197,8 @@ export default function AddEmployeeWizard({ depts, onClose, onCreated }: {
               <tr><td style={{ fontWeight: 600 }}>{t("wiz_name")}</td><td>{name.trim()}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("empId")}</td><td>{empId.trim()}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("department")}</td><td>{dept}</td></tr>
-              <tr><td style={{ fontWeight: 600 }}>{t("emps_role")}</td><td>{desig.trim() || "—"}</td></tr>
+              <tr><td style={{ fontWeight: 600 }}>{t("emps_access_role")}</td><td>{roleLabel(roles.find((r) => r.code === roleCode) || { code: roleCode, label_en: roleCode } as RoleOpt, lang)}</td></tr>
+              <tr><td style={{ fontWeight: 600 }}>{t("emps_designation")}</td><td>{desig.trim() || "—"}</td></tr>
               <tr><td style={{ fontWeight: 600 }}>{t("wiz_phone")}</td><td>{phoneNorm}</td></tr>
             </tbody>
           </table>

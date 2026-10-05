@@ -244,7 +244,9 @@
     "memberNote": "Contact Time Office to change details",
     "sahayak": "SOP assistant — ask anything",
     "privacy": "Privacy policy",
-    "deleteAccount": "Delete my account"
+    "deleteAccount": "Delete my account",
+    "designation": "Designation",
+    "accessRole": "Access role"
   },
   "shift": {
     "title": "My Shift",
@@ -577,7 +579,8 @@
       "next": "Next",
       "idTaken": "This ID is already taken by {{who}}",
       "phoneTaken": "This number already belongs to {{who}}"
-    }
+    },
+    "accessRole": "Access role"
   },
   "veh": {
     "registerTitle": "Gate Log",

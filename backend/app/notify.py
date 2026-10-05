@@ -137,6 +137,61 @@ dispatcher = NotificationDispatcher(
     NoopPushSender() if _os.environ.get("TESTING") else ExpoPushSender()
 )
 
+# ---------------- Broadcast batch push (v1.0.27) ----------------
+# The broadcast engine needs per-message delivery tracking (tickets + receipts),
+# which the fire-and-forget single-push path above does not provide. These module
+# helpers talk to the Expo Push API in batches and are mocked under TESTING.
+EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_RECEIPT_URL = "https://exp.host/--/api/v2/push/getReceipts"
+
+
+async def expo_send_messages(messages: list[dict]) -> list[dict]:
+    """POST messages (chunked ≤100) to Expo. Returns the per-message ticket list
+    in the SAME order as `messages` (so callers can zip with recipients). On a
+    transport error the affected chunk is returned as per-message error tickets —
+    never raises (push must never break the request)."""
+    if _os.environ.get("TESTING"):
+        return [{"status": "ok", "id": f"TEST-{i}"} for i in range(len(messages))]
+    import httpx
+
+    out: list[dict] = []
+    for i in range(0, len(messages), 100):
+        chunk = messages[i : i + 100]
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.post(
+                    EXPO_SEND_URL,
+                    json=chunk,
+                    headers={"Content-Type": "application/json", "Accept": "application/json"},
+                )
+                data = res.json().get("data", [])
+                if isinstance(data, list) and len(data) == len(chunk):
+                    out.extend(data)
+                else:
+                    out.extend([{"status": "error", "message": "no_ticket"}] * len(chunk))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("expo batch send failed: %s", exc)
+            out.extend([{"status": "error", "message": str(exc)[:120]}] * len(chunk))
+    return out
+
+
+async def expo_fetch_receipts(ticket_ids: list[str]) -> dict:
+    """Poll Expo for delivery receipts (chunked ≤300). Returns {ticket_id: receipt}."""
+    if _os.environ.get("TESTING") or not ticket_ids:
+        return {}
+    import httpx
+
+    result: dict = {}
+    for i in range(0, len(ticket_ids), 300):
+        chunk = ticket_ids[i : i + 300]
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                res = await client.post(EXPO_RECEIPT_URL, json={"ids": chunk})
+                result.update(res.json().get("data", {}) or {})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("expo receipts fetch failed: %s", exc)
+    return result
+
 # Trilingual notification templates
 T = {
     "welcome": {

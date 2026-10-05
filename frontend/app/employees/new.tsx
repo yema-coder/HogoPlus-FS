@@ -8,11 +8,13 @@ import { useTranslation } from "react-i18next";
 import { ApiError } from "@/src/api/client";
 import {
   adminDesignations,
+  adminRoles,
   directAddEmployee,
   empIdSuggest,
   employeeAvailability,
   listDepartments,
 } from "@/src/api/endpoints";
+import type { AssignableRole } from "@/src/api/endpoints";
 import type { DepartmentItem } from "@/src/api/types";
 import { BigButton } from "@/src/components/BigButton";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
@@ -21,20 +23,13 @@ import { tri } from "@/src/i18n";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
 const EMP_ID_RE = /^[A-Za-z0-9]{1,20}$/;
-// Core job titles always offered in the Role picker, even before the server list loads.
+// Common job titles always offered in the Designation picker. DISPLAY-ONLY —
+// they NEVER change the permission role (chosen independently below).
 const CORE_TITLES = [
   "Fieldman", "Slipboy", "Agriculture Overseer", "Agriculture Officer",
   "Cane Supply Officer", "Clerk", "Sr. Clerk", "Peon", "Helper", "Watchman",
   "Driver", "Manager", "Supervisor",
 ];
-// Derive the login/permission role from the chosen job title. Everyone defaults
-// to Worker; an explicit Manager/Clerk title lifts the access level.
-const roleFromTitle = (title: string): string => {
-  const d = title.trim().toLowerCase();
-  if (/\bmanager\b/.test(d)) return "Manager";
-  if (/\bclerk\b/.test(d)) return "Clerk";
-  return "Worker";
-};
 const normPhone = (raw: string): string | null => {
   const d = raw.replace(/\D/g, "");
   const ten =
@@ -63,6 +58,8 @@ export default function NewEmployeeWizard() {
   const [dept, setDept] = useState("");
   const [desig, setDesig] = useState("");
   const [desigList, setDesigList] = useState<string[]>([]);
+  const [roles, setRoles] = useState<AssignableRole[]>([]);
+  const [roleCode, setRoleCode] = useState("Worker");
   const [phone, setPhone] = useState("");
   const [depts, setDepts] = useState<DepartmentItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -78,6 +75,9 @@ export default function NewEmployeeWizard() {
     void adminDesignations()
       .then((r) => setDesigList(r.designations))
       .catch(() => undefined);
+    void adminRoles()
+      .then((r) => setRoles(r.roles.filter((x) => x.assignable)))
+      .catch(() => undefined);
   }, []);
 
   const phoneNorm = normPhone(phone);
@@ -92,7 +92,7 @@ export default function NewEmployeeWizard() {
   const stepValid = [
     name.trim().length >= 2,
     EMP_ID_RE.test(empId.trim()),
-    dept !== "" && desig.trim() !== "",
+    dept !== "" && roleCode !== "" && desig.trim() !== "",
     phoneNorm !== null,
     true,
   ][step];
@@ -141,7 +141,7 @@ export default function NewEmployeeWizard() {
         full_name: name.trim(),
         phone: phoneNorm!,
         department_code: dept,
-        role_code: roleFromTitle(desig),
+        role_code: roleCode,
         emp_id: empId.trim(),
         ...(desig.trim() ? { designation: desig.trim() } : {}),
       });
@@ -171,11 +171,17 @@ export default function NewEmployeeWizard() {
     t("emp.wiz.reviewTitle"),
   ];
 
+  const roleLabel = (() => {
+    const r = roles.find((x) => x.code === roleCode);
+    return r ? tri(r as unknown as Record<string, unknown>, "label") : roleCode;
+  })();
+
   const reviewRows: [string, string][] = [
     [t("emp.wiz.nameTitle"), name.trim()],
     [t("emp.wiz.idTitle"), empId.trim()],
     [t("emp.dept"), depts.find((d) => d.code === dept) ? tri(depts.find((d) => d.code === dept) as unknown as Record<string, unknown>, "name") : dept],
-    [t("emp.role"), desig.trim() || "—"],
+    [t("emp.accessRole"), roleLabel],
+    [t("emp.designation"), desig.trim() || "—"],
     [t("emp.wiz.phoneTitle"), phoneNorm ?? ""],
   ];
 
@@ -247,7 +253,22 @@ export default function NewEmployeeWizard() {
                   </Pressable>
                 ))}
               </View>
-              <Text style={styles.sectionLabel}>{t("emp.role")}</Text>
+              <Text style={styles.sectionLabel}>{t("emp.accessRole")}</Text>
+              <View style={styles.chipWrap}>
+                {roles.map((r) => (
+                  <Pressable
+                    key={r.code}
+                    testID={`wiz-role-${r.code}`}
+                    onPress={() => setRoleCode(r.code)}
+                    style={[styles.chip, roleCode === r.code && styles.chipActive]}
+                  >
+                    <Text style={[styles.chipText, roleCode === r.code && styles.chipTextActive]}>
+                      {tri(r as unknown as Record<string, unknown>, "label")}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.sectionLabel}>{t("emp.designation")}</Text>
               <TextInput
                 testID="wiz-desig"
                 style={styles.desigInput}

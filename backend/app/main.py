@@ -13,6 +13,7 @@ from app.routers import (
     ai,
     attendance,
     auth,
+    broadcasts,
     dashboard,
     departments,
     files,
@@ -59,6 +60,7 @@ api.include_router(dashboard.router)
 api.include_router(home.router)
 api.include_router(vehicles.router)
 api.include_router(presence.router)
+api.include_router(broadcasts.router)
 
 app.include_router(api)
 

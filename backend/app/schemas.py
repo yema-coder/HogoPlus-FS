@@ -242,6 +242,8 @@ class SettingsPatchIn(BaseModel):
     dup_window_minutes: int | None = Field(default=None, ge=1, le=1440)
     dup_same_zone: bool | None = None
     dup_same_category: bool | None = None
+    broadcasts_enabled: bool | None = None
+    broadcast_rate_per_hour: int | None = Field(default=None, ge=1, le=200)
 
 
 class RegularizeIn(BaseModel):
@@ -506,3 +508,44 @@ class HomeConfigUpsertIn(BaseModel):
     role_code: str | None = Field(default=None, max_length=20)
     config_json: dict
     is_active: bool = True
+
+
+# ---- v1.0.27: Broadcast / Send-Notification engine ----
+
+class BroadcastAudienceIn(BaseModel):
+    audience_type: Literal["all", "department", "role", "designation", "zone", "employees"]
+    departments: list[str] | None = None
+    roles: list[str] | None = None
+    designations: list[str] | None = None
+    zones: list[str] | None = None
+    employee_ids: list[uuid.UUID] | None = None
+
+
+class BroadcastComposeIn(BroadcastAudienceIn):
+    title_en: str = Field(default="", max_length=200)
+    title_hi: str = Field(default="", max_length=200)
+    title_mr: str = Field(default="", max_length=200)
+    body_en: str = Field(default="", max_length=1000)
+    body_hi: str = Field(default="", max_length=1000)
+    body_mr: str = Field(default="", max_length=1000)
+    priority: Literal["normal", "important", "emergency"] = "normal"
+    deep_link_type: str | None = Field(default=None, max_length=20)
+    deep_link_id: str | None = Field(default=None, max_length=60)
+    scheduled_at: _datetime.datetime | None = None
+    force: bool = False  # proceed despite the duplicate-recent warning
+
+    @model_validator(mode="after")
+    def _require_content(self):
+        if not (self.title_mr.strip() or self.title_en.strip() or self.title_hi.strip()):
+            raise ValueError("title required in at least one language")
+        if not (self.body_mr.strip() or self.body_en.strip() or self.body_hi.strip()):
+            raise ValueError("message required in at least one language")
+        return self
+
+
+class BroadcastResendIn(BaseModel):
+    failed_only: bool = True
+
+
+class BroadcastOpenedIn(BaseModel):
+    broadcast_id: uuid.UUID

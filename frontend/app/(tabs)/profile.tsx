@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { ChevronRight, IdCard, LogOut, MessageCircleQuestion, ShieldCheck, Trash2 } from "lucide-react-native";
 import React, { useState } from "react";
-import { Linking, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
+import { Linking, RefreshControl, ScrollView, StyleSheet, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 
@@ -20,7 +20,15 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const logout = useAuthStore((s) => s.logout);
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const [confirmOut, setConfirmOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refreshProfile();
+    setRefreshing(false);
+  };
 
   const initials = (profile?.full_name ?? "?")
     .split(/\s+/)
@@ -43,19 +51,31 @@ export default function ProfileScreen() {
         : (profile?.department_code ?? "—"),
     },
     {
-      label: t("profile.role"),
-      value: profile?.designation?.trim()
-        ? profile.designation
-        : profile?.role
-          ? tri(profile.role as unknown as Record<string, unknown>, "label")
-          : (profile?.role_code ?? "—"),
+      label: t("profile.designation"),
+      value: profile?.designation?.trim() ? profile.designation : "—",
+    },
+    {
+      label: t("profile.accessRole"),
+      value: profile?.role
+        ? tri(profile.role as unknown as Record<string, unknown>, "label")
+        : (profile?.role_code ?? "—"),
     },
   ];
 
   return (
     <SafeAreaView style={styles.safe} edges={[]} testID="profile-screen">
       <ScreenHeader title={t("profile.title")} backTo="/(tabs)/home" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         <View style={styles.hero}>
           <Pressable
             style={styles.avatar}

@@ -244,7 +244,9 @@
     "memberNote": "माहिती बदलण्यासाठी टाइम ऑफिसला भेटा",
     "sahayak": "SOP सहाय्यक — काहीही विचारा",
     "privacy": "गोपनीयता धोरण",
-    "deleteAccount": "माझे खाते डिलीट करा"
+    "deleteAccount": "माझे खाते डिलीट करा",
+    "designation": "हुद्दा",
+    "accessRole": "ॲक्सेस भूमिका"
   },
   "shift": {
     "title": "माझी शिफ्ट",
@@ -577,7 +579,8 @@
       "next": "पुढे",
       "idTaken": "ही ID आधीच {{who}} यांची आहे",
       "phoneTaken": "हा नंबर आधीच {{who}} यांचा आहे"
-    }
+    },
+    "accessRole": "ॲक्सेस भूमिका"
   },
   "veh": {
     "registerTitle": "गेट नोंदवही",
