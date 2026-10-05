@@ -14,6 +14,11 @@ services:
     container_name: hogoplus-backend
     restart: always
     env_file: .env
+    # Redis is a hard dependency (OTP codes, login/rate-limit state, scheduler NX
+    # lock) — wait for it to be healthy so a cold `up` never races login to failure.
+    depends_on:
+      redis:
+        condition: service_healthy
     # bind to loopback only — the public edge is nginx:443, not the container
     ports:
       - "127.0.0.1:8001:8001"
@@ -36,22 +41,31 @@ services:
       - uploads:/app/backend/uploads
 
   # --------------------------------------------------------------------------
-  # OPTIONAL local Redis fallback. We use Upstash (REDIS_URL in .env) — leave this
-  # COMMENTED. Only enable if you deliberately move off Upstash, then set in .env:
+  # Redis — OTP codes, login/rate-limit state, and the scheduler NX lock. Defined
+  # as a TRACKED service so `docker compose up -d --remove-orphans` MANAGES it
+  # instead of treating a manually-run container as an orphan and deleting it
+  # (which previously broke OTP + login on this host). Set in .env:
   #   REDIS_URL=redis://redis:6379/0
-  # NOTE: a local Redis is per-host, so the cross-host scheduler NX lock and shared
-  # OTP/rate-limit state would NO LONGER be shared with the Emergent backend — do
-  # this ONLY after the Emergent backend is fully retired.
+  # NOTE: this Redis is per-host — only use it once the Emergent backend is retired
+  # (a local Redis does NOT share the scheduler NX lock / OTP / rate-limit state
+  # with any other backend instance).
   # --------------------------------------------------------------------------
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: hogoplus-redis
-  #   restart: always
-  #   command: ["redis-server", "--save", "", "--appendonly", "no"]
-  #   volumes:
-  #     - redis_data:/data
+  redis:
+    image: redis:7-alpine
+    container_name: hogoplus-redis
+    restart: always
+    # appendonly so OTP / rate-limit / NX-lock state survive a redis restart
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - redis_data:/data
 
 volumes:
   fastembed_cache:
   uploads:
-  # redis_data:
+  redis_data:
