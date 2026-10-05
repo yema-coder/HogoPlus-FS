@@ -722,7 +722,9 @@
       "initializing": "Move the phone slowly side to side",
       "too_close": "Too close",
       "too_far": "Too far to measure",
-      "tracking_lost": "Move the phone slowly side to side"
+      "tracking_lost": "Move the phone slowly side to side",
+      "converging": "Hold still — measuring",
+      "unstable": "Readings disagree — hold steady or aim at an edge"
     },
     "hud": {
       "title": "AR debug",
@@ -733,7 +735,9 @@
       "confidence": "Confidence",
       "calibrate": "Calibrate",
       "calibrated": "Calibrated ×{{s}}",
-      "reproj": "Reproj ✕ (sampled pt)"
+      "reproj": "Reproj ✕ (sampled pt)",
+      "target": "Target (tap)",
+      "converged": "Converged"
     },
     "calib": {
       "title": "AR calibration",

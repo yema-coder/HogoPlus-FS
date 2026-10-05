@@ -27,6 +27,10 @@ export type DistanceHint =
   | "too_close"
   | "too_far"
   | "tracking_lost"
+  /** too few samples in the window yet — keep aiming, no number shown */
+  | "converging"
+  /** samples disagree too much to trust a number (moving hand / no texture) */
+  | "unstable"
   | null;
 
 export interface DistanceSample {
@@ -70,6 +74,9 @@ export interface DistanceReading {
   spread: number;
   approx: boolean; // beyond the tier's reliable range (show greyed "≈")
   show: boolean; // false ⇒ hide the number (never show a guess)
+  /** the rolling window has enough samples AND they agree closely enough to be
+   * trusted. `show` can never be true without this. */
+  converged: boolean;
   hint: DistanceHint;
   /** Debug-only (admin HUD): the back-projected VIEW position (fractions 0..1) of
    * the EXACT point the native layer sampled. Drawing a dot here and seeing it sit

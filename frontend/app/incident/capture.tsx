@@ -39,6 +39,7 @@ import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
 import { DistanceCamera, type DistanceCameraRef, type DistancePhoto } from "@/src/ar/DistanceCamera";
+import { isArDebugEnabled } from "@/src/ar/debugAccess";
 import type { ArCapabilities, CaptureDistanceMeta, DistanceReading } from "@/src/ar/types";
 import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
@@ -504,7 +505,7 @@ function IncidentCaptureInner() {
             caps={arCaps}
             target={target}
             torchOn={torch}
-            debug={__DEV__ || rank <= 2}
+            debug={isArDebugEnabled({ rank, empId: profile?.emp_id })}
             onCalibrate={() => router.push("/ar-calibration")}
             onTapMeasure={(x, y) => {
               setTarget({ x, y });

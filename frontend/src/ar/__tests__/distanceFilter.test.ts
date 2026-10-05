@@ -2,8 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  captureMeetsBar,
   evaluateDistance,
   formatDistance,
+  MIN_SAMPLES,
+  spreadLimit,
   mad,
   median,
   pickConfidence,
@@ -124,15 +127,138 @@ test("evaluateDistance: method none never shows", () => {
 
 test("formatDistance strings", () => {
   assert.equal(
-    formatDistance({ distanceM: 6.4, uncertaintyM: 0.3, method: "lidar", confidence: "high", trackingState: "normal", sampleCount: 5, spread: 0.3, approx: false, show: true, hint: null }),
+    formatDistance({ distanceM: 6.4, uncertaintyM: 0.3, method: "lidar", confidence: "high", trackingState: "normal", sampleCount: 5, spread: 0.3, approx: false, show: true, converged: true, hint: null }),
     "6.4 m ±0.3",
   );
   assert.equal(
-    formatDistance({ distanceM: 12.1, uncertaintyM: 0.4, method: "ar_plane", confidence: "medium", trackingState: "normal", sampleCount: 5, spread: 0.4, approx: true, show: true, hint: null }),
-    "≈ 12.1 m",
+    formatDistance({ distanceM: 12.1, uncertaintyM: 0.4, method: "ar_plane", confidence: "medium", trackingState: "normal", sampleCount: 5, spread: 0.4, approx: true, show: true, converged: true, hint: null }),
+    "≈ 12.1 m ±0.4",
   );
   assert.equal(
-    formatDistance({ distanceM: null, uncertaintyM: null, method: "none", confidence: "low", trackingState: "notAvailable", sampleCount: 0, spread: 0, approx: false, show: false, hint: null }),
+    formatDistance({ distanceM: null, uncertaintyM: null, method: "none", confidence: "low", trackingState: "notAvailable", sampleCount: 0, spread: 0, approx: false, show: false, converged: false, hint: null }),
     "",
   );
+});
+
+// ---- convergence gate (field fix 2026-10-06) --------------------------------
+// A worker reporting a hazard must never be shown 6.4 m for something 2 m away.
+// A blank is correct; a confident wrong number is not.
+
+test("evaluateDistance: ONE sample never shows a number (spread of 1 is a lie)", () => {
+  const r = evaluateDistance({
+    samples: samples([6.4]),
+    now: 1000,
+    method: "depth",
+    trackingState: "normal",
+  });
+  assert.equal(r.sampleCount, 1);
+  assert.equal(r.spread, 0); // mathematically zero — this is exactly the trap
+  assert.equal(r.converged, false);
+  assert.equal(r.show, false);
+  assert.equal(r.hint, "converging");
+  assert.equal(formatDistance(r), "");
+});
+
+test("evaluateDistance: below MIN_SAMPLES stays hidden, at MIN_SAMPLES it shows", () => {
+  const below = evaluateDistance({
+    samples: samples(new Array(MIN_SAMPLES - 1).fill(2.0)),
+    now: 1000,
+    method: "depth",
+    trackingState: "normal",
+  });
+  assert.equal(below.show, false);
+  assert.equal(below.hint, "converging");
+
+  const at = evaluateDistance({
+    samples: samples(new Array(MIN_SAMPLES).fill(2.0)),
+    now: 1000,
+    method: "depth",
+    trackingState: "normal",
+  });
+  assert.equal(at.converged, true);
+  assert.equal(at.show, true);
+  assert.equal(at.distanceM, 2);
+});
+
+test("evaluateDistance: samples that disagree are hidden with the unstable hint", () => {
+  // 2.0 / 2.6 / 3.2 around a 2.6 m median: stdev 0.6 > limit max(0.1, 0.08*2.6)=0.21
+  const r = evaluateDistance({
+    samples: samples([2.0, 2.6, 3.2]),
+    now: 1000,
+    method: "depth",
+    trackingState: "normal",
+  });
+  assert.equal(r.sampleCount, 3);
+  assert.ok(r.spread > spreadLimit("depth", 2.6));
+  assert.equal(r.converged, false);
+  assert.equal(r.show, false);
+  assert.equal(r.hint, "unstable");
+  assert.equal(formatDistance(r), "");
+});
+
+test("spreadLimit: relative band with an absolute floor, looser for AR tiers", () => {
+  assert.equal(spreadLimit("depth", 1), 0.1); // floor wins at close range
+  assert.ok(Math.abs(spreadLimit("depth", 5) - 0.4) < 1e-9); // 8% of 5 m
+  assert.ok(Math.abs(spreadLimit("ar_plane", 5) - 0.6) < 1e-9); // 12% of 5 m
+  assert.equal(spreadLimit("depth", 0), 0.1);
+  assert.equal(spreadLimit("depth", NaN), 0.1);
+});
+
+test("evaluateDistance: tracking lost hides the number and keeps the hint", () => {
+  const r = evaluateDistance({
+    samples: samples([2.0, 2.01, 2.02, 2.0]),
+    now: 1000,
+    method: "depth",
+    trackingState: "relocalizing",
+  });
+  assert.equal(r.show, false);
+  assert.equal(r.hint, "tracking_lost");
+  assert.equal(formatDistance(r), "");
+});
+
+test("formatDistance: an approximate reading still carries its ± margin", () => {
+  // ar_plane: reliable to 15 m, hard max 30 m → ~20 m is shown but flagged approx.
+  // Spread 0.2 m is inside the 12% band at that distance, so it still converges.
+  const r = evaluateDistance({
+    samples: samples([20.0, 20.2, 20.1, 20.4, 19.9]),
+    now: 1000,
+    method: "ar_plane",
+    trackingState: "normal",
+  });
+  assert.equal(r.converged, true);
+  assert.equal(r.show, true);
+  assert.equal(r.approx, true);
+  assert.match(formatDistance(r), /^≈ 20\.1 m ±0\.\d$/);
+});
+
+// ---- captured measurement must clear the same bar as the live display -------
+
+test("captureMeetsBar: a one-sample capture is rejected", () => {
+  assert.equal(
+    captureMeetsBar({
+      distance_m: 6.4, distance_method: "depth", distance_confidence: "high",
+      sample_count: 1, sample_spread_m: 0,
+    }),
+    false,
+  );
+});
+
+test("captureMeetsBar: a converged capture is accepted", () => {
+  assert.equal(
+    captureMeetsBar({
+      distance_m: 2.4, distance_method: "depth", distance_confidence: "high",
+      sample_count: 8, sample_spread_m: 0.05,
+    }),
+    true,
+  );
+});
+
+test("captureMeetsBar: rejects wide spread, low confidence, no method, out of range", () => {
+  const base = { distance_m: 2.4, distance_method: "depth", distance_confidence: "high", sample_count: 8 };
+  assert.equal(captureMeetsBar({ ...base, sample_spread_m: 1.2 }), false); // > 8% of 2.4 m
+  assert.equal(captureMeetsBar({ ...base, sample_spread_m: 0.05, distance_confidence: "low" }), false);
+  assert.equal(captureMeetsBar({ ...base, sample_spread_m: 0.05, distance_method: "none" }), false);
+  assert.equal(captureMeetsBar({ ...base, sample_spread_m: 0.05, distance_m: 40 }), false); // past hardMax
+  assert.equal(captureMeetsBar({ ...base, sample_spread_m: 0.05, distance_m: null }), false);
+  assert.equal(captureMeetsBar(null), false);
 });
