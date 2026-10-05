@@ -1867,3 +1867,28 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - `Dockerfile`: added `RUN python scripts/prefetch_models.py` after the backend COPY so the ONNX
   weights bake into the image layer → NO runtime HTTP egress on the restricted EC2 host.
 
+
+### Production-hardening answers + fix (same fork, user audit round)
+- AUTO-MIGRATE SAFETY (app/main.py): the ONLY runtime migration trigger is `_run_db_migrations()`
+  at the startup hook (Dockerfile CMD is uvicorn only; restore/seed scripts are manual). Added
+  `_log_migration_status_disabled()` + restructured the call site so `DISABLE_AUTO_MIGRATE` in
+  (1/true/yes) makes ZERO schema changes, logs ONE line `auto-migrate disabled, current revision =
+  X (code head = Y)`, and WARNs (never crashes, never migrates) when the DB is behind. Verified:
+  "auto-migrate disabled, current revision = 0023 (code head = 0023)". Documented in
+  docs/DEPLOY_ORDER_v1.0.26.md + docs/FLAG_AUDIT.md (prod ALWAYS sets it true; migrations manual).
+- PERF on 2-vCPU/4GB (taskset -c 0,1, OMP=2, cv2=2): RSS boot 106MB → +first face 200 → +first
+  plate 265 → steady 299 → peak 367; full 12MP warm ~189ms (cold ~310ms). Live API process (no
+  vision) = 173MB. Analysis runs via FastAPI BackgroundTasks on the REQUEST worker → with
+  --workers 2 BOTH workers can each hold a model copy (+~160MB each); per-worker analysis
+  serialized by `with _lock`. Verdict: fits 4GB only if constrained (--workers 1, or
+  release_models() on idle, or upsize t3.large / off-box) — box already at ~72%.
+- FACE E2E PROOF: thresholds score≥0.6, nms0.3, top_k5000, max25, input downscaled to _MAX_SIDE
+  1280, no min-size filter. Single PD portrait → 1 face @0.917; 4-crew PD photo → 4/4
+  @0.871–0.914; crops verified correct. Normal frontal face ~0.9 ≫ 0.6.
+- AR BACK-PROJECTION PROOF: numeric model of portrait-view↔landscape-depth (rot90+aspect-fill)
+  shows OLD direct mapping displaced the sampled depth pixel 20–57% of the image diagonal (0% only
+  dead-center); the fix delegates the transform to ARCore/ARKit. No device recording possible from
+  sandbox (no ARCore/ARKit/camera). Did NOT add the on-device reprojection debug marker (would be
+  unverifiable native code; offered as opt-in).
+- SCOPE: did NOT start next features (watchlist / filters / help card) per user instruction.
+
