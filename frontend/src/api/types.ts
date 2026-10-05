@@ -31,6 +31,9 @@ export interface EmployeeProfile {
   has_face_reference?: boolean;
   /** v1.0.24: true for CGM/MD and managers of can_add_employees departments (HEAD_OFFICE). */
   can_add_employees?: boolean;
+  /** true when this account lives in the demo bubble — used only to widen the
+   * admin/dev AR debug HUD gate; real (non-demo) accounts omit/false. */
+  is_demo?: boolean;
 }
 
 /** v1.0.20: pending registration enriched with the evidence an approver needs. */
