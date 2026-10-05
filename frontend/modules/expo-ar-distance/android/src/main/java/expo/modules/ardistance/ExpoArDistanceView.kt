@@ -128,6 +128,13 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
 
   fun capture(promise: Promise) { pendingCapture = promise }
 
+  /** Real display rotation (Surface.ROTATION_*). Portrait-locked phones report
+   * ROTATION_0 — identical to the constant that used to be hardcoded here — while
+   * a naturally-landscape device (tablet) finally reports the truth. Any failure
+   * falls back to 0, i.e. the previous behaviour. */
+  private fun currentDisplayRotation(): Int =
+    try { display?.rotation ?: 0 } catch (_: Throwable) { 0 }
+
   // MARK: GL renderer ---------------------------------------------------------
 
   private inner class Renderer : GLSurfaceView.Renderer {
@@ -139,7 +146,12 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
       GLES20.glViewport(0, 0, width, height)
       viewW = width; viewH = height
-      session?.setDisplayGeometry(0, width, height)
+      // Rotation must be the REAL display rotation, not a hardcoded 0: ARCore uses
+      // it to build the VIEW <-> TEXTURE transform (rotation + aspect-fill crop).
+      // The app is portrait-locked, so on a phone this resolves to ROTATION_0
+      // exactly as before; on a device whose natural orientation is landscape
+      // (tablet) the old constant silently mis-mapped every tap.
+      session?.setDisplayGeometry(currentDisplayRotation(), width, height)
     }
 
     override fun onDrawFrame(gl: GL10?) {

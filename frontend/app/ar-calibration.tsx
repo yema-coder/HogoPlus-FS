@@ -26,6 +26,7 @@ import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { showToast } from "@/src/components/Toast";
+import { isArDebugEnabled } from "@/src/ar/debugAccess";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
 
@@ -39,7 +40,7 @@ export default function ArCalibrationScreen() {
   const router = useRouter();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
-  const isAdmin = rank <= 2;
+  const isAdmin = isArDebugEnabled({ rank, empId: profile?.emp_id });
 
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = React.useRef<DistanceCameraRef>(null);

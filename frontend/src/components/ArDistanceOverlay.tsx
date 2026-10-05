@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import { formatDistance } from "@/src/ar/distanceFilter";
 import { getCalibrationSync } from "@/src/ar/calibration";
+import { tapToViewFraction, type Rect } from "@/src/ar/tapMapping";
 import type { ArCapabilities, DistanceReading } from "@/src/ar/types";
 import { colors, fonts, radius, spacing, type } from "@/src/theme/tokens";
 
@@ -42,7 +43,13 @@ export function ArDistanceOverlay({
 }: Props) {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const size = useRef({ w: 0, h: 0 });
+  // The AR PREVIEW's own measured frame — the single reference every fraction is
+  // expressed against (crosshair position AND the native depth target). Window
+  // dimensions are deliberately never used: the preview is not always the window.
+  const viewSize = useRef({ w: 0, h: 0 });
+  // The touch layer's frame INSIDE that preview (it stops above the shutter), so
+  // a touch reported in layer-local coordinates can be put back where it belongs.
+  const tapLayer = useRef<Rect>({ x: 0, y: 0, w: 0, h: 0 });
 
   // AR genuinely unavailable in this runtime → tell the user plainly, once.
   const arOff = caps ? !caps.supported : false;
@@ -53,16 +60,28 @@ export function ArDistanceOverlay({
         ? t("ar.installArcore")
         : t("ar.notSupported");
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    size.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+  const onViewLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    viewSize.current = { w: width, h: height };
+  };
+
+  const onTapLayerLayout = (e: LayoutChangeEvent) => {
+    const { x, y, width, height } = e.nativeEvent.layout;
+    tapLayer.current = { x, y, w: width, h: height };
   };
 
   const handlePress = (e: { nativeEvent: { locationX: number; locationY: number } }) => {
-    const { w, h } = size.current;
-    if (!w || !h) return;
-    const x = Math.min(1, Math.max(0, e.nativeEvent.locationX / w));
-    const y = Math.min(1, Math.max(0, e.nativeEvent.locationY / h));
-    onTapMeasure(x, y);
+    // locationX/Y are relative to the TOUCH LAYER; the fraction must be relative
+    // to the AR PREVIEW. Mixing the two is what put the crosshair (and the depth
+    // sample) ~1.4x too far down the screen — see src/ar/tapMapping.ts.
+    const frac = tapToViewFraction(
+      e.nativeEvent.locationX,
+      e.nativeEvent.locationY,
+      tapLayer.current,
+      viewSize.current,
+    );
+    if (!frac) return; // not measured yet — never guess a target
+    onTapMeasure(frac.x, frac.y);
   };
 
   const distText = reading ? formatDistance(reading) : "";
@@ -71,9 +90,11 @@ export function ArDistanceOverlay({
   const cal = getCalibrationSync();
 
   return (
-    <View style={styles.fill} pointerEvents="box-none">
-      {/* tap-to-measure layer (upper region only, so the shutter stays tappable) */}
-      <Pressable style={styles.tapLayer} onPress={handlePress} onLayout={onLayout} />
+    <View style={styles.fill} pointerEvents="box-none" onLayout={onViewLayout}>
+      {/* tap-to-measure layer (upper region only, so the shutter stays tappable).
+          Its frame is measured separately from the preview frame above — the two
+          are NOT the same rectangle, and conflating them was the A1 field bug. */}
+      <Pressable style={styles.tapLayer} onPress={handlePress} onLayout={onTapLayerLayout} />
 
       {/* fixed distance banner — always clear of the bottom controls */}
       {!arOff ? (
@@ -148,6 +169,14 @@ export function ArDistanceOverlay({
             {reading?.projX != null && reading?.projY != null
               ? `${reading.projX.toFixed(2)}, ${reading.projY.toFixed(2)}`
               : "—"}
+          </Text>
+          {/* the tap fraction actually sent to the native layer — compare it with
+              the reprojection line above and with where your finger landed */}
+          <Text style={styles.hudLine}>
+            {t("ar.hud.target")}: {target.x.toFixed(2)}, {target.y.toFixed(2)}
+          </Text>
+          <Text style={styles.hudLine}>
+            {t("ar.hud.converged")}: {reading?.converged ? "yes" : "no"}
           </Text>
           {cal.scale !== 1 ? (
             <Text style={styles.hudCal}>{t("ar.hud.calibrated", { s: cal.scale.toFixed(3) })}</Text>

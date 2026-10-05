@@ -28,7 +28,7 @@ import {
   stopSession,
 } from "./arDistance";
 import { applyCalibration, getCalibrationSync, loadCalibration } from "./calibration";
-import { evaluateDistance } from "./distanceFilter";
+import { captureMeetsBar, evaluateDistance } from "./distanceFilter";
 import type { ArCapabilities, CaptureDistanceMeta, DistanceReading, DistanceSample } from "./types";
 
 const WINDOW_MS = 500;
@@ -150,6 +150,14 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
           // apply the admin calibration to the persisted measurement too (A3)
           const cal = getCalibrationSync();
           const meta = res.distance as CaptureDistanceMeta;
+          // A capture resolves from the native rolling window, which may hold a
+          // single sample. Persisting that put a confident wrong distance on the
+          // incident (and in the MD dashboard) while the UI correctly showed
+          // nothing. Drop the value, keep the diagnostics. (field fix 2026-10-06)
+          if (meta && meta.distance_m != null && !captureMeetsBar(meta)) {
+            meta.distance_m = null;
+            meta.distance_uncertainty_m = null;
+          }
           if (cal.scale !== 1 && meta?.distance_m != null) {
             meta.distance_m = Math.round(meta.distance_m * cal.scale * 100) / 100;
             if (meta.sample_spread_m != null) {

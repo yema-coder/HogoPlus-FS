@@ -39,6 +39,7 @@ import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
 import { DistanceCamera, type DistanceCameraRef, type DistancePhoto } from "@/src/ar/DistanceCamera";
+import { isArDebugEnabled } from "@/src/ar/debugAccess";
 import type { ArCapabilities, CaptureDistanceMeta, DistanceReading } from "@/src/ar/types";
 import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
@@ -99,10 +100,11 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
-  // AR debug HUD/dot: admins/dev AND anyone in the demo bubble (any rank). Real
-  // workers on real accounts never match → they never see it.
+  // AR debug HUD/dot. For THIS test build everyone sees it (the owner's own
+  // account is rank 3); the real gate — dev, demo bubble, rank <= 2 or the
+  // server allowlist — is intact behind AR_DEBUG_FOR_EVERYONE in src/ar/debugAccess.
   const isDemo = profile?.is_demo === true;
-  const arDebug = __DEV__ || isDemo || rank <= 2;
+  const arDebug = isArDebugEnabled({ rank, empId: profile?.emp_id, isDemo });
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 
