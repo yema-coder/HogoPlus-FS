@@ -187,6 +187,19 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
 
     if (now - lastEmit < 100) return
     lastEmit = now
+    // debug reprojection (admin HUD): back-project the EXACT point we sampled to
+    // VIEW-normalized so the overlay can draw a dot. On the depth tier this uses
+    // ARCore's own transform both ways — if the dot lands on the finger, the
+    // tap→depth mapping is correct (A1 verification). Other tiers follow the tap.
+    var projX = targetX
+    var projY = targetY
+    if (method == "depth") {
+      val tex = viewToTexture(frame, targetX, targetY)
+      if (tex != null) {
+        val back = textureToView(frame, tex.first, tex.second)
+        if (back != null) { projX = back.first; projY = back.second }
+      }
+    }
     val wv = window.map { it.first }
     val payload = mapOf(
       "distanceM" to emitVal,
@@ -198,8 +211,25 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
       "hint" to hint(cam, emitVal),
       "targetX" to targetX,
       "targetY" to targetY,
+      "projX" to projX,
+      "projY" to projY,
     )
     main.post { Hub.emitDistance(payload) }
+  }
+
+  /** Inverse of [viewToTexture]: map a camera/depth TEXTURE-normalized point back
+   * to VIEW-normalized (0..1 of the preview), for the debug reprojection dot. */
+  private fun textureToView(frame: Frame, u: Float, v: Float): Pair<Double, Double>? {
+    return try {
+      if (viewW <= 0f || viewH <= 0f) return null
+      val inArr = floatArrayOf(u, v)
+      val outArr = FloatArray(2)
+      frame.transformCoordinates2d(
+        com.google.ar.core.Coordinates2d.TEXTURE_NORMALIZED, inArr,
+        com.google.ar.core.Coordinates2d.VIEW, outArr,
+      )
+      Pair((outArr[0] / viewW).toDouble(), (outArr[1] / viewH).toDouble())
+    } catch (_: Throwable) { null }
   }
 
   /** Map a VIEW-normalized tap (0..1 of the preview) to the camera/depth texture's

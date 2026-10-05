@@ -1892,3 +1892,15 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
   unverifiable native code; offered as opt-in).
 - SCOPE: did NOT start next features (watchlist / filters / help card) per user instruction.
 
+
+### AR debug reprojection dot (admin-only verification, user-authorised)
+- Native emits `projX/projY` = VIEW-normalized back-projection of the EXACT sampled point.
+  Android (depth tier): `textureToView()` = inverse of `viewToTexture()` via ARCore
+  `transformCoordinates2d(TEXTURE_NORMALIZED→VIEW)`; other tiers = tap. iOS: = tap (ARKit affine
+  is exact-by-construction). Wired through RawArUpdate → parseArUpdate → DistanceReading.projX/Y →
+  DistanceCamera → ArDistanceOverlay draws a magenta ring (testID ar-reproj-dot) + a HUD line
+  `ar.hud.reproj`, ONLY when debug (admin/dev). If the ring sits on the crosshair on-device, the
+  tap→depth mapping is landing under the finger (A1 proof). i18n parity 652×3. tsc + 23 ar unit
+  tests + lint all green. Native not compilable in sandbox (device build required). Nothing else
+  changed per user instruction.
+

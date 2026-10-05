@@ -90,6 +90,8 @@ export function parseArUpdate(raw: RawArUpdate | null | undefined): {
   torchOn: boolean;
   targetX: number;
   targetY: number;
+  projX: number;
+  projY: number;
 } {
   const r = (raw ?? {}) as RawArUpdate;
   return {
@@ -102,6 +104,8 @@ export function parseArUpdate(raw: RawArUpdate | null | undefined): {
     torchOn: bool(r.torchOn),
     targetX: clamp01(r.targetX),
     targetY: clamp01(r.targetY),
+    projX: clamp01(r.projX ?? r.targetX),
+    projY: clamp01(r.projY ?? r.targetY),
   };
 }
 

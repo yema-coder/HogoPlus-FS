@@ -55,6 +55,8 @@ export interface RawArUpdate {
   torchOn?: boolean | null;
   targetX?: number | string | null;
   targetY?: number | string | null;
+  projX?: number | string | null;
+  projY?: number | string | null;
 }
 
 /** Result of summarising a rolling window into one displayable reading. */
@@ -69,6 +71,12 @@ export interface DistanceReading {
   approx: boolean; // beyond the tier's reliable range (show greyed "≈")
   show: boolean; // false ⇒ hide the number (never show a guess)
   hint: DistanceHint;
+  /** Debug-only (admin HUD): the back-projected VIEW position (fractions 0..1) of
+   * the EXACT point the native layer sampled. Drawing a dot here and seeing it sit
+   * under the finger is the on-device proof that the tap→depth mapping is correct.
+   * Undefined outside the native/debug path. */
+  projX?: number | null;
+  projY?: number | null;
 }
 
 /** Everything native records with a still capture — persisted with the photo. */

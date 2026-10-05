@@ -110,6 +110,9 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
           hint: u.hint,
         }),
       );
+      // debug HUD reprojection dot: carry the native back-projected sampled point
+      reading.projX = u.projX;
+      reading.projY = u.projY;
       lastReadingRef.current = reading;
       onReading?.(reading);
     });

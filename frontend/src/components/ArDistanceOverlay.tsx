@@ -113,6 +113,19 @@ export function ArDistanceOverlay({
         </View>
       ) : null}
 
+      {/* admin/dev reprojection dot — the native back-projected position of the
+          EXACT point we sampled; if it sits on the crosshair, the tap→depth
+          mapping is landing under the finger (A1 verification). */}
+      {debug && !arOff && reading?.projX != null && reading?.projY != null ? (
+        <View
+          pointerEvents="none"
+          style={[styles.reproj, { left: `${reading.projX * 100}%`, top: `${reading.projY * 100}%` }]}
+          testID="ar-reproj-dot"
+        >
+          <View style={styles.reprojRing} />
+        </View>
+      ) : null}
+
       {/* admin/dev diagnostic HUD */}
       {debug && !arOff ? (
         <View style={[styles.hud, { top: bannerTop + 44 }]} pointerEvents="box-none" testID="ar-debug-hud">
@@ -129,6 +142,12 @@ export function ArDistanceOverlay({
           </Text>
           <Text style={styles.hudLine}>
             {t("ar.hud.confidence")}: {reading?.confidence ?? "—"}
+          </Text>
+          <Text style={styles.hudLine}>
+            {t("ar.hud.reproj")}:{" "}
+            {reading?.projX != null && reading?.projY != null
+              ? `${reading.projX.toFixed(2)}, ${reading.projY.toFixed(2)}`
+              : "—"}
           </Text>
           {cal.scale !== 1 ? (
             <Text style={styles.hudCal}>{t("ar.hud.calibrated", { s: cal.scale.toFixed(3) })}</Text>
@@ -194,6 +213,8 @@ const styles = StyleSheet.create({
   crosshairV: { position: "absolute", width: 2, height: CH, backgroundColor: "rgba(255,255,255,0.9)" },
   crosshairH: { position: "absolute", width: CH, height: 2, backgroundColor: "rgba(255,255,255,0.9)" },
   crosshairDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.95)" },
+  reproj: { position: "absolute", width: 28, height: 28, marginLeft: -14, marginTop: -14, alignItems: "center", justifyContent: "center" },
+  reprojRing: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: "#FF3DCB", backgroundColor: "transparent" },
   offChip: {
     backgroundColor: "rgba(0,0,0,0.6)",
     borderRadius: radius.pill,

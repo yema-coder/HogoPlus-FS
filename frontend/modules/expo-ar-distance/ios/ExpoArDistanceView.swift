@@ -122,6 +122,12 @@ public final class ExpoArDistanceView: ExpoView, ARSessionDelegate {
       "hint": hint(frame: frame, method: method, value: emitVal) as Any,
       "targetX": target.x,
       "targetY": target.y,
+      // debug reprojection dot (admin HUD). On ARKit the view↔image mapping is an
+      // exact affine (displayTransform), so the sampled point reprojects to the tap
+      // by construction — the dot sits on the crosshair. The meaningful visual
+      // tap-mapping test is Android (ARCore Depth); here it confirms no drift.
+      "projX": target.x,
+      "projY": target.y,
     ])
   }
 

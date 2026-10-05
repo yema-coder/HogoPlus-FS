@@ -732,7 +732,8 @@
       "spread": "Spread",
       "confidence": "Confidence",
       "calibrate": "Calibrate",
-      "calibrated": "Calibrated ×{{s}}"
+      "calibrated": "Calibrated ×{{s}}",
+      "reproj": "Reproj ✕ (sampled pt)"
     },
     "calib": {
       "title": "AR calibration",
