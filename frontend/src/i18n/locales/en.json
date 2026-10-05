@@ -114,6 +114,7 @@
     "cameraPermissionBody": "Take a photo to report the complaint",
     "locationHelps": "Location helps the manager find the spot",
     "captureHint": "Take a photo of the problem",
+    "distanceLabel": "Distance: {{d}}",
     "voiceNote": "Voice note (optional)",
     "aiCardTitle": "Is this correct?",
     "aiWaiting": "Checking your complaint…",
@@ -687,5 +688,22 @@
     "otpSent": "OTP sent",
     "confirmBtn": "Permanently delete",
     "done": "Account deleted"
+  },
+  "ar": {
+    "needsBuild": "Distance needs the full app build",
+    "installArcore": "Install Google Play Services for AR to measure",
+    "notSupported": "Distance not supported on this phone",
+    "measuring": "Measuring…",
+    "tapToMeasure": "Tap any object to measure",
+    "torch": "Torch",
+    "hint": {
+      "low_light": "Low light — torch on",
+      "no_texture": "Aim at an edge or corner",
+      "hold_steady": "Hold steady",
+      "initializing": "Move the phone slowly side to side",
+      "too_close": "Too close",
+      "too_far": "Too far to measure",
+      "tracking_lost": "Move the phone slowly side to side"
+    }
   }
 }

@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
+import { useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -38,6 +38,9 @@ import { aiVoiceDescribe, createIncident, listDepartments } from "@/src/api/endp
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
+import { DistanceCamera, type DistanceCameraRef, type DistancePhoto } from "@/src/ar/DistanceCamera";
+import type { ArCapabilities, DistanceReading } from "@/src/ar/types";
+import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -132,7 +135,15 @@ function IncidentCaptureInner() {
   const [deptModal, setDeptModal] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
+  const cameraRef = useRef<DistanceCameraRef>(null);
+  // PART 1 (AR object distance): live reading + capabilities + torch + tap target
+  const [reading, setReading] = useState<DistanceReading | null>(null);
+  const [arCaps, setArCaps] = useState<ArCapabilities | null>(null);
+  const [torch, setTorchOn] = useState(false);
+  const [target, setTarget] = useState({ x: 0.5, y: 0.5 });
+  const [capturedDist, setCapturedDist] = useState("");
+  const distanceMetaRef = useRef<unknown>(null);
+  const intrinsicsRef = useRef<unknown>(null);
   const watermarkRef = useRef<View>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
@@ -206,10 +217,19 @@ function IncidentCaptureInner() {
     if (!cameraRef.current || capturing) return;
     setCapturing(true);
     try {
-      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      const photo = (await cameraRef.current.takePictureAsync({ quality: 0.85 })) as DistancePhoto | null;
       if (photo?.uri) {
         setShot({ uri: photo.uri, width: photo.width || 1200, height: photo.height || 1600 });
         setCapturedAt(Date.now());
+        // PART 1: keep the AR distance measured at the instant of capture
+        distanceMetaRef.current = photo.distanceMeta ?? null;
+        intrinsicsRef.current = photo.intrinsics ?? null;
+        const meta = photo.distanceMeta as { distance_m?: number; distance_method?: string } | null;
+        setCapturedDist(
+          meta && meta.distance_m != null && meta.distance_method && meta.distance_method !== "none"
+            ? `${Number(meta.distance_m).toFixed(1)} m`
+            : "",
+        );
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
       }
     } catch {
@@ -455,14 +475,31 @@ function IncidentCaptureInner() {
   if (!shot && !videoUri) {
     return (
       <View style={styles.fill} testID="incident-capture-screen">
-        <CameraView
+        <DistanceCamera
           ref={cameraRef}
           style={styles.fill}
           facing="back"
           mode={mode}
           videoQuality="720p"
           videoBitrate={2_000_000}
+          enableTorch={torch}
+          active={!shot && !videoUri}
+          onReading={setReading}
+          onCapabilities={setArCaps}
         />
+        {mode === "picture" ? (
+          <ArDistanceOverlay
+            reading={reading}
+            caps={arCaps}
+            target={target}
+            torchOn={torch}
+            onTapMeasure={(x, y) => {
+              setTarget({ x, y });
+              cameraRef.current?.setTarget(x, y);
+            }}
+            onToggleTorch={() => setTorchOn((v) => !v)}
+          />
+        ) : null}
         {coach ? (
           <View style={styles.coachWrap} testID="camera-coach-overlay">
             <View style={styles.coachCard}>
@@ -665,6 +702,15 @@ function IncidentCaptureInner() {
           </Pressable>
 
           {locationLine()}
+
+          {capturedDist ? (
+            <View style={styles.locLine} testID="capture-distance-line">
+              <Text style={styles.distIcon}>📏</Text>
+              <Text style={styles.locText} numberOfLines={1}>
+                {t("incident.distanceLabel", { d: capturedDist })}
+              </Text>
+            </View>
+          ) : null}
 
           <Pressable
             testID="incident-dept-selector"
@@ -985,6 +1031,7 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   locText: { flex: 1, fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
+  distIcon: { fontSize: type.base },
   watermark: {
     backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: spacing.md,

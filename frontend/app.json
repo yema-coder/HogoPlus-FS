@@ -77,7 +77,8 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-video",
-      "./plugins/withBleScanNoNeverForLocation.js"
+      "./plugins/withBleScanNoNeverForLocation.js",
+      "./modules/expo-ar-distance/app.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true

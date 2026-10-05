@@ -1534,3 +1534,42 @@ locked/background.
   `script: line 199: expo: command not found` line is benign (resolved config already written).
 - NOTE: sandbox Postgres/supervisor dropped mid-session again; recovered via
   `sudo bash /app/scripts/sandbox_recover.sh` (restore from R2 + alembic upgrade head).
+
+## Camera AR/ML suite (NEW PRD, 2026-10) — sequential 5-step delivery (pause for review after each)
+Goal (user PRD): add to ALL camera captures — (1) live AR object distance (custom native module),
+(2) backend face detection (YuNet ONNX), (3) backend number-plate detection + OCR
+(open-image-models + fast-plate-ocr). Deliver in 5 steps, pausing for user review after each.
+- STEP 1 (Research) — ✅ APPROVED. Custom native module approach chosen (no off-the-shelf Expo lib
+  gives raycast/LiDAR distance). User approved + asked for feature flags + sequential 1→5 delivery.
+- STEP 2 (AR object-distance custom native module) — ✅ CODE COMPLETE (2026-10-05 fork), pending
+  user review + on-device (APK/IPA) validation.
+  * Local Expo module `frontend/modules/expo-ar-distance` (autolinked; plugin in app.json line ~81).
+    - iOS `ios/ExpoArDistanceView.swift` (ARKit ARSCNView): Tier1 LiDAR smoothedSceneDepth 5×5 patch
+      median → Tier2 raycast estimatedPlane → Tier3 rawFeaturePoints median; auto-torch on low light;
+      captureHighResolutionFrame (iOS16+) w/ camera.intrinsics (fx/fy/cx/cy); ~10Hz throttled onDistance.
+    - Android `android/.../ExpoArDistanceView.kt` (ARCore + GLSurfaceView + BackgroundRenderer.kt):
+      Tier1 Depth API 5×5 patch → Tier2 hitTest(+InstantPlacement) → Tier3 point-cloud median;
+      flashMode torch; acquireCameraImage→NV21→JPEG capture w/ imageIntrinsics. ARCore OPTIONAL
+      (app installs/runs on non-AR devices → plain-camera Tier 4). `com.google.ar:core:1.49.0`.
+    - Capabilities probe each mount; module ABSENT in Expo Go/web → graceful "none" fallback.
+  * JS layer `frontend/src/ar/`: types.ts, arDistance.ts (requireNativeModule guard, never throws),
+    distanceFilter.ts (median/MAD outlier reject/rolling window/tier ranges/confidence/formatDistance),
+    parseCaptureResult.ts (defensive bridge parsers), DistanceCamera.tsx (drop-in for CameraView,
+    same imperative ref API; AR for photo only, video = plain camera).
+  * UI: `src/components/ArDistanceOverlay.tsx` (crosshair, confidence-coloured distance pill, auto-fix
+    hint line, torch toggle, tap-to-measure) wired into `app/incident/capture.tsx`; capturedDist shown
+    on preview (incident.distanceLabel). i18n `ar.*` + incident.distanceLabel in en/hi/mr (parity GREEN).
+  * Tests: `src/ar/__tests__/*` 23/23 pass via `node --test` (tsconfig excludes __tests__ from app bundle).
+    Lint clean. App boots + capture route bundles cleanly (web smoke test = camera-permission gate).
+  * NOT YET: distance metadata is captured into distanceMetaRef at shutter time but NOT yet sent to the
+    backend / persisted (deferred to Step 3/4). Real AR tracking is UNTESTABLE in Expo Go — needs a build.
+- STEP 3 (upcoming): backend faces (YuNet ONNX) + plate detect/OCR APIs, persist distance meta,
+  background processing, feature flags.  STEP 4: report-detail UI (distance, editable plates, faces).
+  STEP 5: dashboard views + plate-scale cross-check + calibration page.
+
+## 2026-10-05 fork #2 — sandbox recovery + emp 0001 CGM restore
+- Sandbox had crashed (supervisor/PG down); recovered via `sudo bash /app/scripts/sandbox_recover.sh`
+  (R2 restore + alembic upgrade head). All services healthy, /api/health db_seeded=true.
+- RESTORED emp 0001 Amey Ghadge → role_code=CGM, designation="Chief General Manager", dept=ADMIN
+  (was Manager/"Wireman A"/CIVIL — leftover from earlier role/designation QA). (0428 Pathan Irfan
+  Husen remains CGM too; both real CGMs now.)
