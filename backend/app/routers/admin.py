@@ -101,6 +101,8 @@ async def get_settings(
         "dup_window_minutes": s.dup_window_minutes,
         "dup_same_zone": s.dup_same_zone,
         "dup_same_category": s.dup_same_category,
+        "broadcasts_enabled": s.broadcasts_enabled,
+        "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
     }
 
 
@@ -118,6 +120,7 @@ async def patch_settings(
         "factory_lat", "factory_lng", "radius_meters", "beacon_first_mode",
         "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
         "dup_window_minutes", "dup_same_zone", "dup_same_category",
+        "broadcasts_enabled", "broadcast_rate_per_hour",
     ):
         val = getattr(body, field)
         if val is not None:
@@ -134,6 +137,8 @@ async def patch_settings(
         "dup_window_minutes": s.dup_window_minutes,
         "dup_same_zone": s.dup_same_zone,
         "dup_same_category": s.dup_same_category,
+        "broadcasts_enabled": s.broadcasts_enabled,
+        "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
     }
 
 
@@ -1096,6 +1101,33 @@ async def list_designations(
         )
     ).all()
     return {"designations": [d for d, _ in rows]}
+
+
+@router.get("/roles")
+async def list_assignable_roles(
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Permission-role catalog for the employee add/edit pickers. role_code drives
+    RBAC and is kept STRICTLY SEPARATE from the free-text designation (job title).
+    Time Office (rank 3) may assign Worker/Staff/Clerk/Manager; CGM/MD any role.
+    The backend still enforces this on write — `assignable` is only a UI hint."""
+    await _require_can_add_employees(session, actor)
+    rows = (await session.execute(select(Role).order_by(Role.rank))).scalars().all()
+    can_assign_top = actor.role.rank <= 2
+    return {
+        "roles": [
+            {
+                "code": r.code,
+                "rank": r.rank,
+                "label_en": r.label_en,
+                "label_hi": r.label_hi,
+                "label_mr": r.label_mr,
+                "assignable": bool(can_assign_top or r.rank >= 3),
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.post("/employees")

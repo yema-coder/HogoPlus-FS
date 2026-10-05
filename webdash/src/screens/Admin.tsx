@@ -139,6 +139,7 @@ export default function Admin() {
           home_config_enabled: !!geo.home_config_enabled,
           notif_batching_enabled: !!geo.notif_batching_enabled,
           beacon_first_mode: !!geo.beacon_first_mode,
+          broadcasts_enabled: !!geo.broadcasts_enabled,
           dup_window_minutes: Number(geo.dup_window_minutes) || 30,
           dup_same_zone: !!geo.dup_same_zone,
           dup_same_category: !!geo.dup_same_category,
@@ -404,6 +405,7 @@ export default function Admin() {
                   ["home_config_enabled", "flag_homecfg", "flag-home-config"],
                   ["notif_batching_enabled", "flag_notif", "flag-notif-batching"],
                   ["beacon_first_mode", "flag_beacon_first", "flag-beacon-first"],
+                  ["broadcasts_enabled", "flag_broadcasts", "flag-broadcasts"],
                 ] as [string, string, string][]).map(([key, label, tid]) => (
                   <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "4px 0" }}>
                     <input data-testid={tid} type="checkbox" checked={!!geo[key]}

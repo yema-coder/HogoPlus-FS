@@ -435,6 +435,15 @@ class FactorySettings(TimestampMixin, Base):
     presence_outside_alert_min: Mapped[int] = mapped_column(
         Integer, default=10, server_default="10", nullable=False
     )
+    # v1.0.27 Broadcast / Send-Notification engine — flag OFF by default until
+    # the owner approves. When OFF, only preview + "send test to me" work; real
+    # send/schedule is blocked server-side.
+    broadcasts_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    broadcast_rate_per_hour: Mapped[int] = mapped_column(
+        Integer, default=10, server_default="10", nullable=False
+    )
 
 
 class BleBeacon(TimestampMixin, Base):
@@ -714,3 +723,69 @@ class PresenceConsent(TimestampMixin, Base):
     version: Mapped[str] = mapped_column(String(10), nullable=False)
     lang: Mapped[str] = mapped_column(String(5), nullable=False, default="mr")
     granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# ---------------- v1.0.27 BROADCAST / SEND-NOTIFICATION ENGINE ----------------
+
+class Broadcast(TimestampMixin, Base):
+    """One composed notification push to a resolved audience. The in-app inbox
+    (notifications table) is ALWAYS the source of truth — every recipient gets a
+    row regardless of push state. Delivery numbers live on this row (rolled up
+    from broadcast_receipts) so the history list is a single fast read."""
+
+    __tablename__ = "broadcasts"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    # all | department | role | designation | zone | employees
+    audience_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    audience_json: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    title_en: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    title_hi: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    title_mr: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    body_en: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    body_hi: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    body_mr: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    priority: Mapped[str] = mapped_column(String(12), default="normal", nullable=False)  # normal|important|emergency
+    deep_link_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    deep_link_id: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # scheduled | sending | sent | failed | canceled
+    status: Mapped[str] = mapped_column(String(15), default="sent", nullable=False, index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recipient_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    installed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    delivered_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    no_token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    suppressed_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    opened_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
+
+
+class BroadcastReceipt(Base):
+    """Per-recipient delivery tracking (drives the delivery report + resend-to-failed
+    + Expo receipt polling + invalid-token cleanup)."""
+
+    __tablename__ = "broadcast_receipts"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    broadcast_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("broadcasts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False, index=True
+    )
+    notification_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    ticket_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # queued | sent | delivered | failed | no_token | suppressed | opened
+    status: Mapped[str] = mapped_column(String(15), default="queued", nullable=False, index=True)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

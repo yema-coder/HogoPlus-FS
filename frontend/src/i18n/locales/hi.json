@@ -244,7 +244,9 @@
     "memberNote": "जानकारी बदलने के लिए टाइम ऑफिस से मिलें",
     "sahayak": "SOP सहायक — कुछ भी पूछें",
     "privacy": "गोपनीयता नीति",
-    "deleteAccount": "मेरा खाता हटाएँ"
+    "deleteAccount": "मेरा खाता हटाएँ",
+    "designation": "पद",
+    "accessRole": "ऐक्सेस भूमिका"
   },
   "shift": {
     "title": "मेरी शिफ्ट",
@@ -577,7 +579,8 @@
       "next": "आगे",
       "idTaken": "यह ID पहले से {{who}} की है",
       "phoneTaken": "यह नंबर पहले से {{who}} का है"
-    }
+    },
+    "accessRole": "ऐक्सेस भूमिका"
   },
   "veh": {
     "registerTitle": "गेट लॉग",

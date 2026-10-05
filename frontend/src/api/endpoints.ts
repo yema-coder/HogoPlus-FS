@@ -377,6 +377,23 @@ export const directAddEmployee = (body: {
 export const adminDesignations = () =>
   api<{ designations: string[] }>("/admin/designations");
 
+export interface AssignableRole {
+  code: string;
+  rank: number;
+  label_en: string;
+  label_hi: string;
+  label_mr: string;
+  assignable: boolean;
+}
+
+/** Permission-role catalog for the add/edit pickers (STRICTLY separate from the
+ * free-text designation). `assignable` reflects what the current actor may grant. */
+export const adminRoles = () => api<{ roles: AssignableRole[] }>("/admin/roles");
+
+/** v1.0.27: record that a broadcast push was opened (built apps only, best-effort). */
+export const markBroadcastOpened = (broadcastId: string) =>
+  api(`/broadcasts/receipt-opened`, { method: "POST", body: { broadcast_id: broadcastId } });
+
 export const patchEmployee = (
   id: string,
   body: Partial<{

@@ -56,3 +56,6 @@ export const isTopMgmt = (u: Profile | null) => rankOf(u) <= 2; // MD / CGM
 export const canUseDashboard = (u: Profile | null) => rankOf(u) <= 3;
 export const canReviewAttendance = (u: Profile | null) =>
   isTopMgmt(u) || (rankOf(u) === 3 && u?.department_code === "TIME_OFFICE");
+/** v1.0.27: Send Notification is for MD / CGM / Time-Office manager only. */
+export const canBroadcast = (u: Profile | null) =>
+  isTopMgmt(u) || (rankOf(u) === 3 && u?.department_code === "TIME_OFFICE");
