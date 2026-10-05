@@ -762,19 +762,202 @@ async def _detect_plate_async(kind: str, record_id: str) -> dict:
         await engine.dispose()
 
 
-async def run_incident_ai_background(incident_id: str, with_plate: bool) -> None:
-    """In-process incident AI (ANPR + classification) as a FastAPI background task.
-    Production containers run NO Celery worker — this must never depend on a broker.
-    ANPR runs FIRST: the plate result is the product; classification LLM is slower."""
-    if with_plate:
+async def _analyze_photos_async(kind: str, record_id: str) -> dict:
+    """Local ONNX analysis (YuNet faces + YOLO/CCT number plates) of a record's
+    photos. Writes photo_analyses/photo_faces/photo_plates (idempotent per photo
+    key) and, for incidents, sets detected_plate from the strongest local plate.
+    Never raises. Returns a small summary dict."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app import vision_local
+    from app.models import (
+        FactorySettings,
+        FormSubmission,
+        Incident,
+        PhotoAnalysis,
+        PhotoFace,
+        PhotoPlate,
+    )
+    from app.shift_logic import now_ist
+    from app.storage import get_storage
+    from sqlalchemy import select
+
+    engine, sm = _session_factory()
+    analyzed = 0
+    faces_total = 0
+    plates_total = 0
+    best = None  # (text, conf0to1, analysis_key)
+    try:
+        async with sm() as session:
+            s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+            face_enabled = bool(getattr(s, "face_detection_enabled", True)) if s else True
+            plate_enabled = bool(getattr(s, "plate_detection_enabled", True)) if s else True
+            if not face_enabled and not plate_enabled:
+                return {"skipped": "flags_off", "found_plate": False, "plate_enabled": False}
+
+            keys: list[tuple[str, str]] = []
+            incident = None
+            if kind == "incident":
+                incident = await session.get(Incident, record_id)
+                if incident is None:
+                    return {"error": "not found"}
+                if incident.photo_key:
+                    keys.append((incident.photo_key, "primary"))
+                if incident.resolution_photo_key:
+                    keys.append((incident.resolution_photo_key, "resolution"))
+                is_demo = incident.is_demo
+            elif kind == "submission":
+                sub = await session.get(FormSubmission, record_id)
+                if sub is None:
+                    return {"error": "not found"}
+                keys = [(k, "form") for k in (sub.photos or [])]
+                is_demo = sub.is_demo
+            else:
+                return {"error": f"unknown kind {kind}"}
+
+            storage = get_storage()
+            for key, slot in keys:
+                # idempotent: skip a photo already analysed successfully
+                q = select(PhotoAnalysis).where(PhotoAnalysis.photo_key == key)
+                if kind == "incident":
+                    q = q.where(PhotoAnalysis.incident_id == record_id)
+                else:
+                    q = q.where(PhotoAnalysis.submission_id == record_id)
+                existing = (await session.execute(q)).scalars().first()
+                if existing and existing.status == "done":
+                    for pl in existing.plates:
+                        if pl.plate_text:
+                            conf = pl.ocr_confidence or pl.det_confidence or 0.0
+                            if best is None or conf > best[1]:
+                                best = (pl.plate_text, conf, key)
+                    continue
+                if existing:
+                    await session.delete(existing)
+                    await session.flush()
+
+                row = PhotoAnalysis(
+                    incident_id=record_id if kind == "incident" else None,
+                    submission_id=record_id if kind == "submission" else None,
+                    photo_key=key,
+                    slot=slot,
+                    status="pending",
+                    is_demo=is_demo,
+                )
+                session.add(row)
+                await session.flush()
+
+                try:
+                    img = await run_in_threadpool(storage.get, key)
+                    res = await run_in_threadpool(
+                        vision_local.analyze_image, img, do_faces=face_enabled, do_plates=plate_enabled
+                    )
+                except Exception as e:
+                    logger.warning("photo analysis read/infer failed for %s/%s: %s", kind, key, e)
+                    row.status = "failed"
+                    row.error = str(e)[:200]
+                    row.processed_at = now_ist()
+                    continue
+
+                if not res.get("ok"):
+                    row.status = "failed"
+                    row.error = "decode_failed"
+                    row.processed_at = now_ist()
+                    continue
+
+                fcount = 0
+                for fc in res.get("faces") or []:
+                    session.add(PhotoFace(
+                        analysis_id=row.id, x=fc["x"], y=fc["y"], w=fc["w"], h=fc["h"], score=fc.get("score"),
+                    ))
+                    fcount += 1
+                pcount = 0
+                for pl in res.get("plates") or []:
+                    session.add(PhotoPlate(
+                        analysis_id=row.id, x=pl["x"], y=pl["y"], w=pl["w"], h=pl["h"],
+                        plate_text=pl.get("text"), det_confidence=pl.get("det_confidence"),
+                        ocr_confidence=pl.get("ocr_confidence"), region=pl.get("region"),
+                        source="local_onnx",
+                    ))
+                    pcount += 1
+                    if pl.get("text"):
+                        conf = pl.get("ocr_confidence") or pl.get("det_confidence") or 0.0
+                        if best is None or conf > best[1]:
+                            best = (pl["text"], conf, key)
+
+                row.status = "done"
+                row.face_count = fcount
+                row.plate_count = pcount
+                row.processed_at = now_ist()
+                analyzed += 1
+                faces_total += fcount
+                plates_total += pcount
+
+            # incident: surface the strongest local plate on the incident row itself
+            if kind == "incident" and incident is not None:
+                if not plate_enabled:
+                    incident.plate_status = None
+                elif best is not None:
+                    incident.detected_plate = best[0][:20]
+                    incident.plate_confidence = round(best[1] * 100, 1)
+                    incident.plate_source = "local_onnx"
+                    incident.plate_status = "detected"
+                    incident.plate_reason = None
+
+            await session.commit()
+            logger.info(
+                "PHOTO ANALYSIS %s/%s → analyzed=%d faces=%d plates=%d best_plate=%s",
+                kind, record_id, analyzed, faces_total, plates_total, best[0] if best else None,
+            )
+            return {
+                "analyzed": analyzed,
+                "faces": faces_total,
+                "plates": plates_total,
+                "found_plate": best is not None,
+                "plate_enabled": plate_enabled,
+            }
+    finally:
+        await engine.dispose()
         try:
-            await _detect_plate_async("incident", incident_id)
+            from app import vision_local as _vl
+
+            _vl.release_models()
         except Exception:
-            logger.exception("ANPR pipeline failed for incident %s", incident_id)
+            pass
+
+
+async def run_incident_ai_background(incident_id: str, with_plate: bool) -> None:
+    """In-process incident AI (local face/plate analysis + ANPR fallback +
+    classification) as a FastAPI background task. Production containers run NO
+    Celery worker — this must never depend on a broker. Plate detection runs
+    FIRST (it is the product); the classification LLM is slower."""
+    if with_plate:
+        local_found = False
+        plate_enabled = True
+        try:
+            res = await _analyze_photos_async("incident", incident_id)
+            local_found = bool(res.get("found_plate"))
+            plate_enabled = bool(res.get("plate_enabled", True))
+        except Exception:
+            logger.exception("local photo analysis failed for incident %s", incident_id)
+        # Rekognition/LLM ANPR fallback ONLY when plate detection is enabled and the
+        # local ONNX reader found nothing — keeps the proven detection rate.
+        if plate_enabled and not local_found:
+            try:
+                await _detect_plate_async("incident", incident_id)
+            except Exception:
+                logger.exception("ANPR fallback failed for incident %s", incident_id)
     try:
         await _classify_incident_async(incident_id)
     except Exception:
         logger.exception("incident classification failed for %s", incident_id)
+
+
+async def run_photo_analysis_background(kind: str, record_id: str) -> None:
+    """In-process local face/plate analysis (resolution photos / form submissions)."""
+    try:
+        await _analyze_photos_async(kind, record_id)
+    except Exception:
+        logger.exception("photo analysis failed for %s %s", kind, record_id)
 
 
 async def run_plate_detection_background(kind: str, record_id: str) -> None:

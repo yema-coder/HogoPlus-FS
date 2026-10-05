@@ -1,6 +1,6 @@
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Smartphone } from "lucide-react-native";
+import { Camera as CameraIcon, Car, CircleDot, Clock, Copy, MapPin, Ruler, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
@@ -280,6 +280,21 @@ export default function IncidentDetailScreen() {
               {t("incident.capturedAt")}: {formatDateTime(detail.created_at)}
             </Text>
           </View>
+
+          {detail.distance_m != null && detail.distance_method && detail.distance_method !== "none" ? (
+            <View style={styles.capturedRow} testID="incident-distance-row">
+              <Ruler size={15} color={colors.primary} strokeWidth={2.2} />
+              <Text style={styles.capturedText}>
+                {t("incident.distanceLabel", {
+                  d:
+                    `${detail.distance_m.toFixed(1)} m` +
+                    (detail.distance_uncertainty_m != null && detail.distance_uncertainty_m >= 0.1
+                      ? ` ±${detail.distance_uncertainty_m.toFixed(1)}`
+                      : ""),
+                })}
+              </Text>
+            </View>
+          ) : null}
 
           {detail.duplicate_of ? (
             // v1.0.21: display-only duplicate grouping — this report is intact,

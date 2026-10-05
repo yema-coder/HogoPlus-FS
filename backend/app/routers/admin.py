@@ -103,6 +103,9 @@ async def get_settings(
         "dup_same_category": s.dup_same_category,
         "broadcasts_enabled": s.broadcasts_enabled,
         "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
+        "ar_distance_enabled": s.ar_distance_enabled,
+        "face_detection_enabled": s.face_detection_enabled,
+        "plate_detection_enabled": s.plate_detection_enabled,
     }
 
 
@@ -121,6 +124,7 @@ async def patch_settings(
         "home_config_enabled", "vehicle_log_enabled", "notif_batching_enabled",
         "dup_window_minutes", "dup_same_zone", "dup_same_category",
         "broadcasts_enabled", "broadcast_rate_per_hour",
+        "ar_distance_enabled", "face_detection_enabled", "plate_detection_enabled",
     ):
         val = getattr(body, field)
         if val is not None:
@@ -139,6 +143,9 @@ async def patch_settings(
         "dup_same_category": s.dup_same_category,
         "broadcasts_enabled": s.broadcasts_enabled,
         "broadcast_rate_per_hour": s.broadcast_rate_per_hour,
+        "ar_distance_enabled": s.ar_distance_enabled,
+        "face_detection_enabled": s.face_detection_enabled,
+        "plate_detection_enabled": s.plate_detection_enabled,
     }
 
 

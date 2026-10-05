@@ -39,7 +39,7 @@ import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
 import { DistanceCamera, type DistanceCameraRef, type DistancePhoto } from "@/src/ar/DistanceCamera";
-import type { ArCapabilities, DistanceReading } from "@/src/ar/types";
+import type { ArCapabilities, CaptureDistanceMeta, DistanceReading } from "@/src/ar/types";
 import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
@@ -335,6 +335,16 @@ function IncidentCaptureInner() {
     };
     // voice note already uploaded during transcription — reuse the key
     if (voiceKeyRef.current) payload.voice_note_key = voiceKeyRef.current;
+
+    // AR object distance measured at the instant of capture (travels through the
+    // outbox too). Only attach a real, non-"none" measurement.
+    const dm = distanceMetaRef.current as CaptureDistanceMeta | null;
+    if (dm && dm.distance_m != null && dm.distance_method && dm.distance_method !== "none") {
+      payload.distance_m = dm.distance_m;
+      payload.distance_method = dm.distance_method;
+      payload.distance_confidence = dm.distance_confidence;
+      payload.distance_uncertainty_m = dm.distance_uncertainty_m ?? dm.sample_spread_m ?? null;
+    }
 
     // ---- video path (network required; no outbox for videos) ----
     if (videoUri) {

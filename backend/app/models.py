@@ -290,6 +290,12 @@ class Incident(TimestampMixin, Base):
     plate_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0-100
     plate_source: Mapped[str | None] = mapped_column(String(20), nullable=True)  # rekognition|llm_vision
     plate_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)  # code when not_detected
+    # AR object distance measured on-device at the instant of capture (Step 3).
+    # distance_method: lidar|depth|ar_plane|ar_point|feature|none ; confidence: high|medium|low
+    distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    distance_confidence: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    distance_uncertainty_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     # BLE dual-mode zone CONTEXT (not verification): identifier the app matched at
     # capture time (MAC or "ibeacon:<uuid>:<major>:<minor>") + resolved zone label.
     ble_beacon_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -443,6 +449,18 @@ class FactorySettings(TimestampMixin, Base):
     )
     broadcast_rate_per_hour: Mapped[int] = mapped_column(
         Integer, default=10, server_default="10", nullable=False
+    )
+    # Step 3 camera AI feature flags (default ON — the owner may toggle OFF to save
+    # compute). ar_distance_enabled gates the on-device distance overlay; the other
+    # two gate the backend face / number-plate analysis of captured photos.
+    ar_distance_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    face_detection_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    plate_detection_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
     )
 
 
@@ -788,4 +806,83 @@ class BroadcastReceipt(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+
+class PhotoAnalysis(Base):
+    """One analysed photo (Step 3). Owns the face + plate detections for a single
+    image attached to an incident (and, later, a form submission). Idempotent per
+    (source, photo_key): the background task skips keys already marked done."""
+
+    __tablename__ = "photo_analyses"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("form_submissions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    photo_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    slot: Mapped[str] = mapped_column(String(20), default="primary", nullable=False)  # primary|resolution|form
+    status: Mapped[str] = mapped_column(String(15), default="pending", nullable=False)  # pending|done|failed|skipped
+    face_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    plate_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    faces: Mapped[list["PhotoFace"]] = relationship(
+        "PhotoFace", cascade="all, delete-orphan", lazy="selectin"
+    )
+    plates: Mapped[list["PhotoPlate"]] = relationship(
+        "PhotoPlate", cascade="all, delete-orphan", lazy="selectin"
+    )
+    __table_args__ = (
+        UniqueConstraint("incident_id", "photo_key", name="uq_photo_analysis_incident_key"),
+    )
+
+
+class PhotoFace(Base):
+    __tablename__ = "photo_faces"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("photo_analyses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # bounding box as fractions (0..1) of the image, origin top-left
+    x: Mapped[float] = mapped_column(Float, nullable=False)
+    y: Mapped[float] = mapped_column(Float, nullable=False)
+    w: Mapped[float] = mapped_column(Float, nullable=False)
+    h: Mapped[float] = mapped_column(Float, nullable=False)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PhotoPlate(Base):
+    __tablename__ = "photo_plates"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("photo_analyses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    x: Mapped[float] = mapped_column(Float, nullable=False)
+    y: Mapped[float] = mapped_column(Float, nullable=False)
+    w: Mapped[float] = mapped_column(Float, nullable=False)
+    h: Mapped[float] = mapped_column(Float, nullable=False)
+    plate_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    det_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 detector
+    ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 OCR mean char prob
+    region: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="local_onnx", nullable=False)
+    # reviewer correction: when true, plate_text was hand-edited (never auto-overwritten again)
+    edited: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    edited_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
+    )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )

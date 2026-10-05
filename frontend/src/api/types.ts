@@ -139,8 +139,12 @@ export interface Incident {
   detected_plate: string | null;
   plate_status: "pending" | "detected" | "not_detected" | null;
   plate_confidence: number | null;
-  plate_source: "rekognition" | "llm_vision" | null;
+  plate_source: "rekognition" | "llm_vision" | "local_onnx" | "manual" | null;
   plate_reason: string | null;
+  distance_m: number | null;
+  distance_method: "lidar" | "depth" | "ar_plane" | "ar_point" | "feature" | "none" | null;
+  distance_confidence: "high" | "medium" | "low" | null;
+  distance_uncertainty_m: number | null;
   created_at: string | null;
 }
 

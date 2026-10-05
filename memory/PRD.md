@@ -1573,3 +1573,48 @@ Goal (user PRD): add to ALL camera captures — (1) live AR object distance (cus
 - RESTORED emp 0001 Amey Ghadge → role_code=CGM, designation="Chief General Manager", dept=ADMIN
   (was Manager/"Wireman A"/CIVIL — leftover from earlier role/designation QA). (0428 Pathan Irfan
   Husen remains CGM too; both real CGMs now.)
+
+## Camera AI — STEP 3: backend face + plate analysis + distance persistence (2026-10-05) ✅ code complete, pending user review
+Delivers the user's "backend face-detector + number-plate reader" + "Save Distance".
+- NEW LOCAL VISION (CPU-only ONNX, no torch, no external API) `app/vision_local.py`:
+  * Faces — OpenCV `cv2.FaceDetectorYN` (YuNet, bundled `backend/ml_models/yunet.onnx`, 227KB).
+    We only count/locate faces (boxes + score), never identify.
+  * Plates — `open-image-models` `create_detector("yolo-v9-t-384-license-plate-end2end")` crops
+    each plate → `fast-plate-ocr` `LicensePlateRecognizer("cct-xs-v2-global-model")` reads text.
+  * `analyze_image(bytes, do_faces, do_plates)` → boxes as FRACTIONS (0..1) of the image; NEVER
+    raises (missing model/decode → empty). Lazy singletons + `release_models()` (gc+malloc_trim)
+    called after each run (small-container RSS hygiene; spike ~300-400MB → back to ~135MB).
+  * Deps added to requirements.txt: fast-plate-ocr==1.1.0, open-image-models==0.6.0,
+    opencv-python-headless==5.0.0.93 (onnxruntime/numpy/pillow/PyYAML already present).
+  * MODEL CACHE: yolo (7.4MB) + cct (3.2MB) auto-download from HF to ~/.cache on FIRST inference
+    (one-time, needs outbound internet). yunet is bundled in the repo. If download fails the pipeline
+    degrades gracefully (analysis status=failed, incident still fine). Sandbox has them cached.
+- DB (alembic 0021, applied to sandbox; auto-applied in prod via main.py startup upgrade):
+  * incidents: distance_m / distance_method / distance_confidence / distance_uncertainty_m.
+  * settings flags (default ON): ar_distance_enabled / face_detection_enabled / plate_detection_enabled
+    (in admin GET/PATCH /settings + SettingsPatchIn).
+  * photo_analyses (one per analysed photo, idempotent per incident+photo_key) + photo_faces
+    (x,y,w,h,score) + photo_plates (box, plate_text, det/ocr confidence, region, source, edited,
+    edited_by/at). CASCADE on incident/submission delete.
+- PIPELINE (`app/tasks.py`): `_analyze_photos_async(kind, record_id)` runs faces+plates on each photo
+  (primary + resolution), writes rows, and for incidents sets detected_plate/plate_confidence(×100)/
+  plate_source='local_onnx'/plate_status='detected' from the strongest local plate. `run_incident_ai_background`
+  now = local analysis FIRST → Rekognition/LLM ANPR ONLY as fallback when local found nothing AND
+  plate flag ON → classification. Resolution photo (status→resolved) enqueues `run_photo_analysis_background`.
+  All in-process FastAPI BackgroundTasks (prod has no Celery). plate flag OFF ⇒ plate_status cleared to NULL.
+- API (`app/routers/incidents.py`): GET /api/incidents/{id}/analysis (role-scoped like detail →
+  {distance, detected_plate, plate_status, face_count, plate_count, pending, photos:[{faces,plates}]});
+  PATCH /api/incidents/{id}/plates/{plate_id} {text} (managers rank≤3 / dept mgr ONLY; reporter 403;
+  normalises upper, edited=True, becomes incident.detected_plate source='manual', never auto-overwritten).
+- FRONTEND: capture.tsx now sends distance_{m,method,confidence,uncertainty_m} in the incident payload
+  (travels through the offline outbox too). incident/[id].tsx shows a compact distance row (Ruler icon,
+  incident.distanceLabel) when a real measurement exists. src/api/types.ts Incident extended.
+  (Faces/plates OVERLAY on the detail screen is STEP 4 — not built yet.)
+- TESTS: tests/test_step3_camera_ai.py (11) — distance persist/validate/none-drop, analysis empty+pending,
+  cross-worker 403, pipeline writes rows + sets plate (vision_local monkeypatched, no models in CI),
+  idempotent re-run, manager-edit/worker-403/empty-422, flags exposed, plate-flag-off skips plates.
+  FULL SUITE: 354 passed, 1 skipped (was 354 baseline + new). Lint clean. Real-model e2e verified via
+  curl (demo worker upload→incident→analysis: face score 0.907 + plate MH12AB1234 det0.41/ocr1.0;
+  CGM plate edit → MH14GH7777 source=manual; worker 403). App boots + detail screen renders clean.
+- NOT TESTABLE without a native build: on-device AR distance capture (Step 2). Faces/plates display UI = Step 4.
+

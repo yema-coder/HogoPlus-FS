@@ -156,6 +156,11 @@ class IncidentCreateIn(BaseModel):
     description: str | None = None
     voice_note_key: str | None = None
     severity: str = "normal"
+    # AR object distance measured on-device at capture (Step 3; may be null).
+    distance_m: float | None = Field(default=None, ge=0, le=100)
+    distance_method: str | None = None
+    distance_confidence: str | None = None
+    distance_uncertainty_m: float | None = Field(default=None, ge=0, le=100)
     # BLE zone CONTEXT (non-blocking, background scan at capture; may be null).
     ble_beacon_id: str | None = None
     ble_ibeacon_uuid: str | None = None
@@ -244,6 +249,22 @@ class SettingsPatchIn(BaseModel):
     dup_same_category: bool | None = None
     broadcasts_enabled: bool | None = None
     broadcast_rate_per_hour: int | None = Field(default=None, ge=1, le=200)
+    ar_distance_enabled: bool | None = None
+    face_detection_enabled: bool | None = None
+    plate_detection_enabled: bool | None = None
+
+
+class PlatePatchIn(BaseModel):
+    """Reviewer correction of a detected number plate (Step 4 edit flow)."""
+    text: str = Field(max_length=20)
+
+    @field_validator("text")
+    @classmethod
+    def _clean(cls, v: str) -> str:
+        v = (v or "").strip().upper()
+        if not v:
+            raise ValueError("text required")
+        return v
 
 
 class RegularizeIn(BaseModel):
