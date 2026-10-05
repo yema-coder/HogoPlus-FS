@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-import { api, ApiError } from "../api";
+import { api, ApiError, apiDownload } from "../api";
 import { Chip, Empty, Loading } from "../components";
 import { localName, useI18n } from "../i18n";
 
@@ -94,6 +94,7 @@ function Compose({ goHistory }: { goHistory: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [dupWarn, setDupWarn] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [editingTpl, setEditingTpl] = useState<Template | null>(null);
 
   useEffect(() => {
     api("/broadcasts/meta").then(setMeta).catch(() => {});
@@ -192,14 +193,28 @@ function Compose({ goHistory }: { goHistory: () => void }) {
     setErr(""); setMsg("");
   };
 
+  const startEdit = (tpl: Template) => {
+    applyTemplate(tpl);
+    setEditingTpl(tpl);
+  };
+
+  const cancelEdit = () => setEditingTpl(null);
+
   const saveTemplate = async () => {
     setBusy(true); setErr(""); setMsg("");
+    const payload = {
+      title_mr: title.mr, title_hi: title.hi, title_en: title.en,
+      body_mr: body.mr, body_hi: body.hi, body_en: body.en, priority,
+    };
     try {
-      await api("/broadcasts/templates", { method: "POST", body: JSON.stringify({
-        title_mr: title.mr, title_hi: title.hi, title_en: title.en,
-        body_mr: body.mr, body_hi: body.hi, body_en: body.en, priority,
-      }) });
-      setMsg(t("bc_template_saved"));
+      if (editingTpl) {
+        await api(`/broadcasts/templates/${editingTpl.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        setMsg(t("bc_template_updated"));
+        setEditingTpl(null);
+      } else {
+        await api("/broadcasts/templates", { method: "POST", body: JSON.stringify(payload) });
+        setMsg(t("bc_template_saved"));
+      }
       const r = await api("/broadcasts/templates");
       setTemplates(r.items || []);
     } catch (e: any) { handleErr(e); }
@@ -211,6 +226,7 @@ function Compose({ goHistory }: { goHistory: () => void }) {
     try {
       await api(`/broadcasts/templates/${id}`, { method: "DELETE" });
       setTemplates((prev) => prev.filter((x) => x.id !== id));
+      if (editingTpl?.id === id) setEditingTpl(null);
     } catch { /* best effort */ }
   };
 
@@ -238,16 +254,22 @@ function Compose({ goHistory }: { goHistory: () => void }) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {templates.map((tpl) => {
               const lbl = (tpl as any)[`title_${lang}`] || tpl.title_mr || tpl.title_en;
+              const isEditing = editingTpl?.id === tpl.id;
               return (
                 <span key={tpl.id} data-testid={`bc-tpl-${tpl.id}`}
-                  className="btn ghost"
+                  className={`btn ${isEditing ? "primary" : "ghost"}`}
                   style={{ fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
                   onClick={() => applyTemplate(tpl)}>
                   <span>{PRIO_EMOJI[tpl.priority]} {lbl}</span>
                   {!tpl.is_builtin && (
-                    <span data-testid={`bc-tpl-del-${tpl.id}`} aria-label="delete template"
-                      onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }}
-                      style={{ color: "var(--danger)", fontWeight: 700, marginLeft: 2 }}>✕</span>
+                    <>
+                      <span data-testid={`bc-tpl-edit-${tpl.id}`} aria-label="edit template"
+                        onClick={(e) => { e.stopPropagation(); startEdit(tpl); }}
+                        style={{ marginLeft: 2 }}>✎</span>
+                      <span data-testid={`bc-tpl-del-${tpl.id}`} aria-label="delete template"
+                        onClick={(e) => { e.stopPropagation(); deleteTemplate(tpl.id); }}
+                        style={{ color: "var(--danger)", fontWeight: 700, marginLeft: 2 }}>✕</span>
+                    </>
                   )}
                 </span>
               );
@@ -402,9 +424,15 @@ function Compose({ goHistory }: { goHistory: () => void }) {
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
           <button className="btn ghost" data-testid="bc-send-test" disabled={busy || !contentReady} onClick={sendTest}>🧪 {t("bc_send_test")}</button>
-          <button className="btn ghost" data-testid="bc-save-template" disabled={busy || !contentReady} onClick={saveTemplate}>💾 {t("bc_save_template")}</button>
+          <button className="btn ghost" data-testid="bc-save-template" disabled={busy || !contentReady} onClick={saveTemplate}>
+            {editingTpl ? `✏️ ${t("bc_update_template")}` : `💾 ${t("bc_save_template")}`}
+          </button>
+          {editingTpl && (
+            <button className="btn ghost" data-testid="bc-cancel-edit" disabled={busy} onClick={cancelEdit}
+              style={{ color: "var(--muted)" }}>{t("bc_cancel_edit")}</button>
+          )}
           <button className="btn primary" data-testid="bc-review-send" disabled={busy || !canSend} onClick={() => setConfirm(true)}>
             {when === "schedule" ? t("bc_schedule_btn") : t("bc_review_send")}
           </button>
@@ -588,7 +616,13 @@ function DetailModal({ row, onClose, onChanged }: { row: BroadcastRow; onClose: 
         </div>
         {showReceipts && (
           <div className="card" data-testid="bc-receipts-panel" style={{ marginTop: 10 }}>
-            <b>{t("bc_receipts")}</b>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <b>{t("bc_receipts")}</b>
+              <button className="btn ghost" data-testid="bc-export-xlsx" style={{ fontSize: 12 }}
+                onClick={() => apiDownload(`/broadcasts/${row.id}/receipts.xlsx`, `broadcast_delivery_${row.id.slice(0, 8)}.xlsx`).catch(() => {})}>
+                ⬇️ {t("bc_export_xlsx")}
+              </button>
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" }}>
               {([
                 ["", t("bc_receipts_all"), r.recipient_count],

@@ -452,3 +452,58 @@ async def test_receipts_worker_403_and_missing_404(client):
     # unknown broadcast → 404
     assert (await client.get(f"/api/broadcasts/{uuid.uuid4()}/receipts", headers=hdr)).status_code == 404
 
+
+# ---------------- template edit ----------------
+
+@pytest.mark.asyncio
+async def test_template_edit(client):
+    hdr = await login(client, PHONES["cgm"])
+    created = await client.post(
+        "/api/broadcasts/templates",
+        json={"title_mr": "जुने शीर्षक", "body_mr": "जुना मजकूर", "priority": "normal"},
+        headers=hdr,
+    )
+    tid = created.json()["id"]
+    upd = await client.patch(
+        f"/api/broadcasts/templates/{tid}",
+        json={"title_mr": "नवे शीर्षक", "body_mr": "नवीन मजकूर", "priority": "emergency"},
+        headers=hdr,
+    )
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["title_mr"] == "नवे शीर्षक"
+    assert upd.json()["priority"] == "emergency"
+    # list reflects the edit
+    lst = await client.get("/api/broadcasts/templates", headers=hdr)
+    assert any(i["id"] == tid and i["title_mr"] == "नवे शीर्षक" for i in lst.json()["items"])
+    await client.delete(f"/api/broadcasts/templates/{tid}", headers=hdr)
+    # editing a non-existent template → 404; worker → 403
+    assert (await client.patch(f"/api/broadcasts/templates/{uuid.uuid4()}",
+            json={"title_mr": "x", "body_mr": "y"}, headers=hdr)).status_code == 404
+    whdr = await login(client, PHONES["w_prod1"])
+    assert (await client.patch(f"/api/broadcasts/templates/{uuid.uuid4()}",
+            json={"title_mr": "x", "body_mr": "y"}, headers=whdr)).status_code == 403
+
+
+# ---------------- delivery report Excel export ----------------
+
+@pytest.mark.asyncio
+async def test_receipts_xlsx_export(client):
+    await _enable_flag(client)
+    hdr = await login(client, PHONES["cgm"])
+    r = await client.post(
+        "/api/broadcasts",
+        json={"audience_type": "department", "departments": ["PRODUCTION"],
+              "title_mr": "एक्सेल", "body_mr": "अहवाल"},
+        headers=hdr,
+    )
+    bid = r.json()["id"]
+    xl = await client.get(f"/api/broadcasts/{bid}/receipts.xlsx", headers=hdr)
+    assert xl.status_code == 200
+    assert "spreadsheetml" in xl.headers["content-type"]
+    assert "attachment" in xl.headers.get("content-disposition", "")
+    assert xl.content[:2] == b"PK"  # xlsx is a zip container
+    # worker 403, unknown broadcast 404
+    whdr = await login(client, PHONES["w_prod1"])
+    assert (await client.get(f"/api/broadcasts/{bid}/receipts.xlsx", headers=whdr)).status_code == 403
+    assert (await client.get(f"/api/broadcasts/{uuid.uuid4()}/receipts.xlsx", headers=hdr)).status_code == 404
+

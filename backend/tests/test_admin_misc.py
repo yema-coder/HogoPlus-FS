@@ -252,3 +252,18 @@ async def test_admin_employee_missing_phone_filter(client):
     assert r.status_code == 200
     assert all(e["phone"] is None for e in r.json())
 
+
+
+async def test_admin_diagnostics(client):
+    cgm = await login(client, PHONES["cgm"])
+    r = await client.get("/api/admin/diagnostics", headers=cgm)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["db_seeded"] is True
+    assert d["employee_count"] >= 8
+    assert d["active_employee_count"] >= 1
+    assert isinstance(d["scheduler_jobs"], list) and len(d["scheduler_jobs"]) >= 1
+    assert "warnings" in d and isinstance(d["warnings"], list)
+    # worker forbidden
+    w = await login(client, PHONES["w_prod1"])
+    assert (await client.get("/api/admin/diagnostics", headers=w)).status_code == 403

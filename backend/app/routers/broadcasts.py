@@ -7,11 +7,13 @@ Role-gated to MD / CGM / Time-Office. Real send/schedule is behind the
 settings.broadcasts_enabled flag (preview + test-to-me always work).
 """
 import hashlib
+import io
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,7 +39,7 @@ from app.schemas import (
     BroadcastTemplateIn,
 )
 from app.security import get_approved_employee, is_dept_manager
-from app.shift_logic import now_ist
+from app.shift_logic import IST, now_ist
 
 logger = logging.getLogger("hogo.broadcast")
 router = APIRouter(tags=["broadcasts"])
@@ -605,6 +607,28 @@ async def create_template(
     return _template_out(tpl)
 
 
+@router.patch("/broadcasts/templates/{template_id}")
+async def update_template(
+    template_id: uuid.UUID,
+    body: BroadcastTemplateIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a saved custom template in place (built-in templates can't be edited)."""
+    await _require_broadcast_access(session, actor)
+    tpl = await session.get(BroadcastTemplate, template_id)
+    if tpl is None or tpl.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Template not found")
+    tpl.title_en, tpl.title_hi, tpl.title_mr = body.title_en, body.title_hi, body.title_mr
+    tpl.body_en, tpl.body_hi, tpl.body_mr = body.body_en, body.body_hi, body.body_mr
+    tpl.priority = body.priority
+    await write_audit(session, actor.id, "broadcast.template_updated", "broadcast_template", str(tpl.id),
+                      {"title": _pick(body.title_mr, body.title_en)})
+    await session.commit()
+    await session.refresh(tpl)
+    return _template_out(tpl)
+
+
 @router.delete("/broadcasts/templates/{template_id}")
 async def delete_template(
     template_id: uuid.UUID,
@@ -764,6 +788,51 @@ async def broadcast_receipts(
         },
         "items": items,
     }
+
+
+@router.get("/broadcasts/{broadcast_id}/receipts.xlsx")
+async def export_receipts(
+    broadcast_id: uuid.UUID,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Download the full per-recipient delivery list as an Excel file (for records)."""
+    await _require_broadcast_access(session, actor)
+    bc = await session.get(Broadcast, broadcast_id)
+    if bc is None or bc.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    from openpyxl import Workbook
+
+    rows = (
+        await session.execute(
+            select(BroadcastReceipt, Employee.full_name, Employee.emp_id, Employee.department_code)
+            .join(Employee, Employee.id == BroadcastReceipt.employee_id)
+            .where(BroadcastReceipt.broadcast_id == bc.id)
+            .order_by(Employee.full_name)
+            .limit(10000)
+        )
+    ).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Delivery"
+    ws.append(["Broadcast", _pick(bc.title_mr, bc.title_en, bc.title_hi)])
+    ws.append(["Sent at (IST)", bc.sent_at.astimezone(IST).strftime("%d-%m-%Y %H:%M") if bc.sent_at else ""])
+    ws.append(["Recipients", bc.recipient_count])
+    ws.append([])
+    ws.append(["Name", "Emp ID", "Department", "Status", "Error", "Updated (IST)"])
+    for r, name, eid, dept in rows:
+        upd = r.updated_at.astimezone(IST).strftime("%d-%m-%Y %H:%M") if r.updated_at else ""
+        ws.append([name, eid, dept or "", r.status, r.error or "", upd])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"broadcast_delivery_{str(bc.id)[:8]}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
 
 
 # ---------------- scheduler-callable sweeps ----------------

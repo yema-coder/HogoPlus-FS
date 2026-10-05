@@ -52,3 +52,22 @@ export async function api(path: string, opts: RequestInit = {}, retry = true): P
   }
   return res.json();
 }
+
+/** Authenticated file download → triggers a browser "Save as" for a blob response. */
+export async function apiDownload(path: string, filename: string, retry = true): Promise<void> {
+  const token = getAccess();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`/api${path}`, { headers });
+  if (res.status === 401 && retry && (await tryRefresh())) return apiDownload(path, filename, false);
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

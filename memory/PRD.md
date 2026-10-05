@@ -1756,3 +1756,50 @@ app untouched (announce.tsx uses the older /admin/announcements fanout; broadcas
 - NON-BLOCKING reviewer notes (NOT actioned, by design): Broadcast.tsx ~632 lines (could split later);
   deleteTemplate uses window.confirm vs the styled send-confirm modal.
 
+## 2026-10-05 fork #4 — Broadcast backlog completed: Template Edit + Delivery Excel export + System Health ✅ code complete + E2E verified
+User directive "do all the steps, complete everything and test everything". Shipped the remaining
+Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
+
+### Quick Template EDIT
+- Backend: PATCH /api/broadcasts/templates/{template_id} (BroadcastTemplateIn; custom only, 404 for
+  builtin-id/other-bubble; worker 403; audited broadcast.template_updated) in app/routers/broadcasts.py.
+- Webdash Compose: custom template chips now carry a ✎ edit control (testID bc-tpl-edit-<uuid>) beside
+  the ✕ delete. Tapping ✎ loads the template into the composer + enters EDIT mode (editingTpl state) →
+  the single "Save as template" button switches label to "✏️ Update template" and a "bc-cancel-edit"
+  button appears; saving PATCHes in place ("Template updated ✓"). Built-in chips have no ✎/✕.
+
+### Delivery Report EXPORT to Excel
+- Backend: GET /api/broadcasts/{broadcast_id}/receipts.xlsx — openpyxl Workbook (header rows: title /
+  sent-at IST / recipient count, then a per-recipient table Name/EmpID/Dept/Status/Error/Updated-IST),
+  StreamingResponse with the spreadsheetml content-type + attachment filename broadcast_delivery_<8>.xlsx.
+  Bubble-scoped 404, worker 403. (Mirrors the existing vehicles /export.xlsx pattern.)
+- Webdash: new api.ts `apiDownload(path, filename)` helper (authed fetch → blob → <a download> click,
+  401-refresh-retry). A "⬇️ Download Excel" button (testID bc-export-xlsx) in the receipts panel header.
+
+### Scheduled Template Blast (NO new code — already supported, now verified)
+- Applying a template fills the composer; the existing "Schedule" option (bc-when-schedule + bc-sched-at)
+  then schedules it (status=scheduled, fired by the per-minute broadcast_schedule_sweep). E2E-proven:
+  builtin:maintenance + Everyone + schedule tomorrow → History row shows the amber "Scheduled" chip.
+
+### Seed Safety Check → admin-visible System Health card
+- Backend already had the startup DB-integrity check (empty employees → CRITICAL log + /api/health
+  db_seeded=false + CGM notification). ADDED a visible read-only view: scheduler.py `scheduler_status()`
+  helper + GET /api/admin/diagnostics (require_role(2) — demo top-mgmt may VIEW; never mutates) returning
+  {db_seeded, employee_count (real), active_employee_count, demo_employee_count, department_count,
+  scheduler_running, scheduler_jobs[], warnings[db_empty|employee_count_low|scheduler_not_running], ok}.
+- Webdash Admin: new "🩺 System health" card (testID admin-diagnostics) at position 0 — green
+  "All systems healthy ✓" (diag-ok) OR red warnings (diag-warnings), employee/active/demo/department
+  counts + scheduler running + job count. Live: 431 employees (412 active), scheduler running (10 jobs), ok.
+
+### Tests + build + verification
+- pytest: +3 (test_broadcasts.py test_template_edit + test_receipts_xlsx_export; test_admin_misc.py
+  test_admin_diagnostics). FULL SUITE **371 passed, 2 skipped**. Lint clean (Broadcast.tsx, Admin.tsx).
+- Webdash rebuilt → /app/backend/webdash_dist (index-BiC2JTi7.js), served live at /api/dash.
+- testing_agent iteration_30.json — ALL PASS, 0 bugs (Demo CGM): template edit flow, xlsx download
+  captured via expect_download, scheduled-template blast shows Scheduled chip, System Health card shows
+  431 employees + scheduler running; regression (template apply + receipt filters) still green.
+- NON-BLOCKING reviewer notes (NOT actioned): Admin NavLink lacks data-testid=nav-admin; Broadcast.tsx
+  ~665 lines (soft cap 700); composer edits title_<tLang> while chip label reads title_<uiLang> (fine).
+- SANDBOX: broadcasts_enabled remains ON (rate 50). i18n webdash: +13 keys (bc_update_template/
+  bc_template_updated/bc_cancel_edit/bc_export_xlsx + diag_*).
+

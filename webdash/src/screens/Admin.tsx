@@ -66,6 +66,7 @@ export default function Admin() {
   const [calMsg, setCalMsg] = useState("");
   const [candidates, setCandidates] = useState<any[]>([]);
   const [calIncident, setCalIncident] = useState("");
+  const [diag, setDiag] = useState<any>(null);
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
@@ -75,6 +76,7 @@ export default function Admin() {
   useEffect(() => {
     api("/admin/settings").then(setGeo).catch(() => {});
     api("/admin/plate-scale/candidates").then(setCandidates).catch(() => setCandidates([]));
+    api("/admin/diagnostics").then(setDiag).catch(() => setDiag(null));
     api("/app-version")
       .then((v) => setVer({ ...v, apk_url: v.apk_url ?? "", notes: v.notes ?? "", latest_version: v.latest_version ?? "" }))
       .catch(() => setVer({ latest_version: "", apk_url: "", notes: "", force_update: false }));
@@ -377,6 +379,26 @@ export default function Admin() {
 
       <div className="grid">
         <div>
+          {diag && (
+            <div className="card" data-testid="admin-diagnostics">
+              <h2>🩺 {t("diag_title")}</h2>
+              {diag.warnings?.length ? (
+                <div data-testid="diag-warnings" style={{ color: "var(--danger)", fontWeight: 700, marginBottom: 8 }}>
+                  {diag.warnings.includes("db_empty") && <div>{t("diag_warn_db_empty")}</div>}
+                  {diag.warnings.includes("employee_count_low") && <div>{t("diag_warn_low")}</div>}
+                  {diag.warnings.includes("scheduler_not_running") && <div>{t("diag_warn_scheduler")}</div>}
+                </div>
+              ) : (
+                <div data-testid="diag-ok" style={{ color: "var(--success)", fontWeight: 700, marginBottom: 8 }}>{t("diag_ok")}</div>
+              )}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 14 }}>
+                <span data-testid="diag-employees">👥 {t("diag_employees")}: <b>{diag.employee_count}</b> ({diag.active_employee_count} {t("diag_active")})</span>
+                <span>🏭 {t("diag_departments")}: <b>{diag.department_count}</b></span>
+                <span>🧪 {t("diag_demo")}: <b>{diag.demo_employee_count}</b></span>
+                <span data-testid="diag-scheduler">⚙️ {t("diag_scheduler")}: <b>{diag.scheduler_running ? t("diag_running") : t("diag_stopped")}</b> ({(diag.scheduler_jobs || []).length})</span>
+              </div>
+            </div>
+          )}
           <div className="card">
             <h2>📱 {t("appver_title")}</h2>
             {!ver ? <Empty /> : (
