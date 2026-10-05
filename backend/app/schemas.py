@@ -581,3 +581,21 @@ class BroadcastResendIn(BaseModel):
 
 class BroadcastOpenedIn(BaseModel):
     broadcast_id: uuid.UUID
+
+
+class BroadcastTemplateIn(BaseModel):
+    title_en: str = Field(default="", max_length=200)
+    title_hi: str = Field(default="", max_length=200)
+    title_mr: str = Field(default="", max_length=200)
+    body_en: str = Field(default="", max_length=1000)
+    body_hi: str = Field(default="", max_length=1000)
+    body_mr: str = Field(default="", max_length=1000)
+    priority: Literal["normal", "important", "emergency"] = "normal"
+
+    @model_validator(mode="after")
+    def _require_content(self):
+        if not (self.title_mr.strip() or self.title_en.strip() or self.title_hi.strip()):
+            raise ValueError("title required in at least one language")
+        if not (self.body_mr.strip() or self.body_en.strip() or self.body_hi.strip()):
+            raise ValueError("message required in at least one language")
+        return self

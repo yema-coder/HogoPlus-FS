@@ -339,3 +339,171 @@ async def test_meta_zones(client):
     body = r.json()
     assert "zones" in body and isinstance(body["zones"], list)
     assert body["enabled"] in (True, False)
+
+
+# ---------------- quick templates ----------------
+
+@pytest.mark.asyncio
+async def test_templates_builtins_present(client):
+    hdr = await login(client, PHONES["cgm"])
+    r = await client.get("/api/broadcasts/templates", headers=hdr)
+    assert r.status_code == 200
+    items = r.json()["items"]
+    builtins = [i for i in items if i["is_builtin"]]
+    assert len(builtins) >= 6
+    # every built-in carries trilingual content + a valid priority
+    for b in builtins:
+        assert b["id"].startswith("builtin:")
+        assert b["title_mr"] and b["body_mr"]
+        assert b["priority"] in ("normal", "important", "emergency")
+
+
+@pytest.mark.asyncio
+async def test_template_create_list_delete(client):
+    hdr = await login(client, PHONES["cgm"])
+    created = await client.post(
+        "/api/broadcasts/templates",
+        json={"title_mr": "माझा साचा", "title_en": "My template",
+              "body_mr": "हा माझा जतन केलेला संदेश आहे.", "body_en": "My saved message.",
+              "priority": "important"},
+        headers=hdr,
+    )
+    assert created.status_code == 200, created.text
+    tid = created.json()["id"]
+    assert created.json()["is_builtin"] is False
+    # appears in the list as a custom template
+    lst = await client.get("/api/broadcasts/templates", headers=hdr)
+    custom = [i for i in lst.json()["items"] if not i["is_builtin"]]
+    assert any(c["id"] == tid for c in custom)
+    # delete it → gone
+    d = await client.delete(f"/api/broadcasts/templates/{tid}", headers=hdr)
+    assert d.status_code == 200
+    lst2 = await client.get("/api/broadcasts/templates", headers=hdr)
+    assert not any(i["id"] == tid for i in lst2.json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_template_worker_403(client):
+    hdr = await login(client, PHONES["w_prod1"])
+    assert (await client.get("/api/broadcasts/templates", headers=hdr)).status_code == 403
+    assert (await client.post("/api/broadcasts/templates",
+            json={"title_mr": "x", "body_mr": "y"}, headers=hdr)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_template_validation_and_missing_404(client):
+    hdr = await login(client, PHONES["cgm"])
+    # no body → 422
+    bad = await client.post("/api/broadcasts/templates",
+                            json={"title_mr": "only title"}, headers=hdr)
+    assert bad.status_code == 422
+    # deleting a non-existent (valid-uuid) template → 404
+    missing = await client.delete(f"/api/broadcasts/templates/{uuid.uuid4()}", headers=hdr)
+    assert missing.status_code == 404
+
+
+# ---------------- delivery receipts (full per-recipient list) ----------------
+
+@pytest.mark.asyncio
+async def test_receipts_full_list_and_filter(client):
+    await _enable_flag(client)
+    hdr = await login(client, PHONES["cgm"])
+    r = await client.post(
+        "/api/broadcasts",
+        json={"audience_type": "department", "departments": ["PRODUCTION"],
+              "title_mr": "रसीद", "body_mr": "संदेश"},
+        headers=hdr,
+    )
+    assert r.status_code == 200, r.text
+    bid = r.json()["id"]
+    total = r.json()["recipient_count"]
+    assert total >= 1
+    # full list = one row per recipient
+    full = await client.get(f"/api/broadcasts/{bid}/receipts", headers=hdr)
+    assert full.status_code == 200
+    data = full.json()
+    assert data["total"] == total
+    assert len(data["items"]) == total
+    assert set(data["counts"].keys()) == {"sent", "delivered", "failed", "no_token", "suppressed", "opened"}
+    # every item has a name + status
+    for it in data["items"]:
+        assert it["name"] and it["status"]
+    # filter by no_token returns only no_token rows (PRODUCTION workers have no token)
+    filt = await client.get(f"/api/broadcasts/{bid}/receipts?status=no_token", headers=hdr)
+    assert filt.status_code == 200
+    rows = filt.json()["items"]
+    assert len(rows) == data["counts"]["no_token"]
+    assert all(x["status"] == "no_token" for x in rows)
+
+
+@pytest.mark.asyncio
+async def test_receipts_worker_403_and_missing_404(client):
+    await _enable_flag(client)
+    hdr = await login(client, PHONES["cgm"])
+    r = await client.post(
+        "/api/broadcasts",
+        json={"audience_type": "all", "title_mr": "रसीद २", "body_mr": "संदेश"},
+        headers=hdr,
+    )
+    bid = r.json()["id"]
+    # worker cannot read receipts
+    whdr = await login(client, PHONES["w_prod1"])
+    assert (await client.get(f"/api/broadcasts/{bid}/receipts", headers=whdr)).status_code == 403
+    # unknown broadcast → 404
+    assert (await client.get(f"/api/broadcasts/{uuid.uuid4()}/receipts", headers=hdr)).status_code == 404
+
+
+# ---------------- template edit ----------------
+
+@pytest.mark.asyncio
+async def test_template_edit(client):
+    hdr = await login(client, PHONES["cgm"])
+    created = await client.post(
+        "/api/broadcasts/templates",
+        json={"title_mr": "जुने शीर्षक", "body_mr": "जुना मजकूर", "priority": "normal"},
+        headers=hdr,
+    )
+    tid = created.json()["id"]
+    upd = await client.patch(
+        f"/api/broadcasts/templates/{tid}",
+        json={"title_mr": "नवे शीर्षक", "body_mr": "नवीन मजकूर", "priority": "emergency"},
+        headers=hdr,
+    )
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["title_mr"] == "नवे शीर्षक"
+    assert upd.json()["priority"] == "emergency"
+    # list reflects the edit
+    lst = await client.get("/api/broadcasts/templates", headers=hdr)
+    assert any(i["id"] == tid and i["title_mr"] == "नवे शीर्षक" for i in lst.json()["items"])
+    await client.delete(f"/api/broadcasts/templates/{tid}", headers=hdr)
+    # editing a non-existent template → 404; worker → 403
+    assert (await client.patch(f"/api/broadcasts/templates/{uuid.uuid4()}",
+            json={"title_mr": "x", "body_mr": "y"}, headers=hdr)).status_code == 404
+    whdr = await login(client, PHONES["w_prod1"])
+    assert (await client.patch(f"/api/broadcasts/templates/{uuid.uuid4()}",
+            json={"title_mr": "x", "body_mr": "y"}, headers=whdr)).status_code == 403
+
+
+# ---------------- delivery report Excel export ----------------
+
+@pytest.mark.asyncio
+async def test_receipts_xlsx_export(client):
+    await _enable_flag(client)
+    hdr = await login(client, PHONES["cgm"])
+    r = await client.post(
+        "/api/broadcasts",
+        json={"audience_type": "department", "departments": ["PRODUCTION"],
+              "title_mr": "एक्सेल", "body_mr": "अहवाल"},
+        headers=hdr,
+    )
+    bid = r.json()["id"]
+    xl = await client.get(f"/api/broadcasts/{bid}/receipts.xlsx", headers=hdr)
+    assert xl.status_code == 200
+    assert "spreadsheetml" in xl.headers["content-type"]
+    assert "attachment" in xl.headers.get("content-disposition", "")
+    assert xl.content[:2] == b"PK"  # xlsx is a zip container
+    # worker 403, unknown broadcast 404
+    whdr = await login(client, PHONES["w_prod1"])
+    assert (await client.get(f"/api/broadcasts/{bid}/receipts.xlsx", headers=whdr)).status_code == 403
+    assert (await client.get(f"/api/broadcasts/{uuid.uuid4()}/receipts.xlsx", headers=hdr)).status_code == 404
+

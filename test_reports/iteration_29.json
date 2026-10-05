@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only verification of webdash Broadcast enhancements (Quick Templates + Delivery Receipts) at /api/dash. All critical flows PASS: login as Demo CGM (+919000000500/123456), Send Notification screen loads with broadcast-title, Compose tab shows bc-templates card with exactly 6 built-in template chips (shift_change, safety_alert, maintenance, holiday, salary, assembly) using colon-containing testIDs. Tapping bc-tpl-builtin:safety_alert correctly fills bc-title-input ('सुरक्षा इशारा'), bc-body-input, highlights bc-prio-emergency, and the bc-preview phone mock reflects filled text. Save-as-template works end-to-end: button enabled after title+message, click bc-save-template -> bc-success 'Template saved ✓' appears, new custom chip bc-tpl-<uuid> added with delete control bc-tpl-del-<uuid>; clicking the X with confirm() accept removes the chip. Delivery receipts flow fully works: audience Everyone (bc-aud-all), fill unique content, bc-review-send opens bc-confirm-modal, bc-confirm-send POSTs and lands in History; row bc-hist-<uuid> opens bc-detail-modal; bc-view-receipts reveals bc-receipts-panel with all 7 filter chips showing counts (All 35, Delivered 0, Opened 0, Sent 0, Failed 0, No app/push off 35, Quiet hours 0) and bc-receipts-list with 35 recipient rows (name + status chip). Filtering by bc-rfilter-no_token keeps 35 rows (all no_token in this demo bubble); bc-rfilter-delivered shows empty state (0 delivered). Role gate verified: Demo Worker +919000000001 is denied with 'Access restricted' screen and nav-broadcast is NOT rendered.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_29.json"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Broadcast.tsx (632 lines) is just under the 700-line soft cap; consider splitting Compose/History/DetailModal into separate files to keep it maintainable as more features (templates, receipts) grow.",
+    "deleteTemplate() uses window.confirm which is browser-blocking; works today but a styled modal would be more consistent with the rest of the webdash (bc-confirm-modal style).",
+    "The 'Switched OFF for real users' red topbar overlay persists across every webdash screen — purely cosmetic (iteration 27/28 pre-existing); verified it does not intercept any clicks in the Broadcast flow."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "Created one real broadcast via Demo CGM (audience=all, 35 recipients) during live send test; it now appears in bc-hist as the top row and is used to drive the receipts verification. No cleanup needed (demo bubble auto-purges per standing scheduler).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Webdash Broadcast at /api/dash. Login Demo CGM +919000000500 / OTP 123456 (phone input requires +91 prefix, length>=13). Built-in template chip IDs literally contain a colon, so always escape via [data-testid=\"bc-tpl-builtin:safety_alert\"] (quote the attribute). History row IDs are bc-hist-<uuid>; the search input ALSO has data-testid='bc-hist-search' and the type select is 'bc-hist-type' — filter rows with regex /^bc-hist-[0-9a-f]{8}-/ to avoid picking those up. Delete template uses window.confirm → register page.once('dialog', d.accept()) BEFORE clicking the ✕. In the demo bubble all 35 recipients are 'no_token' (none have mobile app tokens), so Delivered/Opened/Sent/Failed counts are 0 — expected, not a bug.",
+  "rca_of_issue": "n/a — no bugs found. Both new features (Quick Templates CRUD and Delivery Receipts UI) work end-to-end with correct data, counts, filtering and role gating."
+}

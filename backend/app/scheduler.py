@@ -120,6 +120,18 @@ JOBS = [
 ]
 
 
+def scheduler_status() -> dict:
+    """Snapshot of the in-process scheduler for the admin System-health card."""
+    if _scheduler is None:
+        return {"running": False, "jobs": [], "job_names": [n for n, *_ in JOBS]}
+    jobs = [
+        {"id": job.id, "next_run": job.next_run_time.isoformat() if job.next_run_time else None}
+        for job in _scheduler.get_jobs()
+    ]
+    return {"running": _scheduler.running, "jobs": jobs, "job_names": [j["id"] for j in jobs]}
+
+
+
 def start_scheduler() -> AsyncIOScheduler | None:
     """Start the in-process scheduler exactly once per container.
     Disabled under TESTING or DISABLE_SCHEDULER=true."""

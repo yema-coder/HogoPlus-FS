@@ -1678,3 +1678,128 @@ Delivers the user's "backend face-detector + number-plate reader" + "Save Distan
 ### Camera AI feature (Steps 1–5) — DELIVERY COMPLETE. All 5 steps done + reviewed/verified.
   Remaining real-device-only validation: on-device AR distance capture + native Share (need APK/IPA build).
 
+
+## 2026-10-05 — Android EAS build failure FIXED (expo-ar-distance Kotlin typo)
+- ROOT CAUSE (from the user's EAS app-bundle build logs): `:expo-ar-distance:compileReleaseKotlin FAILED`
+  → `ExpoArDistanceView.kt:202:48 Unresolved reference 'nativeEndian'`.
+- FIX: `plane.buffer.order(ByteOrder.nativeEndian())` → `ByteOrder.nativeOrder()` (correct java.nio API).
+  BackgroundRenderer.kt already used nativeOrder() correctly in 3 places; this was the only bad ref.
+  The Kotlin compiler reports all module errors at once — this was the sole one. Next build should compile.
+- deployment_agent (backend MongoDB-template health check) returned several "BLOCKERS" that are FALSE
+  POSITIVES for THIS app — DO NOT act on them (they would destroy the running product):
+  * "UNSUPPORTED_STACK: asyncpg/Postgres" — this app is intentionally Postgres+SQLAlchemy+Redis+pgvector
+    with a SEPARATE custom prod backend (api.hogoplus.in). It is NOT a MongoDB app. Do NOT migrate.
+    (The quoted departments.beacon_exempt asyncpg error is from an OLD log, already fixed via startup
+    `alembic upgrade head`.)
+  * "DESTRUCTIVE_DB_STARTUP: demo_cleanup" — demo_cleanup only purges DEMO-bubble data (is_demo && !seed)
+    past TTL; never real records. Intentional, long-standing. Not a blocker.
+  * "EXPO_BACKEND_REACH: hardcoded PROD_API_URL=api.hogoplus.in" — INTENTIONAL & documented: the mobile
+    RELEASE build targets the user's own prod backend, not the emergent.host rewrite. Changing it would
+    break the production app. Leave as-is.
+  * "EXPO_PUSH direct exp.host" — working in prod (verified live earlier). Not a build blocker.
+  * ".dockerignore excludes .env" / "committed eas.json" — docker/pipeline concerns; user said NO docker
+    changes; the EAS build already consumed eas.json fine. Out of scope for the Kotlin build error.
+  Net: the ONLY change needed to unblock the failing Android build was the one-line nativeOrder() fix.
+
+## 2026-10-05 fork #3 — Broadcast enhancements: Quick Templates + Delivery Receipts UI ✅ code complete + E2E verified
+User picked "Broadcast enhancements: Delivery Receipts UI + Quick Templates". Both shipped on the
+WEBDASH (served at /api/dash; the full Broadcast engine is webdash-only, MD/CGM/Time-Office). Mobile
+app untouched (announce.tsx uses the older /admin/announcements fanout; broadcasts are webdash-only).
+
+### Quick Templates (reusable composer messages)
+- NEW DB table `broadcast_templates` (migration 0023, down_rev 0022, applied to sandbox + auto-applied
+  in prod via main.py startup `alembic upgrade head`): id, created_by, title_{en,hi,mr}, body_{en,hi,mr},
+  priority, is_demo (bubble-scoped), timestamps. Model `BroadcastTemplate` added to models.py.
+- 6 BUILT-IN factory templates served from CODE (never stored, cannot be deleted): shift_change,
+  safety_alert, maintenance, holiday, salary, assembly — each trilingual + a priority. Constant
+  `BUILTIN_TEMPLATES` + `_builtin_out()` in app/routers/broadcasts.py. Built-in ids are literal
+  "builtin:<key>" (contain a colon).
+- Endpoints (app/routers/broadcasts.py) — REGISTERED BEFORE `GET /broadcasts/{broadcast_id}` so the
+  literal "/templates" path is NOT parsed as a broadcast UUID (route-ordering bug caught + fixed during
+  dev: templates GET was 422ing because {broadcast_id}:uuid matched "templates" first):
+  * GET  /api/broadcasts/templates → {items: [builtins first, then this bubble's custom (desc)]}
+  * POST /api/broadcasts/templates (BroadcastTemplateIn, validates title+body in ≥1 lang) → custom row
+  * DELETE /api/broadcasts/templates/{template_id} (custom only; 404 if builtin-id/other-bubble)
+  All gated by `_require_broadcast_access` (MD/CGM rank≤2 OR Time-Office manager; worker 403). Audited
+  broadcast.template_saved / broadcast.template_deleted.
+- Webdash Compose: new `bc-templates` card (chips; built-in testID bc-tpl-builtin:<key>, custom
+  bc-tpl-<uuid> with ✕ delete bc-tpl-del-<uuid>). Tap a chip → fills title/body(all 3 langs)+priority
+  + phone preview. New `bc-save-template` button (enabled when title+message present) → saves current
+  draft as a custom template; delete via ✕ (window.confirm).
+
+### Delivery Receipts UI (full per-recipient list)
+- NEW endpoint GET /api/broadcasts/{broadcast_id}/receipts?status=  → {total, counts{sent,delivered,
+  failed,no_token,suppressed,opened}, items:[{emp_id,name,department_code,status,error,updated_at}]}
+  (joins Employee, bubble-scoped 404, worker 403, order by name, limit 1000). Backend already tracked
+  per-recipient broadcast_receipts (rolled-up counts + failed-only list existed); this exposes the FULL
+  list with an optional status filter.
+- Webdash History DetailModal: kept the failed-only quick list; added `bc-view-receipts` toggle →
+  `bc-receipts-panel` with 7 filter chips (bc-rfilter-all/delivered/opened/sent/failed/no_token/
+  suppressed, each w/ count) + `bc-receipts-list` (one row per recipient + status Chip tone). Lazy-loads
+  on first open; refetches on filter change.
+- i18n: +18 webdash keys (bc_templates/bc_templates_hint/bc_save_template/bc_template_saved/
+  bc_template_delete_confirm/bc_builtin_tag/bc_receipts/bc_view_receipts/bc_hide_receipts/
+  bc_receipts_all/bc_no_receipts/bc_status_{opened,delivered,sent,failed,no_token,suppressed,queued})
+  ×3 langs in webdash/src/i18n.tsx.
+- Schemas: BroadcastTemplateIn added to app/schemas.py.
+
+### Tests + build + verification
+- pytest: tests/test_broadcasts.py +8 (builtins present, create/list/delete custom, worker 403,
+  validation 422 + missing 404, receipts full-list+filter, receipts worker 403 + missing 404).
+  FULL SUITE: **369 passed, 1 skipped** (was 362+2). Lint clean (webdash Broadcast.tsx).
+- Webdash rebuilt: `cd /app/webdash && npx vite build` → /app/backend/webdash_dist (index-CNQeQSQv.js),
+  served live at /api/dash (verified bundle hash matches).
+- testing_agent iteration_29.json — ALL PASS, 0 bugs (Demo CGM +919000000500/123456): built-in chips
+  fill composer + preview, save-as-template adds+deletes a custom chip, full send→History→receipts panel
+  with 35 recipients + working status filters, worker role-gate denied. No mocks.
+- SANDBOX: broadcasts_enabled flipped ON (rate 50) via SQL so send→receipts E2E works. Leaving ON.
+- NON-BLOCKING reviewer notes (NOT actioned, by design): Broadcast.tsx ~632 lines (could split later);
+  deleteTemplate uses window.confirm vs the styled send-confirm modal.
+
+## 2026-10-05 fork #4 — Broadcast backlog completed: Template Edit + Delivery Excel export + System Health ✅ code complete + E2E verified
+User directive "do all the steps, complete everything and test everything". Shipped the remaining
+Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
+
+### Quick Template EDIT
+- Backend: PATCH /api/broadcasts/templates/{template_id} (BroadcastTemplateIn; custom only, 404 for
+  builtin-id/other-bubble; worker 403; audited broadcast.template_updated) in app/routers/broadcasts.py.
+- Webdash Compose: custom template chips now carry a ✎ edit control (testID bc-tpl-edit-<uuid>) beside
+  the ✕ delete. Tapping ✎ loads the template into the composer + enters EDIT mode (editingTpl state) →
+  the single "Save as template" button switches label to "✏️ Update template" and a "bc-cancel-edit"
+  button appears; saving PATCHes in place ("Template updated ✓"). Built-in chips have no ✎/✕.
+
+### Delivery Report EXPORT to Excel
+- Backend: GET /api/broadcasts/{broadcast_id}/receipts.xlsx — openpyxl Workbook (header rows: title /
+  sent-at IST / recipient count, then a per-recipient table Name/EmpID/Dept/Status/Error/Updated-IST),
+  StreamingResponse with the spreadsheetml content-type + attachment filename broadcast_delivery_<8>.xlsx.
+  Bubble-scoped 404, worker 403. (Mirrors the existing vehicles /export.xlsx pattern.)
+- Webdash: new api.ts `apiDownload(path, filename)` helper (authed fetch → blob → <a download> click,
+  401-refresh-retry). A "⬇️ Download Excel" button (testID bc-export-xlsx) in the receipts panel header.
+
+### Scheduled Template Blast (NO new code — already supported, now verified)
+- Applying a template fills the composer; the existing "Schedule" option (bc-when-schedule + bc-sched-at)
+  then schedules it (status=scheduled, fired by the per-minute broadcast_schedule_sweep). E2E-proven:
+  builtin:maintenance + Everyone + schedule tomorrow → History row shows the amber "Scheduled" chip.
+
+### Seed Safety Check → admin-visible System Health card
+- Backend already had the startup DB-integrity check (empty employees → CRITICAL log + /api/health
+  db_seeded=false + CGM notification). ADDED a visible read-only view: scheduler.py `scheduler_status()`
+  helper + GET /api/admin/diagnostics (require_role(2) — demo top-mgmt may VIEW; never mutates) returning
+  {db_seeded, employee_count (real), active_employee_count, demo_employee_count, department_count,
+  scheduler_running, scheduler_jobs[], warnings[db_empty|employee_count_low|scheduler_not_running], ok}.
+- Webdash Admin: new "🩺 System health" card (testID admin-diagnostics) at position 0 — green
+  "All systems healthy ✓" (diag-ok) OR red warnings (diag-warnings), employee/active/demo/department
+  counts + scheduler running + job count. Live: 431 employees (412 active), scheduler running (10 jobs), ok.
+
+### Tests + build + verification
+- pytest: +3 (test_broadcasts.py test_template_edit + test_receipts_xlsx_export; test_admin_misc.py
+  test_admin_diagnostics). FULL SUITE **371 passed, 2 skipped**. Lint clean (Broadcast.tsx, Admin.tsx).
+- Webdash rebuilt → /app/backend/webdash_dist (index-BiC2JTi7.js), served live at /api/dash.
+- testing_agent iteration_30.json — ALL PASS, 0 bugs (Demo CGM): template edit flow, xlsx download
+  captured via expect_download, scheduled-template blast shows Scheduled chip, System Health card shows
+  431 employees + scheduler running; regression (template apply + receipt filters) still green.
+- NON-BLOCKING reviewer notes (NOT actioned): Admin NavLink lacks data-testid=nav-admin; Broadcast.tsx
+  ~665 lines (soft cap 700); composer edits title_<tLang> while chip label reads title_<uiLang> (fine).
+- SANDBOX: broadcasts_enabled remains ON (rate 50). i18n webdash: +13 keys (bc_update_template/
+  bc_template_updated/bc_cancel_edit/bc_export_xlsx + diag_*).
+

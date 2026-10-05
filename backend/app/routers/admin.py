@@ -1385,3 +1385,53 @@ async def list_ble_diag(
         }
         for ev, emp_id, full_name in rows
     ]
+
+
+
+# ---------------- System health / seed-safety diagnostics ----------------
+
+@router.get("/diagnostics")
+async def admin_diagnostics(
+    actor: Employee = Depends(require_role(2)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Seed-safety + system-health snapshot for top management (CGM/MD). Surfaces
+    an empty/low employee table and whether the in-process scheduler is running.
+    Read-only (demo top-mgmt may view; it never mutates shared config)."""
+    from app.scheduler import scheduler_status
+
+    real_total = (await session.execute(
+        select(func.count()).select_from(Employee).where(Employee.is_demo.is_(False))
+    )).scalar() or 0
+    real_active = (await session.execute(
+        select(func.count()).select_from(Employee).where(
+            Employee.is_demo.is_(False),
+            Employee.is_active.is_(True),
+            Employee.onboarding_status == "approved",
+        )
+    )).scalar() or 0
+    demo_total = (await session.execute(
+        select(func.count()).select_from(Employee).where(Employee.is_demo.is_(True))
+    )).scalar() or 0
+    dept_count = (await session.execute(select(func.count()).select_from(Department))).scalar() or 0
+
+    sched = scheduler_status()
+    warnings: list[str] = []
+    if real_total == 0:
+        warnings.append("db_empty")
+    elif real_total < 50:
+        warnings.append("employee_count_low")
+    if not sched["running"]:
+        warnings.append("scheduler_not_running")
+
+    return {
+        "db_seeded": real_total > 0,
+        "employee_count": real_total,
+        "active_employee_count": real_active,
+        "demo_employee_count": demo_total,
+        "department_count": dept_count,
+        "scheduler_running": sched["running"],
+        "scheduler_jobs": sched["job_names"],
+        "warnings": warnings,
+        "ok": len(warnings) == 0,
+    }

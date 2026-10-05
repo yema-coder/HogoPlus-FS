@@ -7,11 +7,13 @@ Role-gated to MD / CGM / Time-Office. Real send/schedule is behind the
 settings.broadcasts_enabled flag (preview + test-to-me always work).
 """
 import hashlib
+import io
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +23,7 @@ from app.models import (
     BleBeacon,
     Broadcast,
     BroadcastReceipt,
+    BroadcastTemplate,
     Employee,
     FactorySettings,
     Notification,
@@ -33,14 +36,95 @@ from app.schemas import (
     BroadcastComposeIn,
     BroadcastOpenedIn,
     BroadcastResendIn,
+    BroadcastTemplateIn,
 )
 from app.security import get_approved_employee, is_dept_manager
-from app.shift_logic import now_ist
+from app.shift_logic import IST, now_ist
 
 logger = logging.getLogger("hogo.broadcast")
 router = APIRouter(tags=["broadcasts"])
 
 PRIORITY_EMOJI = {"normal": "📢", "important": "❗", "emergency": "🚨"}
+
+# Built-in factory templates (served from code, never stored; cannot be deleted).
+# Order: [en, hi, mr]. These prefill the composer in one tap.
+BUILTIN_TEMPLATES: list[dict] = [
+    {
+        "key": "shift_change",
+        "priority": "important",
+        "title": ("Shift change notice", "शिफ्ट बदल सूचना", "शिफ्ट बदल सूचना"),
+        "body": (
+            "Your shift timing has changed. Please check the roster and report on time.",
+            "आपकी शिफ्ट का समय बदल गया है। कृपया रोस्टर देखें और समय पर आएं।",
+            "तुमच्या शिफ्टची वेळ बदलली आहे. कृपया रोस्टर पाहा व वेळेवर या.",
+        ),
+    },
+    {
+        "key": "safety_alert",
+        "priority": "emergency",
+        "title": ("Safety alert", "सुरक्षा चेतावनी", "सुरक्षा इशारा"),
+        "body": (
+            "Safety hazard reported in the plant. Wear your PPE and follow supervisor instructions.",
+            "संयंत्र में सुरक्षा खतरा सूचित हुआ है। अपना PPE पहनें और सुपरवाइज़र के निर्देश मानें।",
+            "प्लांटमध्ये सुरक्षेचा धोका नोंदवला आहे. तुमचे PPE घाला व पर्यवेक्षकाच्या सूचना पाळा.",
+        ),
+    },
+    {
+        "key": "maintenance",
+        "priority": "normal",
+        "title": ("Planned maintenance", "नियोजित रखरखाव", "नियोजित देखभाल"),
+        "body": (
+            "Maintenance shutdown is planned. Production will pause during this window.",
+            "रखरखाव हेतु शटडाउन नियोजित है। इस दौरान उत्पादन रुकेगा।",
+            "देखभालीसाठी शटडाउन नियोजित आहे. या वेळेत उत्पादन थांबेल.",
+        ),
+    },
+    {
+        "key": "holiday",
+        "priority": "normal",
+        "title": ("Holiday notice", "छुट्टी सूचना", "सुट्टी सूचना"),
+        "body": (
+            "The factory will remain closed on the declared holiday. Enjoy your day!",
+            "घोषित अवकाश के दिन कारखाना बंद रहेगा। आपका दिन शुभ हो!",
+            "घोषित सुट्टीच्या दिवशी कारखाना बंद राहील. तुमचा दिवस आनंदी जावो!",
+        ),
+    },
+    {
+        "key": "salary",
+        "priority": "normal",
+        "title": ("Salary credited", "वेतन जमा", "पगार जमा"),
+        "body": (
+            "This month's salary has been credited to your account.",
+            "इस महीने का वेतन आपके खाते में जमा कर दिया गया है।",
+            "या महिन्याचा पगार तुमच्या खात्यात जमा झाला आहे.",
+        ),
+    },
+    {
+        "key": "assembly",
+        "priority": "emergency",
+        "title": ("Assemble immediately", "तुरंत एकत्र हों", "तात्काळ एकत्र या"),
+        "body": (
+            "Please assemble at the muster point immediately. This is urgent.",
+            "कृपया तुरंत मस्टर पॉइंट पर एकत्र हों। यह अत्यावश्यक है।",
+            "कृपया तात्काळ मस्टर पॉइंटवर एकत्र या. हे अत्यावश्यक आहे.",
+        ),
+    },
+]
+
+
+def _builtin_out() -> list[dict]:
+    out = []
+    for tpl in BUILTIN_TEMPLATES:
+        ten, thi, tmr = tpl["title"]
+        ben, bhi, bmr = tpl["body"]
+        out.append({
+            "id": f"builtin:{tpl['key']}",
+            "is_builtin": True,
+            "title_en": ten, "title_hi": thi, "title_mr": tmr,
+            "body_en": ben, "body_hi": bhi, "body_mr": bmr,
+            "priority": tpl["priority"],
+        })
+    return out
 
 
 # ---------------- access + helpers ----------------
@@ -468,6 +552,99 @@ async def list_broadcasts(
     return {"items": out}
 
 
+# ---------------- quick templates (registered BEFORE /broadcasts/{broadcast_id}
+# so the literal "/templates" path is not parsed as a broadcast UUID) ----------------
+
+def _template_out(tpl: BroadcastTemplate) -> dict:
+    return {
+        "id": str(tpl.id),
+        "is_builtin": False,
+        "title_en": tpl.title_en, "title_hi": tpl.title_hi, "title_mr": tpl.title_mr,
+        "body_en": tpl.body_en, "body_hi": tpl.body_hi, "body_mr": tpl.body_mr,
+        "priority": tpl.priority,
+        "created_at": tpl.created_at.isoformat() if tpl.created_at else None,
+    }
+
+
+@router.get("/broadcasts/templates")
+async def list_templates(
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Built-in factory templates first, then this bubble's custom templates."""
+    await _require_broadcast_access(session, actor)
+    custom = (
+        await session.execute(
+            select(BroadcastTemplate)
+            .where(BroadcastTemplate.is_demo.is_(actor.is_demo))
+            .order_by(BroadcastTemplate.created_at.desc())
+            .limit(100)
+        )
+    ).scalars().all()
+    return {"items": _builtin_out() + [_template_out(t) for t in custom]}
+
+
+@router.post("/broadcasts/templates")
+async def create_template(
+    body: BroadcastTemplateIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    await _require_broadcast_access(session, actor)
+    tpl = BroadcastTemplate(
+        created_by=actor.id,
+        title_en=body.title_en, title_hi=body.title_hi, title_mr=body.title_mr,
+        body_en=body.body_en, body_hi=body.body_hi, body_mr=body.body_mr,
+        priority=body.priority,
+        is_demo=actor.is_demo,
+    )
+    session.add(tpl)
+    await session.flush()
+    await write_audit(session, actor.id, "broadcast.template_saved", "broadcast_template", str(tpl.id),
+                      {"title": _pick(body.title_mr, body.title_en)})
+    await session.commit()
+    await session.refresh(tpl)
+    return _template_out(tpl)
+
+
+@router.patch("/broadcasts/templates/{template_id}")
+async def update_template(
+    template_id: uuid.UUID,
+    body: BroadcastTemplateIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a saved custom template in place (built-in templates can't be edited)."""
+    await _require_broadcast_access(session, actor)
+    tpl = await session.get(BroadcastTemplate, template_id)
+    if tpl is None or tpl.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Template not found")
+    tpl.title_en, tpl.title_hi, tpl.title_mr = body.title_en, body.title_hi, body.title_mr
+    tpl.body_en, tpl.body_hi, tpl.body_mr = body.body_en, body.body_hi, body.body_mr
+    tpl.priority = body.priority
+    await write_audit(session, actor.id, "broadcast.template_updated", "broadcast_template", str(tpl.id),
+                      {"title": _pick(body.title_mr, body.title_en)})
+    await session.commit()
+    await session.refresh(tpl)
+    return _template_out(tpl)
+
+
+@router.delete("/broadcasts/templates/{template_id}")
+async def delete_template(
+    template_id: uuid.UUID,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    await _require_broadcast_access(session, actor)
+    tpl = await session.get(BroadcastTemplate, template_id)
+    if tpl is None or tpl.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Template not found")
+    await session.delete(tpl)
+    await write_audit(session, actor.id, "broadcast.template_deleted", "broadcast_template", str(template_id), {})
+    await session.commit()
+    return {"ok": True}
+
+
 @router.get("/broadcasts/{broadcast_id}")
 async def broadcast_detail(
     broadcast_id: uuid.UUID,
@@ -562,6 +739,100 @@ async def mark_opened(
             await _recount(session, bc)
         await session.commit()
     return {"ok": True}
+
+
+# ---------------- delivery receipts ----------------
+
+@router.get("/broadcasts/{broadcast_id}/receipts")
+async def broadcast_receipts(
+    broadcast_id: uuid.UUID,
+    status: str | None = None,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Per-recipient delivery list for a broadcast (drives the Delivery Receipts
+    UI). Optional ?status= filter (sent/delivered/failed/no_token/suppressed/opened)."""
+    await _require_broadcast_access(session, actor)
+    bc = await session.get(Broadcast, broadcast_id)
+    if bc is None or bc.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    q = (
+        select(BroadcastReceipt, Employee.full_name, Employee.emp_id, Employee.department_code)
+        .join(Employee, Employee.id == BroadcastReceipt.employee_id)
+        .where(BroadcastReceipt.broadcast_id == bc.id)
+    )
+    if status:
+        q = q.where(BroadcastReceipt.status == status)
+    q = q.order_by(Employee.full_name).limit(1000)
+    rows = (await session.execute(q)).all()
+    items = [
+        {
+            "emp_id": eid,
+            "name": name,
+            "department_code": dept,
+            "status": r.status,
+            "error": r.error,
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r, name, eid, dept in rows
+    ]
+    return {
+        "total": bc.recipient_count,
+        "counts": {
+            "sent": bc.sent_count,
+            "delivered": bc.delivered_count,
+            "failed": bc.failed_count,
+            "no_token": bc.no_token_count,
+            "suppressed": bc.suppressed_count,
+            "opened": bc.opened_count,
+        },
+        "items": items,
+    }
+
+
+@router.get("/broadcasts/{broadcast_id}/receipts.xlsx")
+async def export_receipts(
+    broadcast_id: uuid.UUID,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Download the full per-recipient delivery list as an Excel file (for records)."""
+    await _require_broadcast_access(session, actor)
+    bc = await session.get(Broadcast, broadcast_id)
+    if bc is None or bc.is_demo != actor.is_demo:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    from openpyxl import Workbook
+
+    rows = (
+        await session.execute(
+            select(BroadcastReceipt, Employee.full_name, Employee.emp_id, Employee.department_code)
+            .join(Employee, Employee.id == BroadcastReceipt.employee_id)
+            .where(BroadcastReceipt.broadcast_id == bc.id)
+            .order_by(Employee.full_name)
+            .limit(10000)
+        )
+    ).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Delivery"
+    ws.append(["Broadcast", _pick(bc.title_mr, bc.title_en, bc.title_hi)])
+    ws.append(["Sent at (IST)", bc.sent_at.astimezone(IST).strftime("%d-%m-%Y %H:%M") if bc.sent_at else ""])
+    ws.append(["Recipients", bc.recipient_count])
+    ws.append([])
+    ws.append(["Name", "Emp ID", "Department", "Status", "Error", "Updated (IST)"])
+    for r, name, eid, dept in rows:
+        upd = r.updated_at.astimezone(IST).strftime("%d-%m-%Y %H:%M") if r.updated_at else ""
+        ws.append([name, eid, dept or "", r.status, r.error or "", upd])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"broadcast_delivery_{str(bc.id)[:8]}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
 
 
 # ---------------- scheduler-callable sweeps ----------------
