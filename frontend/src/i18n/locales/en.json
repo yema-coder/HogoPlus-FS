@@ -153,7 +153,8 @@
     "tapPlateToEdit": "Tap a plate to edit the number",
     "editPlateTitle": "Edit number plate",
     "plateRequired": "Enter the plate number",
-    "plateUpdated": "Number plate updated"
+    "plateUpdated": "Number plate updated",
+    "plateScaleLabel": "Plate-scale check: ~{{d}}"
   },
   "status": {
     "submitted": "Sent",

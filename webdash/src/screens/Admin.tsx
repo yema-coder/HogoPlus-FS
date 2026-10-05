@@ -61,6 +61,11 @@ export default function Admin() {
   const [flagsMsg, setFlagsMsg] = useState("");
   const [mdPwd, setMdPwd] = useState("");
   const [mdPwdMsg, setMdPwdMsg] = useState("");
+  // Step 5 — camera AI / plate-scale calibration
+  const [psMsg, setPsMsg] = useState("");
+  const [calMsg, setCalMsg] = useState("");
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [calIncident, setCalIncident] = useState("");
 
   const loadDepts = () => api("/departments").then((d) => { setDepts(d); if (!targetDept && d.length) setTargetDept(d[0].code); });
   const loadNoPhone = () => api("/admin/employees?missing_phone=true").then(setNoPhone).catch(() => {});
@@ -69,6 +74,7 @@ export default function Admin() {
 
   useEffect(() => {
     api("/admin/settings").then(setGeo).catch(() => {});
+    api("/admin/plate-scale/candidates").then(setCandidates).catch(() => setCandidates([]));
     api("/app-version")
       .then((v) => setVer({ ...v, apk_url: v.apk_url ?? "", notes: v.notes ?? "", latest_version: v.latest_version ?? "" }))
       .catch(() => setVer({ latest_version: "", apk_url: "", notes: "", force_update: false }));
@@ -149,6 +155,42 @@ export default function Admin() {
       setFlagsMsg(`✓ ${t("saved")}`);
     } catch (e: any) {
       setFlagsMsg(e.message);
+    }
+  };
+
+  const savePlateScale = async () => {
+    setPsMsg("");
+    try {
+      const res = await api("/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          ar_distance_enabled: !!geo.ar_distance_enabled,
+          face_detection_enabled: !!geo.face_detection_enabled,
+          plate_detection_enabled: !!geo.plate_detection_enabled,
+          plate_scale_enabled: !!geo.plate_scale_enabled,
+          plate_ref_width_m: Number(geo.plate_ref_width_m) || 0.5,
+          plate_scale_k: Number(geo.plate_scale_k) || 1.2,
+        }),
+      });
+      setGeo(res);
+      setPsMsg(`✓ ${t("saved")}`);
+    } catch (e: any) {
+      setPsMsg(e.message);
+    }
+  };
+
+  const calibrate = async () => {
+    setCalMsg("");
+    if (!calIncident) return;
+    try {
+      const res = await api("/admin/plate-scale/calibrate", {
+        method: "POST",
+        body: JSON.stringify({ incident_id: calIncident }),
+      });
+      setGeo((g: any) => ({ ...g, plate_scale_k: res.plate_scale_k, plate_scale_enabled: true }));
+      setCalMsg(`${t("ps_calibrated")} ${res.plate_scale_k}`);
+    } catch (e: any) {
+      setCalMsg(e.message);
     }
   };
 
@@ -438,6 +480,66 @@ export default function Admin() {
                   {flagsMsg && <span style={{ fontSize: 13, color: flagsMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{flagsMsg}</span>}
                 </div>
                 <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 0 }}>{t("flags_hint")}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>📷 {t("ps_title")}</h2>
+            {!geo ? <Empty /> : (
+              <div>
+                {([
+                  ["ar_distance_enabled", "ps_flag_distance", "flag-ar-distance"],
+                  ["face_detection_enabled", "ps_flag_faces", "flag-face-detection"],
+                  ["plate_detection_enabled", "ps_flag_plates", "flag-plate-detection"],
+                  ["plate_scale_enabled", "ps_flag_scale", "flag-plate-scale"],
+                ] as [string, string, string][]).map(([key, label, tid]) => (
+                  <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "4px 0" }}>
+                    <input data-testid={tid} type="checkbox" checked={!!geo[key]}
+                      onChange={(e) => setGeo({ ...geo, [key]: e.target.checked })} />
+                    <span style={{
+                      fontWeight: 700, fontSize: 11, padding: "1px 8px", borderRadius: 10,
+                      background: geo[key] ? "var(--success, #1E8E4E)" : "var(--muted, #888)", color: "#fff",
+                    }}>{geo[key] ? "ON" : "OFF"}</span>
+                    {t(label)}
+                  </label>
+                ))}
+                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--border, #eee)" }}>
+                  <label style={{ fontSize: 13 }}>
+                    {t("ps_ref_width")}:{" "}
+                    <input data-testid="ps-ref-width" type="number" step="0.01" min={0.1} max={2} style={{ width: 70 }}
+                      value={geo.plate_ref_width_m ?? 0.5}
+                      onChange={(e) => setGeo({ ...geo, plate_ref_width_m: e.target.value })} />
+                  </label>
+                  <label style={{ fontSize: 13 }}>
+                    {t("ps_k")}:{" "}
+                    <input data-testid="ps-k" type="number" step="0.01" min={0.1} max={5} style={{ width: 70 }}
+                      value={geo.plate_scale_k ?? 1.2}
+                      onChange={(e) => setGeo({ ...geo, plate_scale_k: e.target.value })} />
+                  </label>
+                  <button className="btn primary" data-testid="ps-save" onClick={savePlateScale}>{t("save")}</button>
+                  {psMsg && <span style={{ fontSize: 13, color: psMsg.startsWith("✓") ? "var(--success)" : "var(--danger)" }}>{psMsg}</span>}
+                </div>
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border, #eee)" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>🧮 {t("ps_calibrate")}</div>
+                  <p style={{ fontSize: 12, color: "var(--muted)", margin: "0 0 6px" }}>{t("ps_calibrate_hint")}</p>
+                  {candidates.length === 0 ? (
+                    <span style={{ fontSize: 13, color: "var(--muted)" }}>{t("ps_no_candidates")}</span>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <select data-testid="ps-candidate" value={calIncident} onChange={(e) => setCalIncident(e.target.value)} style={{ maxWidth: 320 }}>
+                        <option value="">—</option>
+                        {candidates.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.category} · {c.distance_m}m · 🚗{c.plate_text || "?"} (w{c.plate_width_fraction})
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn" data-testid="ps-calibrate" disabled={!calIncident} onClick={calibrate}>{t("ps_calibrate")}</button>
+                      {calMsg && <span style={{ fontSize: 13, color: calMsg.includes("k") ? "var(--success)" : "var(--danger)" }}>{calMsg}</span>}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

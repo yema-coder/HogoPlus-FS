@@ -29,24 +29,152 @@ function Thumb({ i, size = 64 }: { i: any; size?: number }) {
 
 function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
   const { t } = useI18n();
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [blur, setBlur] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [plate, setPlate] = useState<string | null>(item.detected_plate ?? null);
+
+  const loadAnalysis = () =>
+    api(`/incidents/${item.id}/analysis`).then(setAnalysis).catch(() => setAnalysis(null));
+  useEffect(() => {
+    void loadAnalysis();
+  }, [item.id]);
+
+  const primary =
+    analysis?.photos?.find((p: any) => p.slot === "primary") ?? analysis?.photos?.[0] ?? null;
+  const faces: any[] = primary?.faces ?? [];
+  const plates: any[] = primary?.plates ?? [];
+  const ps = analysis?.plate_scale;
+
+  const savePlate = async () => {
+    if (!editId || !editText.trim()) return;
+    setSaving(true);
+    try {
+      await api(`/incidents/${item.id}/plates/${editId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ text: editText.trim().toUpperCase() }),
+      });
+      setPlate(editText.trim().toUpperCase());
+      setEditId(null);
+      await loadAnalysis();
+    } catch {
+      /* keep editor open on failure */
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const pct = (v: number) => `${v * 100}%`;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" data-testid="incident-detail-modal" onClick={(e) => e.stopPropagation()}>
         {item.video_url ? (
           <video src={item.video_url} controls style={{ width: "100%", borderRadius: 12, maxHeight: 320, background: "#000" }} />
         ) : item.photo_url ? (
-          <img src={item.photo_url} alt="" style={{ width: "100%", borderRadius: 12, maxHeight: 320, objectFit: "contain", background: "#000" }} />
+          <div style={{ position: "relative", width: "100%", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+            <img src={item.photo_url} alt="" style={{ width: "100%", display: "block" }} />
+            {plates.map((p) => (
+              <div
+                key={p.id}
+                data-testid={`dash-plate-box-${p.id}`}
+                onClick={() => {
+                  setEditId(p.id);
+                  setEditText(p.text ?? "");
+                }}
+                title={t("an_edit_plate")}
+                style={{
+                  position: "absolute", left: pct(p.x), top: pct(p.y), width: pct(p.w), height: pct(p.h),
+                  border: "2.5px solid var(--accent)", borderRadius: 4, cursor: "pointer", boxSizing: "border-box",
+                }}
+              >
+                <span style={{
+                  position: "absolute", top: -20, left: -2, background: "var(--accent)", color: "#fff",
+                  fontSize: 11, fontWeight: 800, padding: "1px 6px", borderRadius: 6, whiteSpace: "nowrap",
+                }}>{p.text || "?"} ✎</span>
+              </div>
+            ))}
+            {faces.map((f) => (
+              <div
+                key={f.id}
+                data-testid={`dash-face-box-${f.id}`}
+                style={{
+                  position: "absolute", left: pct(f.x), top: pct(f.y), width: pct(f.w), height: pct(f.h),
+                  boxSizing: "border-box", borderRadius: 8,
+                  ...(blur
+                    ? { background: "rgba(190,195,205,0.45)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1.5px solid #6B7280" }
+                    : { border: "2px solid var(--warning, #F59E0B)" }),
+                }}
+              />
+            ))}
+          </div>
         ) : null}
+
+        {/* analysis controls */}
+        {item.photo_url ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {faces.length ? (
+              <button
+                className="btn"
+                data-testid="dash-blur-toggle"
+                onClick={() => setBlur((v) => !v)}
+                style={blur ? { background: "var(--accent)", color: "#fff" } : undefined}
+              >
+                🙈 {blur ? t("an_blur_on") : t("an_blur")} ({faces.length})
+              </button>
+            ) : null}
+            {analysis?.pending ? <Chip tone="amber">⏳ {t("an_pending")}</Chip> : null}
+          </div>
+        ) : null}
+
+        {editId ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+            <input
+              data-testid="dash-plate-input"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value.toUpperCase())}
+              maxLength={20}
+              placeholder="MH12AB1234"
+              style={{ flex: 1, letterSpacing: 2, fontWeight: 700 }}
+            />
+            <button className="btn primary" data-testid="dash-plate-save" disabled={saving} onClick={savePlate}>{t("save")}</button>
+            <button className="btn" onClick={() => setEditId(null)}>{t("back")}</button>
+          </div>
+        ) : plates.length ? (
+          <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>{t("an_tap_plate")}</p>
+        ) : null}
+
         <h2 style={{ marginTop: 10 }}>{item.category} · {item.department_code}</h2>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "8px 0" }}>
           <Chip tone={item.severity === "critical" ? "red" : item.severity === "high" ? "amber" : undefined}>{item.severity}</Chip>
           <Chip tone="blue">{item.status}</Chip>
           <AgeChip hours={item.age_hours} />
-          {item.detected_plate ? <Chip tone="green">🚗 {item.detected_plate}</Chip> : null}
+          {plate ? <Chip tone="green">🚗 {plate}</Chip> : null}
+          {faces.length ? <Chip tone="blue">🙂 {faces.length} {t("an_faces")}</Chip> : null}
         </div>
         <div className="detail-rows">
           <div><b>{t("reporter")}:</b> {item.reporter_name}</div>
           {item.description ? <div><b>{t("description")}:</b> {item.description}</div> : null}
+          {analysis?.distance?.distance_m != null ? (
+            <div data-testid="dash-distance">
+              <b>📏 {t("an_distance")}:</b> {analysis.distance.distance_m.toFixed(1)} m
+              {analysis.distance.distance_uncertainty_m ? ` ±${analysis.distance.distance_uncertainty_m.toFixed(1)}` : ""}
+              {analysis.distance.distance_method ? ` · ${analysis.distance.distance_method}` : ""}
+            </div>
+          ) : null}
+          {ps ? (
+            <div data-testid="dash-crosscheck">
+              <b>🧮 {t("an_crosscheck")}:</b> ~{ps.est_distance_m.toFixed(1)} m
+              {ps.consistent != null ? (
+                <span style={{
+                  marginLeft: 6, fontSize: 11, fontWeight: 800, padding: "1px 8px", borderRadius: 10, color: "#fff",
+                  background: ps.consistent ? "var(--success, #1E8E4E)" : "var(--danger, #D64545)",
+                }}>{ps.consistent ? `✓ ${t("an_consistent")}` : `⚠ ${t("an_mismatch")} (${ps.delta_pct}%)`}</span>
+              ) : null}
+            </div>
+          ) : null}
           {item.ble_zone ? <div><b>📍 {t("beaconZone")}:</b> {item.ble_zone}</div>
             : item.address_text ? <div><b>📍</b> {item.address_text}</div>
             : (item.gps_lat != null && item.gps_lng != null) ? <div><b>📍</b> {item.gps_lat.toFixed(5)}, {item.gps_lng.toFixed(5)}</div>

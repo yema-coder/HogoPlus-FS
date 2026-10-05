@@ -153,7 +153,8 @@
     "tapPlateToEdit": "नंबर बदलने के लिए प्लेट पर टैप करें",
     "editPlateTitle": "नंबर प्लेट संपादित करें",
     "plateRequired": "प्लेट नंबर दर्ज करें",
-    "plateUpdated": "नंबर प्लेट अपडेट हुई"
+    "plateUpdated": "नंबर प्लेट अपडेट हुई",
+    "plateScaleLabel": "प्लेट-स्केल जाँच: ~{{d}}"
   },
   "status": {
     "submitted": "भेजा गया",

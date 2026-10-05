@@ -462,6 +462,18 @@ class FactorySettings(TimestampMixin, Base):
     plate_detection_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    # Step 5 plate-scale cross-check: an independent distance estimate from the
+    # apparent width of a standard number plate. k ≈ focal_length_px / image_width_px
+    # (resolution-independent); distance ≈ k · ref_width_m / plate_width_fraction.
+    plate_scale_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    plate_ref_width_m: Mapped[float] = mapped_column(
+        Float, default=0.5, server_default="0.5", nullable=False
+    )
+    plate_scale_k: Mapped[float] = mapped_column(
+        Float, default=1.2, server_default="1.2", nullable=False
+    )
 
 
 class BleBeacon(TimestampMixin, Base):

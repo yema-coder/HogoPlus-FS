@@ -12,6 +12,7 @@ from app.demo import get_role_holder, resolve_dept_manager_id
 from app.models import (
     Department,
     Employee,
+    FactorySettings,
     Incident,
     IncidentTimeline,
     PhotoAnalysis,
@@ -20,6 +21,7 @@ from app.models import (
     Role,
 )
 from app.notify import dispatcher, template
+from app.plate_scale import compute_plate_scale
 from app.schemas import (
     ConfirmRoutingIn,
     EscalateIn,
@@ -533,6 +535,20 @@ async def incident_analysis(
     pending = bool(incident.photo_key) and not any(
         a.slot == "primary" and a.status in ("done", "failed") for a in rows
     )
+    # plate-scale cross-check from the strongest detected plate (Step 5)
+    plate_scale = None
+    best_plate = None
+    for a in rows:
+        for p in a.plates:
+            if p.w and p.w > 0 and (best_plate is None or (p.det_confidence or 0) > (best_plate.det_confidence or 0)):
+                best_plate = p
+    if best_plate is not None:
+        s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+        if s is not None:
+            plate_scale = compute_plate_scale(
+                enabled=s.plate_scale_enabled, k=s.plate_scale_k, ref_width_m=s.plate_ref_width_m,
+                plate_w_frac=best_plate.w, ar_distance_m=incident.distance_m,
+            )
     return {
         "incident_id": str(incident.id),
         "distance": {
@@ -541,6 +557,7 @@ async def incident_analysis(
             "distance_confidence": incident.distance_confidence,
             "distance_uncertainty_m": incident.distance_uncertainty_m,
         },
+        "plate_scale": plate_scale,
         "detected_plate": incident.detected_plate,
         "plate_status": incident.plate_status,
         "face_count": sum(a.face_count for a in rows),

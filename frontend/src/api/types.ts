@@ -203,6 +203,14 @@ export interface IncidentAnalysis {
     distance_confidence: string | null;
     distance_uncertainty_m: number | null;
   };
+  plate_scale: {
+    est_distance_m: number;
+    ref_width_m: number;
+    k: number;
+    ar_distance_m?: number;
+    delta_pct?: number;
+    consistent?: boolean;
+  } | null;
   detected_plate: string | null;
   plate_status: string | null;
   face_count: number;

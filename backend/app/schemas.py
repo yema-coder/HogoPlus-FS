@@ -252,6 +252,17 @@ class SettingsPatchIn(BaseModel):
     ar_distance_enabled: bool | None = None
     face_detection_enabled: bool | None = None
     plate_detection_enabled: bool | None = None
+    plate_scale_enabled: bool | None = None
+    plate_ref_width_m: float | None = Field(default=None, ge=0.1, le=2.0)
+    plate_scale_k: float | None = Field(default=None, ge=0.1, le=5.0)
+
+
+class PlateScaleCalibrateIn(BaseModel):
+    """Derive the plate-scale constant k. Either pass an incident_id that has a
+    trusted AR distance + a detected plate, or the raw (distance, width-fraction)."""
+    incident_id: uuid.UUID | None = None
+    distance_m: float | None = Field(default=None, gt=0, le=100)
+    plate_width_fraction: float | None = Field(default=None, gt=0, le=1)
 
 
 class PlatePatchIn(BaseModel):

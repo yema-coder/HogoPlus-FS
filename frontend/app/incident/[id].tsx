@@ -370,6 +370,18 @@ export default function IncidentDetailScreen() {
             </View>
           ) : null}
 
+          {analysis?.plate_scale ? (
+            <View style={styles.capturedRow} testID="incident-crosscheck-row">
+              <Ruler size={15} color={colors.muted} strokeWidth={2.2} />
+              <Text style={styles.capturedText}>
+                {t("incident.plateScaleLabel", { d: `${analysis.plate_scale.est_distance_m.toFixed(1)} m` })}
+                {analysis.plate_scale.consistent != null
+                  ? `  ${analysis.plate_scale.consistent ? "✓" : `⚠ ${analysis.plate_scale.delta_pct}%`}`
+                  : ""}
+              </Text>
+            </View>
+          ) : null}
+
           {detail.duplicate_of ? (
             // v1.0.21: display-only duplicate grouping — this report is intact,
             // it is just grouped with an earlier one on manager cards

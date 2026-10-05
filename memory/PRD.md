@@ -1643,3 +1643,38 @@ Delivers the user's "backend face-detector + number-plate reader" + "Save Distan
 - SCOPE NOTE: overlay boxes shown on the PRIMARY photo only (resolution photo still plain). Existing
   seeded demo incidents have no analysis rows (created before Step 3) → boxes only appear on NEW captures.
 
+
+## Camera AI — STEP 5: dashboard views + plate-scale cross-check + calibration (2026-10-05) ✅ code complete + live verified
+- PLATE-SCALE CROSS-CHECK (`app/plate_scale.py`): independent distance estimate from a plate's
+  apparent width. distance ≈ k · ref_width_m / plate_width_fraction, where k ≡ f_px/image_width_px
+  (single per-camera constant, resolution-independent). compute_plate_scale() returns est + (vs AR)
+  delta_pct + consistent (±33% tol). calibrate_k() derives k from a trusted (AR distance, plate-w) pair.
+- DB (alembic 0022): settings.plate_scale_enabled (ON), plate_ref_width_m (0.5), plate_scale_k (1.2).
+- API:
+  * GET /incidents/{id}/analysis now returns `plate_scale` (computed from the strongest detected plate
+    + the incident's AR distance + settings).
+  * POST /api/admin/plate-scale/calibrate {incident_id | distance_m+plate_width_fraction} (require_real_role
+    2; demo accounts 403 by design) → derives+persists k, enables cross-check, audited.
+  * GET /api/admin/plate-scale/candidates → recent incidents with BOTH AR distance + a detected plate.
+  * admin GET/PATCH /settings refactored to _settings_out(); PATCH accepts the 3 new fields.
+- WEBDASH (`webdash/`, built → backend/webdash_dist, served at /api/dash):
+  * Incidents DetailModal rewritten: fetches analysis, overlays face/plate boxes on the photo
+    (% positioning), plate box TAPPABLE → inline edit → PATCH; "Blur faces" toggle (CSS backdropFilter
+    blur); distance row + plate-scale cross-check row (green ✓ matches / red ⚠ differs N%); face count chip.
+  * Admin "📷 Camera AI & plate-scale calibration" card: 4 flag toggles (ar_distance/face/plate/
+    plate_scale), ref-width + k inputs + Save, and "Calibrate from a report" dropdown (candidates) → calibrate.
+  * i18n ps_*/an_* keys ×3 langs (webdash D dict).
+- MOBILE (`incident/[id].tsx`): plate-scale cross-check line under the distance row
+  (incident.plateScaleLabel + ✓ / ⚠ Δ%). IncidentAnalysis type gained plate_scale.
+- TESTS: tests/test_step5_plate_scale.py (9) — estimate/consistency/disabled, calibrate_k roundtrip,
+  analysis returns plate_scale, settings expose fields, calibrate-from-incident (k=1.8), candidates list,
+  manual calibrate + 400 validation, worker 403. FULL SUITE 362 passed, 2 skipped. Webdash tsc (my files
+  clean; pre-existing Presence.tsx warnings only) + vite build OK. Lint clean. i18n parity 622 each.
+- LIVE VERIFIED (dashboard, demo CGM): plate box "MH12AB1234 ✎" + face box render; blur toggle →
+  backdrop-blurred face; Distance "4.2 m ±0.2 · lidar"; "Plate-scale check: ~1.4 m ⚠ differs from AR
+  (67.6%)"; Admin card + candidate dropdown populated. (Mismatch expected — synthetic test plate is huge;
+  real plates calibrate to consistent.)
+
+### Camera AI feature (Steps 1–5) — DELIVERY COMPLETE. All 5 steps done + reviewed/verified.
+  Remaining real-device-only validation: on-device AR distance capture + native Share (need APK/IPA build).
+
