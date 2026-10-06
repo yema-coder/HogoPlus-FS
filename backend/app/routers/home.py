@@ -111,7 +111,9 @@ async def get_home_counts(
         )
         counts["open_incidents"] = await _count(
             select(func.count()).select_from(Incident).where(
-                Incident.status != "resolved", Incident.is_demo == is_demo
+                Incident.status != "resolved",
+                Incident.is_demo == is_demo,
+                Incident.source != "gallery",  # test uploads excluded from KPI count
             )
         )
 

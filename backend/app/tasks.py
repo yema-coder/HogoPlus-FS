@@ -762,11 +762,13 @@ async def _detect_plate_async(kind: str, record_id: str) -> dict:
         await engine.dispose()
 
 
-async def _analyze_photos_async(kind: str, record_id: str) -> dict:
+async def _analyze_photos_async(kind: str, record_id: str, force: bool = False) -> dict:
     """Local ONNX analysis (YuNet faces + YOLO/CCT number plates) of a record's
     photos. Writes photo_analyses/photo_faces/photo_plates (idempotent per photo
     key) and, for incidents, sets detected_plate from the strongest local plate.
-    Never raises. Returns a small summary dict."""
+    Never raises. Returns a small summary dict.
+
+    `force=True` overrides the global face/plate switches (gallery test uploads)."""
     from starlette.concurrency import run_in_threadpool
 
     from app import vision_local
@@ -792,6 +794,9 @@ async def _analyze_photos_async(kind: str, record_id: str) -> dict:
             s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
             face_enabled = bool(getattr(s, "face_detection_enabled", True)) if s else True
             plate_enabled = bool(getattr(s, "plate_detection_enabled", True)) if s else True
+            if force:  # gallery test uploads: measure accuracy regardless of batch switches
+                face_enabled = True
+                plate_enabled = True
             if not face_enabled and not plate_enabled:
                 return {"skipped": "flags_off", "found_plate": False, "plate_enabled": False}
 
@@ -925,16 +930,19 @@ async def _analyze_photos_async(kind: str, record_id: str) -> dict:
             pass
 
 
-async def run_incident_ai_background(incident_id: str, with_plate: bool) -> None:
+async def run_incident_ai_background(incident_id: str, with_plate: bool, force: bool = False) -> None:
     """In-process incident AI (local face/plate analysis + ANPR fallback +
     classification) as a FastAPI background task. Production containers run NO
     Celery worker — this must never depend on a broker. Plate detection runs
-    FIRST (it is the product); the classification LLM is slower."""
+    FIRST (it is the product); the classification LLM is slower.
+
+    `force=True` (gallery test uploads) runs faces+plates even when the global
+    detection switches are off — the only way to measure real local accuracy."""
     if with_plate:
         local_found = False
         plate_enabled = True
         try:
-            res = await _analyze_photos_async("incident", incident_id)
+            res = await _analyze_photos_async("incident", incident_id, force=force)
             local_found = bool(res.get("found_plate"))
             plate_enabled = bool(res.get("plate_enabled", True))
         except Exception:

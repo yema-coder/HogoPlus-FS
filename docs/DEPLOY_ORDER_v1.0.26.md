@@ -53,27 +53,32 @@ docker tag hogoplus-backend:latest hogoplus-backend:rollback-20261006   # image 
 ```bash
 git pull                                      # pull main FIRST (standing rule)
 docker compose build backend                  # prefetch_models.py runs INSIDE the build (bakes ONNX)
-# DB is at 0019 → this applies 0020,0021,0022,0023, with the OLD container still serving:
+# DB is at 0019 → this applies 0020,0021,0022,0023,0024, with the OLD container serving:
 docker compose run --rm backend alembic current             # expect 0019
-docker compose run --rm backend alembic upgrade head        # -> 0023 (idempotent)
+docker compose run --rm backend alembic upgrade head        # -> 0024 (idempotent)
 docker compose up -d backend
 docker compose logs --tail=20 backend | grep -i "auto-migrate\|revision"
-#   expect: "auto-migrate disabled, current revision = 0023 (code head = 0023)"
+#   expect: "auto-migrate disabled, current revision = 0024 (code head = 0024)"
+# Re-run the MANUAL seeds (not run on boot) so this batch's config/allowlist land:
+docker compose run --rm backend python scripts/seed_home_configs.py        # CGM/MD "Report incident" tile
+docker compose run --rm backend python scripts/seed_ar_debug_allowlist.py  # Amey 0001/8483029039 -> AR debug
 # KEEP PLATES OFF (migration default is ON). Face stays ON for smoke test:
 #   PATCH /api/admin/settings {"plate_detection_enabled": false}  (CGM/MD token)
 ```
 If step-1 (upgrade) is skipped and the DB is behind, the app still BOOTS and logs a WARNING;
 requests touching the new columns/tables fail until you upgrade. It will NOT auto-migrate.
 
-## Alembic migrations (ordered; revision id == filename prefix; head = 0023)
+## Alembic migrations (ordered; revision id == filename prefix; head = 0024)
 0001_initial_schema · 0002_fix_shift_timings · 0003_phase4_ai_storage · 0004_ux_pack ·
 0005_video_password_polish · 0006_ble_mac · 0007_anpr_pipeline · 0008_demo_isolation ·
 0009_app_version · 0010_ble_dualmode · 0011_beacon_first_flag · 0012_force_update_flag ·
 0013_wave1_dept_upgrade · 0014_reg_context_bilingual_ai · 0015_p1_batch · 0016_nudge_idempotency ·
 0017_head_office_md · 0018_live_presence · 0019_presence_phase2 · **0020_broadcasts** ·
-**0021_photo_analysis** · **0022_plate_scale** · **0023_broadcast_templates**
-> Bold = added during the Broadcast + Camera-AI rounds. If your prod last deployed at v1.0.25 it
-> is at **0018**, so `alembic upgrade head` will apply 0019→0023 (verify with `alembic current`).
+**0021_photo_analysis** · **0022_plate_scale** · **0023_broadcast_templates** ·
+**0024_ar_debug_allowlist**
+> Bold = added during the Broadcast + Camera-AI rounds. If your prod is at **0019**,
+> `alembic upgrade head` applies 0020→0024 (verify with `alembic current`). 0024 is a single
+> additive column (`settings.ar_debug_emp_ids TEXT NOT NULL DEFAULT ''`) — no data migration.
 
 ## requirements.txt
 - **No change in this round.** The Camera-AI + Broadcast rounds (already in the repo) need these if
@@ -83,13 +88,19 @@ requests touching the new columns/tables fail until you upgrade. It will NOT aut
   was already added for RAG embeddings.
 
 ## Flags / settings (all new feature flags default OFF/FALSE)
-- **Backend:** no new settings flag this round. ⚠️ Face/plate are gated by the `settings` table
-  columns `face_detection_enabled` / `plate_detection_enabled`, both **server_default TRUE** (added
-  by migration 0021). So **after you apply 0020-0023, plate detection defaults ON.** Per the owner's
-  instruction plates stay OFF for this deploy and NO code workaround was added — you MUST turn it
+- **Backend:** NEW migration **0024** adds `settings.ar_debug_emp_ids` (TEXT, default `''`) — a
+  comma/newline allowlist of emp_ids + phones that may see the on-device AR debug HUD/dot with NO
+  rebuild. Default empty (nobody). Editable at runtime via `PATCH /api/admin/settings
+  {"ar_debug_emp_ids": "..."}` (CGM/MD) and exposed per-user as the computed boolean `ar_debug` on
+  `/api/auth/me` + login. Seeded for Amey (0001 / 8483029039) by the seed below.
+- ⚠️ Face/plate are gated by `settings.face_detection_enabled` / `plate_detection_enabled`, both
+  **server_default TRUE** (added by 0021). So **after you apply the migrations, plate detection
+  defaults ON.** Plates stay OFF for this deploy and NO code workaround was added — you MUST turn it
   off at runtime: `PATCH /api/admin/settings {"plate_detection_enabled": false}` (CGM/MD). Face
   stays ON (smoke test ok). `broadcasts_enabled` already defaults FALSE.
-- **Env:** **`DISABLE_AUTO_MIGRATE=true`** — NEW; production ALWAYS sets this.
+- **Env:** **`DISABLE_AUTO_MIGRATE=true`** — production ALWAYS sets this.
+- **Mobile AR debug gate (client):** `__DEV__ || is_demo || role.rank ≤ 2 || profile.ar_debug`
+  (the last from the server allowlist). Real workers on real accounts match none → never see it.
 - **Mobile (client-only):** AR Debug HUD + reprojection dot + `/ar-calibration` gated to
   `__DEV__ || role.rank ≤ 2`.
 

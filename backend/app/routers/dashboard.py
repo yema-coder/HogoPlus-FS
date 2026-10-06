@@ -68,6 +68,7 @@ async def factory_pulse(
             select(safunc.count()).select_from(Incident).where(
                 Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
                 Incident.is_demo == user.is_demo,
+                Incident.source != "gallery",  # test uploads excluded from the pulse
             )
         )
     ).scalar() or 0
@@ -77,6 +78,7 @@ async def factory_pulse(
                 Incident.severity == "critical",
                 Incident.status.in_(["submitted", "seen", "in_progress", "escalated"]),
                 Incident.is_demo == user.is_demo,
+                Incident.source != "gallery",
             ).limit(1)
         )
     ).scalar_one_or_none()
@@ -162,6 +164,7 @@ async def plate_search(
             "label": i.category,
             "department_code": i.department_code,
             "status": i.status,
+            "source": i.source,
             "created_at": i.created_at.isoformat() if i.created_at else None,
         }
         for i in incidents
@@ -237,7 +240,8 @@ async def _pending_counts(session: AsyncSession, dept: str | None, is_demo: bool
     add((await session.execute(q)).all())
 
     q = select(Incident.department_code, safunc.count()).where(
-        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo)
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo),
+        Incident.source != "gallery",
     ).group_by(Incident.department_code)
     add((await session.execute(q)).all())
 
@@ -262,6 +266,7 @@ def _feed_item(i: Incident, reporter_name: str, storage) -> dict:
         "video_url": storage.url_for(i.video_key) if i.video_key else None,
         "voice_note_url": storage.url_for(i.voice_note_key) if i.voice_note_key else None,
         "address_text": i.address_text, "description": i.description,
+        "source": i.source,
         "created_at": i.created_at.isoformat(), "age_hours": _age_hours(i.created_at),
     }
 
@@ -358,6 +363,7 @@ async def compute_overview(dept: str | None, is_demo: bool) -> dict:
     inc_q = select(Incident.department_code, Incident.severity, safunc.count()).where(
         Incident.status.in_(OPEN_INCIDENT_STATUSES),
         Incident.is_demo == is_demo,
+        Incident.source != "gallery",
     ).group_by(Incident.department_code, Incident.severity)
 
     sub_q = select(FormSubmission.department_code, safunc.count()).where(
@@ -384,7 +390,8 @@ async def compute_overview(dept: str | None, is_demo: bool) -> dict:
         .group_by(Employee.department_code)
     )
     p_inc_q = select(Incident.department_code, safunc.count()).where(
-        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo)
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo.is_(is_demo),
+        Incident.source != "gallery",
     ).group_by(Incident.department_code)
 
     feed_q = (
@@ -559,6 +566,7 @@ async def department_detail(
         {
             "id": str(i.id), "category": i.category, "status": i.status,
             "severity": i.severity, "created_at": i.created_at.isoformat(),
+            "source": i.source,
             "severity_reason": i.severity_reason,
             "severity_reason_mr": i.severity_reason_mr,
             "detected_plate": i.detected_plate,
@@ -701,7 +709,8 @@ async def approvals_aging(
                       "escalated": False, "created_at": sw.created_at.isoformat()})
 
     q = select(Incident).where(
-        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo == user.is_demo
+        Incident.status.in_(["submitted", "escalated"]), Incident.is_demo == user.is_demo,
+        Incident.source != "gallery",
     )
     if dept:
         q = q.where(Incident.department_code == dept)

@@ -114,6 +114,7 @@ def _settings_out(s: FactorySettings) -> dict:
         "plate_scale_enabled": s.plate_scale_enabled,
         "plate_ref_width_m": s.plate_ref_width_m,
         "plate_scale_k": s.plate_scale_k,
+        "ar_debug_emp_ids": s.ar_debug_emp_ids,
     }
 
 
@@ -134,6 +135,7 @@ async def patch_settings(
         "broadcasts_enabled", "broadcast_rate_per_hour",
         "ar_distance_enabled", "face_detection_enabled", "plate_detection_enabled",
         "plate_scale_enabled", "plate_ref_width_m", "plate_scale_k",
+        "ar_debug_emp_ids",
     ):
         val = getattr(body, field)
         if val is not None:

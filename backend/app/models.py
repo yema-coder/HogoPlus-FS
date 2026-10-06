@@ -308,6 +308,10 @@ class Incident(TimestampMixin, Base):
     )
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    # capture source: 'field' = normal in-app camera/video; 'gallery' = test upload
+    # picked from the photo library by an AR-debug allowlisted account. Gallery rows
+    # route/analyse like normal complaints but are excluded from factory statistics.
+    source: Mapped[str] = mapped_column(String(10), default="field", server_default="field", nullable=False)
 
 
 class IncidentTimeline(Base):
@@ -461,6 +465,12 @@ class FactorySettings(TimestampMixin, Base):
     )
     plate_detection_enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
+    )
+    # Server-driven AR debug allowlist: comma/newline-separated employee IDs and/or
+    # phone numbers that may see the on-device AR debug HUD + reprojection dot (no
+    # rebuild needed). Empty = nobody. Real workers never match.
+    ar_debug_emp_ids: Mapped[str] = mapped_column(
+        Text, default="", server_default="", nullable=False
     )
     # Step 5 plate-scale cross-check: an independent distance estimate from the
     # apparent width of a standard number plate. k ≈ focal_length_px / image_width_px
