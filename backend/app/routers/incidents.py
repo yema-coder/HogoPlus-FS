@@ -29,7 +29,7 @@ from app.schemas import (
     IncidentStatusIn,
     PlatePatchIn,
 )
-from app.security import get_approved_employee, get_current_employee, is_dept_manager
+from app.security import ar_debug_allowlisted, get_approved_employee, get_current_employee, is_dept_manager
 
 router = APIRouter(tags=["incidents"])
 
@@ -78,6 +78,7 @@ def _out(i: Incident) -> dict:
         "distance_confidence": i.distance_confidence,
         "distance_uncertainty_m": i.distance_uncertainty_m,
         "duplicate_of": str(i.duplicate_of) if i.duplicate_of else None,
+        "source": i.source,
         "created_at": i.created_at.isoformat() if i.created_at else None,
     }
 
@@ -147,6 +148,19 @@ async def create_incident(
         if existing:
             return _out(existing)
 
+    # Gallery-sourced uploads are a test-only tool for AR-debug allowlisted accounts
+    # (hundreds of self-shot vehicle/person photos run through the pipeline to measure
+    # real face/plate accuracy). Gated server-side too — the mobile button is already
+    # allowlist-gated, this rejects a forged request from any other account.
+    source = body.source if body.source in ("field", "gallery") else "field"
+    if source == "gallery":
+        s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+        if not ar_debug_allowlisted(employee, s.ar_debug_emp_ids if s else None):
+            raise HTTPException(
+                status_code=403,
+                detail="Gallery upload is restricted to allowlisted test accounts",
+            )
+
     dept = (
         await session.execute(select(Department).where(Department.code == body.department_code))
     ).scalar_one_or_none()
@@ -192,6 +206,7 @@ async def create_incident(
         client_uuid=body.client_uuid,
         assigned_manager_id=assigned,
         status="submitted",
+        source=source,
         plate_status="pending" if body.photo_key else None,
         ble_beacon_id=ble_ref,
         ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
@@ -222,7 +237,11 @@ async def create_incident(
     if not os.environ.get("TESTING"):
         from app.tasks import run_incident_ai_background
 
-        background.add_task(run_incident_ai_background, str(incident.id), bool(incident.photo_key))
+        # gallery test uploads FORCE faces+plates ON even when the global plate switch
+        # is off for this batch — that is the whole point (measuring local accuracy).
+        background.add_task(
+            run_incident_ai_background, str(incident.id), bool(incident.photo_key), source == "gallery"
+        )
 
     return _out(incident)
 

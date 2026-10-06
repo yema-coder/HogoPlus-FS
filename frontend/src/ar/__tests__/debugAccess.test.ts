@@ -44,3 +44,10 @@ test("the demo bubble widens the real gate (upstream rule, preserved)", () => {
   assert.equal(gate({ rank: 6, isDemo: false }), false); // real worker
   assert.equal(gate({ rank: 6 }), false);
 });
+
+test("the server-driven allowlist (profile.ar_debug) opens the real gate", () => {
+  const gate = (ctx: Parameters<typeof evaluateArDebug>[0]) => evaluateArDebug(ctx, false, false);
+  assert.equal(gate({ rank: 3, serverAllowed: true }), true); // owner's 0001 once seeded
+  assert.equal(gate({ rank: 3, serverAllowed: false }), false);
+  assert.equal(gate({ rank: 6, serverAllowed: true }), true);
+});

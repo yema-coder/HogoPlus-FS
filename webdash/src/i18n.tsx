@@ -80,6 +80,7 @@ const D: Record<string, [string, string, string]> = {
   an_edit_plate: ["Edit plate", "प्लेट संपादित करें", "प्लेट संपादित करा"],
   an_pending: ["Analysing photo…", "फ़ोटो विश्लेषण हो रहा…", "फोटो विश्लेषण सुरू…"],
   an_tap_plate: ["Tap a plate box to edit", "संपादित करने के लिए प्लेट बॉक्स पर टैप करें", "संपादित करण्यासाठी प्लेट बॉक्सवर टॅप करा"],
+  gallery_test: ["Test upload", "टेस्ट अपलोड", "टेस्ट अपलोड"],
   veh_export_range: ["Export range (defaults to this month)", "एक्सपोर्ट रेंज (डिफ़ॉल्ट: यह महीना)", "एक्सपोर्ट कालावधी (डीफॉल्ट: हा महिना)"],
   appver_title: ["App version & updates", "ऐप वर्शन और अपडेट", "अ‍ॅप आवृत्ती व अपडेट"],
   appver_latest: ["Latest version", "नवीनतम वर्शन", "नवीनतम आवृत्ती"],

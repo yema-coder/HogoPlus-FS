@@ -23,6 +23,9 @@ export interface ArDebugContext {
   allowlist?: string[] | null;
   /** account lives in the sealed demo bubble — real workers never match */
   isDemo?: boolean | null;
+  /** the SERVER already decided this account is allowlisted
+   * (settings.ar_debug_emp_ids -> profile.ar_debug); needs a backend deploy */
+  serverAllowed?: boolean | null;
 }
 
 function isDev(): boolean {
@@ -39,7 +42,8 @@ export function evaluateArDebug(
 ): boolean {
   if (forEveryone) return true;
   if (dev) return true;
-  const { rank, empId, allowlist, isDemo } = ctx;
+  const { rank, empId, allowlist, isDemo, serverAllowed } = ctx;
+  if (serverAllowed) return true; // server-side allowlist (no app rebuild needed)
   if (isDemo) return true; // demo bubble: any rank, real workers never match
   if (empId && allowlist?.length) {
     const wanted = empId.trim().toUpperCase();

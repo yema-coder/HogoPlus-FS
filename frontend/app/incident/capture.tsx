@@ -1,12 +1,14 @@
 import dayjs from "dayjs";
 import { useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import NetInfo from "@react-native-community/netinfo";
 import {
   Camera as CameraIcon,
   ChevronDown,
+  Images,
   Maximize2,
   MapPin,
   MapPinOff,
@@ -100,11 +102,19 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
-  // AR debug HUD/dot. For THIS test build everyone sees it (the owner's own
-  // account is rank 3); the real gate — dev, demo bubble, rank <= 2 or the
-  // server allowlist — is intact behind AR_DEBUG_FOR_EVERYONE in src/ar/debugAccess.
+  // AR debug HUD/dot — and the gallery test-upload button below, which the code
+  // agent gated on the same signal. For THIS test build everyone sees both (the
+  // owner's own account is rank 3 and the server allowlist needs a backend deploy
+  // first). The real gate — dev, demo bubble, rank <= 2, or the server-driven
+  // allowlist (settings.ar_debug_emp_ids -> profile.ar_debug) — is intact behind
+  // AR_DEBUG_FOR_EVERYONE in src/ar/debugAccess.ts.
   const isDemo = profile?.is_demo === true;
-  const arDebug = isArDebugEnabled({ rank, empId: profile?.emp_id, isDemo });
+  const arDebug = isArDebugEnabled({
+    rank,
+    empId: profile?.emp_id,
+    isDemo,
+    serverAllowed: profile?.ar_debug === true,
+  });
   const enqueue = useOutboxStore((s) => s.enqueue);
   const { width: windowW, height: windowH } = useWindowDimensions();
 
@@ -116,6 +126,9 @@ function IncidentCaptureInner() {
   const [recordLeft, setRecordLeft] = useState(30);
   const [videoUri, setVideoUri] = useState<string | null>(null);
   const [shot, setShot] = useState<Shot | null>(null);
+  // gallery test upload (AR-debug allowlist only): original pixels, no watermark,
+  // null GPS/distance — source='gallery' on the server, excluded from statistics.
+  const [fromGallery, setFromGallery] = useState(false);
   const [capturedAt, setCapturedAt] = useState<number>(0);
   const [capturing, setCapturing] = useState(false);
   const [gps, setGps] = useState<GpsFix | null>(null);
@@ -246,6 +259,41 @@ function IncidentCaptureInner() {
     }
   };
 
+  /** Gallery test upload (AR-debug allowlist only). Picks an image from the photo
+   * library, routes it through the SAME preview+submit flow with source='gallery'.
+   * No AR distance, no device GPS, no watermark — the server forces faces+plates. */
+  const pickFromGallery = async () => {
+    // contextual permission: only asked after an allowlisted tester taps the button
+    let perm = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (!perm.granted && perm.canAskAgain) {
+      perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    }
+    if (!perm.granted) {
+      // never a dead end: if the OS won't ask again, send them to Settings
+      showToast(t("errors.generic"), "error");
+      if (!perm.canAskAgain) void Linking.openSettings();
+      return;
+    }
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 1,
+        exif: false,
+      });
+      const a = res.assets?.[0];
+      if (!res.canceled && a) {
+        setFromGallery(true);
+        setShot({ uri: a.uri, width: a.width || 1200, height: a.height || 1600 });
+        setCapturedAt(Date.now());
+        setCapturedDist("");
+        distanceMetaRef.current = null;
+        intrinsicsRef.current = null;
+      }
+    } catch {
+      showToast(t("errors.generic"), "error");
+    }
+  };
+
   const startRecording = async () => {
     if (!cameraRef.current || recording) return;
     if (micPerm && !micPerm.granted && micPerm.canAskAgain) {
@@ -331,14 +379,16 @@ function IncidentCaptureInner() {
     const payload: Record<string, unknown> = {
       category: "other", // AI suggests the real category post-submit
       department_code: dept,
-      gps_lat: gps?.lat ?? null,
-      gps_lng: gps?.lng ?? null,
-      address_text: address,
+      // gallery test uploads carry NO device GPS/zone (the photo was shot elsewhere);
+      // the server stores source='gallery' and keeps them out of factory statistics.
+      gps_lat: fromGallery ? null : (gps?.lat ?? null),
+      gps_lng: fromGallery ? null : (gps?.lng ?? null),
+      address_text: fromGallery ? null : address,
       description: desc.trim() || null,
       severity: "normal",
       // offline outbox idempotency: replays of this report return the same incident
       client_uuid: `inc-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      ...beaconPayload(bleHitRef.current),
+      ...(fromGallery ? { source: "gallery" } : beaconPayload(bleHitRef.current)),
     };
     // voice note already uploaded during transcription — reuse the key
     if (voiceKeyRef.current) payload.voice_note_key = voiceKeyRef.current;
@@ -346,7 +396,7 @@ function IncidentCaptureInner() {
     // AR object distance measured at the instant of capture (travels through the
     // outbox too). Only attach a real, non-"none" measurement.
     const dm = distanceMetaRef.current as CaptureDistanceMeta | null;
-    if (dm && dm.distance_m != null && dm.distance_method && dm.distance_method !== "none") {
+    if (!fromGallery && dm && dm.distance_m != null && dm.distance_method && dm.distance_method !== "none") {
       payload.distance_m = dm.distance_m;
       payload.distance_method = dm.distance_method;
       payload.distance_confidence = dm.distance_confidence;
@@ -391,14 +441,20 @@ function IncidentCaptureInner() {
     }
 
     // ---- photo path: optimistic — always via the outbox ----
+    // gallery test uploads keep ORIGINAL pixels (no watermark burn-in) so face/plate
+    // accuracy is measured on the real image; camera captures burn the watermark in.
     let finalUri: string;
-    try {
-      finalUri = await buildFinalImage();
-    } catch (err) {
-      console.warn("buildFinalImage failed:", err);
-      showToast(t("errors.generic"), "error");
-      setSubmitting(false);
-      return;
+    if (fromGallery) {
+      finalUri = shot!.uri;
+    } else {
+      try {
+        finalUri = await buildFinalImage();
+      } catch (err) {
+        console.warn("buildFinalImage failed:", err);
+        showToast(t("errors.generic"), "error");
+        setSubmitting(false);
+        return;
+      }
     }
     // Queue locally + upload in the background: the user is unblocked immediately;
     // the outbox worker handles retries and the success screen shows live progress.
@@ -557,6 +613,17 @@ function IncidentCaptureInner() {
             ) : null}
           </View>
           <View style={styles.shutterRow}>
+            {arDebug && mode === "picture" && !recording ? (
+              <Pressable
+                testID="incident-gallery-button"
+                accessibilityRole="button"
+                onPress={() => void pickFromGallery()}
+                style={styles.galleryPill}
+              >
+                <Images size={18} color="#FFFFFF" strokeWidth={2.4} />
+                <Text style={styles.galleryPillText}>Choose from gallery (test)</Text>
+              </Pressable>
+            ) : null}
             {!recording ? (
               <View style={styles.modeRow}>
                 <Pressable
@@ -720,7 +787,16 @@ function IncidentCaptureInner() {
             </View>
           </Pressable>
 
-          {locationLine()}
+          {fromGallery ? (
+            <View style={styles.locLine} testID="capture-gallery-note">
+              <Images size={18} color={colors.primary} strokeWidth={2.4} />
+              <Text style={[styles.locText, { color: colors.primary }]} numberOfLines={1}>
+                Gallery test upload · not counted in statistics
+              </Text>
+            </View>
+          ) : (
+            locationLine()
+          )}
 
           {capturedDist ? (
             <View style={styles.locLine} testID="capture-distance-line">
@@ -786,6 +862,7 @@ function IncidentCaptureInner() {
               onPress={() => {
                 setShot(null);
                 setVideoUri(null);
+                setFromGallery(false);
               }}
               style={{ flex: 1 }}
             />
@@ -917,6 +994,18 @@ const styles = StyleSheet.create({
   },
   gpsChipText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
   shutterRow: { alignItems: "center", paddingBottom: spacing.xl, gap: spacing.md },
+  galleryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderWidth: 2,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.lg,
+    minHeight: 44,
+  },
+  galleryPillText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: "#FFFFFF" },
   modeRow: { flexDirection: "row", gap: spacing.sm },
   modeChip: {
     flexDirection: "row",
