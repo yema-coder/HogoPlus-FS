@@ -2,8 +2,9 @@ import NetInfo from "@react-native-community/netinfo";
 import { AppState, Platform } from "react-native";
 import { create } from "zustand";
 
-import { ApiError, uploadFile } from "@/src/api/client";
+import { ApiError, localizedDetail, uploadFile } from "@/src/api/client";
 import { createIncident, createVehicleLog, punchIn, submitForm } from "@/src/api/endpoints";
+import i18n from "@/src/i18n";
 import { storage } from "@/src/utils/storage";
 
 export interface OutboxFile {
@@ -38,6 +39,9 @@ interface OutboxState {
   uploadingId: string | null;
   /** outbox item id → created incident id (null = permanently rejected) */
   results: Record<string, string | null>;
+  /** outbox item id → the REAL failure (status + readable message) so the UI can
+   * tell the user WHAT went wrong instead of a generic "try again" toast. */
+  errors: Record<string, { status: number; message: string }>;
   init: () => Promise<void>;
   enqueue: (item: Omit<OutboxItem, "id" | "createdAt" | "retries" | "nextAttemptAt">) => Promise<string>;
   process: () => Promise<void>;
@@ -78,6 +82,7 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
   processing: false,
   uploadingId: null,
   results: {},
+  errors: {},
 
   init: async () => {
     if (initialized) return;
@@ -189,10 +194,24 @@ export const useOutboxStore = create<OutboxState>((set, get) => ({
           for (const f of item.files ?? []) await removeOutboxFile(f.uri);
         } catch (e) {
           const status = e instanceof ApiError ? e.status : 0;
+          // ALWAYS log the real HTTP status + response body (BUG-3: generic toasts hid
+          // exactly this — e.g. 400 ".heic not allowed", 413 "exceeds 10 MB limit").
+          console.warn(
+            `[outbox] ${item.type} send failed — HTTP ${status}:`,
+            e instanceof ApiError ? JSON.stringify(e.detail) : (e instanceof Error ? e.message : String(e)),
+          );
           if (status >= 400 && status < 500 && status !== 401 && status !== 429) {
-            // permanent rejection (validation / duplicate punch) — drop it
+            // permanent rejection (validation / duplicate / unsupported file) — drop it,
+            // but KEEP the real reason so the success screen shows WHAT went wrong.
+            const message =
+              (e instanceof ApiError ? localizedDetail(e, i18n.language || "en") : undefined) ||
+              (status === 0 ? "Network error" : `HTTP ${status}`);
             const items = get().items.filter((i) => i.id !== item.id);
-            set({ items, results: { ...get().results, [item.id]: null } });
+            set({
+              items,
+              results: { ...get().results, [item.id]: null },
+              errors: { ...get().errors, [item.id]: { status, message } },
+            });
             await persist(items);
             await removeOutboxFile(item.photoUri);
             for (const f of item.files ?? []) await removeOutboxFile(f.uri);
