@@ -376,9 +376,53 @@ class ExpoArDistanceView(context: Context, appContext: AppContext) : ExpoView(co
     val yuv = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
     val out = ByteArrayOutputStream()
     yuv.compressToJpeg(Rect(0, 0, image.width, image.height), 90, out)
+    val jpeg = out.toByteArray()
     val file = File(context.cacheDir, "ar_${UUID.randomUUID()}.jpg")
-    file.writeBytes(out.toByteArray())
+
+    // BUG 5 FIX: ARCore's CPU camera image is in the sensor's native LANDSCAPE
+    // orientation. Written as-is it is sideways on a portrait-held phone — which
+    // silently breaks server face/plate detection (OpenCV imdecode IGNORES EXIF,
+    // so an EXIF-only tag would not help) and shows every incident rotated on the
+    // dashboard. Physically rotate the pixels so the stored JPEG is truly upright.
+    val rotation = captureRotationDegrees()
+    if (rotation == 0) {
+      file.writeBytes(jpeg)
+    } else {
+      val src = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+      val m = android.graphics.Matrix().apply { postRotate(rotation.toFloat()) }
+      val rotated = Bitmap.createBitmap(src, 0, 0, src.width, src.height, m, true)
+      val rout = ByteArrayOutputStream()
+      rotated.compress(Bitmap.CompressFormat.JPEG, 90, rout)
+      file.writeBytes(rout.toByteArray())
+      if (rotated != src) src.recycle()
+      rotated.recycle()
+    }
     return "file://${file.absolutePath}"
+  }
+
+  /** Degrees to rotate the sensor-native capture so it is upright for the current
+   * display. Back-facing camera: (sensorOrientation - displayRotation + 360) % 360.
+   * Falls back to 90° (the near-universal back-camera sensor orientation). */
+  private fun captureRotationDegrees(): Int {
+    return try {
+      val cm = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+      val camId = session?.cameraConfig?.cameraId
+      val sensor = if (camId != null) {
+        cm.getCameraCharacteristics(camId)
+          .get(android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+      } else {
+        90
+      }
+      val displayDeg = when (display?.rotation) {
+        android.view.Surface.ROTATION_90 -> 90
+        android.view.Surface.ROTATION_180 -> 180
+        android.view.Surface.ROTATION_270 -> 270
+        else -> 0
+      }
+      (sensor - displayDeg + 360) % 360
+    } catch (_: Throwable) {
+      90
+    }
   }
 
   // MARK: math -----------------------------------------------------------------

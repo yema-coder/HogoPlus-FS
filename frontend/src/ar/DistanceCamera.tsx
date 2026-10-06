@@ -3,6 +3,7 @@
 // non-AR devices). Exposes the SAME imperative API expo-camera's ref has, so the
 // capture screens barely change. The capture→submit flow never depends on AR.
 
+import { useIsFocused } from "@react-navigation/native";
 import { CameraView } from "expo-camera";
 import React, {
   forwardRef,
@@ -12,7 +13,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { AppState, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
 
 import {
   captureStill,
@@ -20,6 +21,7 @@ import {
   getArDistanceViewManager,
   isArModulePresent,
   onDistanceUpdate,
+  onStatusUpdate,
   pauseSession,
   resumeSession,
   setTarget as setNativeTarget,
@@ -32,6 +34,9 @@ import { captureMeetsBar, evaluateDistance } from "./distanceFilter";
 import type { ArCapabilities, CaptureDistanceMeta, DistanceReading, DistanceSample } from "./types";
 
 const WINDOW_MS = 500;
+// BUG 1: if the AR GL preview produces no frame/status within this window we treat
+// it as hung (black screen) or crashed and fall back to the plain camera for good.
+const AR_READY_TIMEOUT_MS = 5000;
 
 export interface DistancePhoto {
   uri: string;
@@ -71,11 +76,27 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
   const windowRef = useRef<DistanceSample[]>([]);
   const lastReadingRef = useRef<DistanceReading | null>(null);
   const [caps, setCaps] = useState<ArCapabilities | null>(null);
+  // BUG 1: mount the plain camera first; promote to AR only when supported, and if
+  // the AR preview never signals liveness within AR_READY_TIMEOUT_MS fall back to
+  // the plain camera permanently (prevents the 10-15s black-screen hang / crash).
+  const [arTimedOut, setArTimedOut] = useState(false);
+  const arLiveRef = useRef(false);
+
+  // run the camera ONLY while the screen is focused AND the app is foregrounded
+  const isFocused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const effectiveActive = active && isFocused && appActive;
 
   // AR is only used for still photos; video always uses the plain camera.
   const ArView = useMemo(() => getArDistanceViewManager() as React.ComponentType<{ style?: StyleProp<ViewStyle> }> | null, []);
   const wantAr = isArModulePresent() && !!ArView && mode === "picture" && caps?.supported !== false;
-  const useAr = wantAr && caps?.supported === true;
+  const useAr = wantAr && caps?.supported === true && !arTimedOut;
+
+  // track app foreground/background to pause/release the camera off-screen
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => setAppActive(s === "active"));
+    return () => sub.remove();
+  }, []);
 
   // runtime capability check each mount (RULE 5)
   useEffect(() => {
@@ -95,8 +116,16 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
   // AR session lifecycle + live distance subscription
   useEffect(() => {
     if (!useAr) return;
+    arLiveRef.current = false;
     void startSession();
+    // liveness: onDistance (~10 Hz once frames flow) or onStatus (init / failure)
+    // both prove the native session is alive and rendering — cancels the watchdog.
+    const markLive = () => {
+      arLiveRef.current = true;
+    };
+    const offStatus = onStatusUpdate(markLive);
     const off = onDistanceUpdate((u) => {
+      markLive();
       const now = Date.now();
       if (u.distanceM != null) windowRef.current.push({ value: u.distanceM, timestamp: now });
       windowRef.current = windowRef.current.filter((s) => now - s.timestamp <= WINDOW_MS);
@@ -116,8 +145,15 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
       lastReadingRef.current = reading;
       onReading?.(reading);
     });
+    // watchdog: no liveness within the timeout → the AR preview is hung/crashed,
+    // fall back to the plain camera for the rest of this screen.
+    const watchdog = setTimeout(() => {
+      if (!arLiveRef.current) setArTimedOut(true);
+    }, AR_READY_TIMEOUT_MS);
     return () => {
+      clearTimeout(watchdog);
       off();
+      offStatus();
       void stopSession();
       windowRef.current = [];
       lastReadingRef.current = null;
@@ -125,12 +161,12 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useAr]);
 
-  // pause/resume with screen focus (SPEED RULE: never run AR off-screen)
+  // pause/resume with screen focus + app state (never run AR off-screen/background)
   useEffect(() => {
     if (!useAr) return;
-    if (active) void resumeSession();
+    if (effectiveActive) void resumeSession();
     else void pauseSession();
-  }, [active, useAr]);
+  }, [effectiveActive, useAr]);
 
   // torch: native toggle for AR, prop for the plain camera
   useEffect(() => {
@@ -200,6 +236,7 @@ export const DistanceCamera = forwardRef<DistanceCameraRef, Props>(function Dist
       style={[styles.fill, style]}
       facing={facing}
       mode={mode}
+      active={effectiveActive}
       enableTorch={!!enableTorch}
       videoQuality={videoQuality}
       videoBitrate={videoBitrate}

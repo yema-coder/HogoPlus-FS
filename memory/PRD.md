@@ -1945,3 +1945,39 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
   non-allowlisted gallery→403; non-allowlisted field→200 source=field; invalid source→422; SECURITY
   open-incident KPI increments only for the field one (gallery excluded); feed shows gallery tagged.
   Lint + web bundle clean. Native picker + capture flow require the APK build (like AR) to QA on device.
+
+## Camera-AI device bug pack — BUG 5 (photo rotation) + BUG 1 (AR lifecycle) (2026-06 fork) ✅
+- BUG 5 ROOT CAUSE (proven): Android AR capture `ExpoArDistanceView.kt → yuvToJpegFile()`
+  wrote the sensor-native LANDSCAPE YUV frame with NO rotation + NO EXIF → every AR photo
+  stored 1600x900 sideways. This silently broke server face/plate detection (OpenCV
+  `cv2.imdecode` in vision_local.py IGNORES EXIF, so an EXIF-only tag would NOT help) and
+  showed every incident rotated on the dashboard.
+  FIX (Kotlin): new `captureRotationDegrees()` = (SENSOR_ORIENTATION − displayRotation + 360)%360
+  (back cam, locked-portrait ⇒ 90° CW; falls back to 90). yuvToJpegFile now PHYSICALLY rotates
+  the decoded bitmap before writing, so the stored JPEG is truly upright. resolveCapture already
+  reports width/height by decoding the final file ⇒ shot.width/height now portrait (burn-in
+  landscape/portrait decision no longer wrong). iOS path (ExpoArDistanceView.swift) ALREADY
+  correct — applies `.oriented(.right)` and reports post-orientation extent. Native → verify only
+  on an APK build (not Expo Go).
+  BACKFILL for already-stored rotated photos: `backend/scripts/backfill_rotate_ar_photos.py`
+  (--since / --incident-id / --degrees 90|180|270 / --force-all / --include-gallery / --dry-run).
+  Default ONLY rotates LANDSCAPE photos (w≥h = broken-AR signature), skips gallery + video + already
+  portrait; overwrites the SAME storage key (links keep working); clears PhotoAnalysis, resets plate
+  fields, re-runs local faces+plates (force=True) + ANPR fallback (classification LLM NOT re-run).
+  VALIDATED end-to-end on the restored sandbox: real incident 03c39871 1600x900 → 900x1600 PORTRAIT,
+  re-analysis ran (faces/plates + ANPR). Rotation unit-tested (160x90→90x160). User runs it against
+  prod himself (DISABLE_AUTO_MIGRATE, managed DB).
+- BUG 1 (AR crash / 10-15s black screen): `src/ar/DistanceCamera.tsx` — mount the PLAIN camera first,
+  promote to AR only when supported, and a 5s liveness watchdog (first onDistance OR onStatus event
+  cancels it) → `arTimedOut` falls back to the plain camera permanently if AR hangs/crashes. Added
+  useIsFocused (@react-navigation/native) + AppState → `effectiveActive = active && focused && app
+  foregrounded` drives resume/pause AND the plain CameraView `active` prop (releases camera off-screen
+  / in background). Native AR init only QA-able on the APK; plain-camera fallback verified on web.
+- Testing: iteration_32 — BUG 2 (clean detail photo, metadata in MetaGrid below), BUG 4 (People +
+  Number-plates sections ALWAYS render in Checking/N/None), BUG 1 capture screen mounts — ALL PASS
+  (Demo CGM +919000000500 / 123456). BUG 3 (outbox surfaces real HTTP status via console.warn +
+  localizedDetail + errors map in outbox.ts) is code-complete from the prior session; QA on device by
+  picking an oversized/HEIC image. DistanceCamera tsc + eslint clean.
+- NOTE: this fork booted with local Postgres wiped (DATABASE_URL=127.0.0.1) — recovered via
+  `sudo bash /app/scripts/sandbox_recover.sh` (PGDG PG16+pgvector+redis, restore R2 backup
+  2026-10-06/1230, 470 employees, db_seeded=true). Same recurring reset as prior forks.

@@ -1,6 +1,7 @@
 import dayjs from "dayjs";
 import { useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
@@ -57,7 +58,6 @@ import { useOutboxStore } from "@/src/offline/outbox";
 import { storage } from "@/src/utils/storage";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
-import { burnInSafe } from "@/src/utils/burnIn";
 import { reverseGeocode } from "@/src/utils/geocode";
 import { acquireGps, type GpsFix } from "@/src/utils/gps";
 
@@ -164,7 +164,6 @@ function IncidentCaptureInner() {
   const [capturedDist, setCapturedDist] = useState("");
   const distanceMetaRef = useRef<unknown>(null);
   const intrinsicsRef = useRef<unknown>(null);
-  const watermarkRef = useRef<View>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
   // never waits on it — whatever is found by Submit time travels with the payload.
@@ -282,8 +281,20 @@ function IncidentCaptureInner() {
       });
       const a = res.assets?.[0];
       if (!res.canceled && a) {
+        // BUG-3 root cause: gallery photos are often HEIC (iOS) or >10MB, which the
+        // upload endpoint rejects (400 .heic not allowed / 413 too large). Transcode
+        // every pick to a right-sized JPEG so it passes and faces/plates read cleanly.
+        const longest = Math.max(a.width || 0, a.height || 0);
+        const actions =
+          longest > 2600
+            ? [(a.width || 0) >= (a.height || 0) ? { resize: { width: 2600 } } : { resize: { height: 2600 } }]
+            : [];
+        const jpg = await ImageManipulator.manipulateAsync(a.uri, actions, {
+          compress: 0.9,
+          format: ImageManipulator.SaveFormat.JPEG,
+        });
         setFromGallery(true);
-        setShot({ uri: a.uri, width: a.width || 1200, height: a.height || 1600 });
+        setShot({ uri: jpg.uri, width: jpg.width || a.width || 1200, height: jpg.height || a.height || 1600 });
         setCapturedAt(Date.now());
         setCapturedDist("");
         distanceMetaRef.current = null;
@@ -331,12 +342,6 @@ function IncidentCaptureInner() {
     } else {
       void startRecording();
     }
-  };
-
-  /** Burn watermark into pixels via view-shot, then compress. Never throws for a valid shot. */
-  const buildFinalImage = async (): Promise<string> => {
-    if (!shot) throw new Error("no shot");
-    return burnInSafe(watermarkRef, shot.uri, shot.width, shot.height);
   };
 
   /** Voice-first: transcribe as soon as a note is recorded. NEVER a dead end —
@@ -441,21 +446,11 @@ function IncidentCaptureInner() {
     }
 
     // ---- photo path: optimistic — always via the outbox ----
-    // gallery test uploads keep ORIGINAL pixels (no watermark burn-in) so face/plate
-    // accuracy is measured on the real image; camera captures burn the watermark in.
-    let finalUri: string;
-    if (fromGallery) {
-      finalUri = shot!.uri;
-    } else {
-      try {
-        finalUri = await buildFinalImage();
-      } catch (err) {
-        console.warn("buildFinalImage failed:", err);
-        showToast(t("errors.generic"), "error");
-        setSubmitting(false);
-        return;
-      }
-    }
+    // BUG-2 fix: incident photos are stored CLEAN — no burned-in watermark. Every bit
+    // of capture metadata (time, GPS, zone, reporter) is persisted on the incident and
+    // shown BELOW the photo on the detail screen + webdash, so the burn-in was redundant
+    // and was covering the image. Camera + gallery both upload the original pixels.
+    const finalUri = shot!.uri;
     // Queue locally + upload in the background: the user is unblocked immediately;
     // the outbox worker handles retries and the success screen shows live progress.
     const oid = await enqueue({
@@ -687,9 +682,6 @@ function IncidentCaptureInner() {
   }
 
   // ---- Tap 2: details + submit (compact — the whole core path fits without scrolling) ----
-  const displayW = windowW - sizes.screenPadding * 2;
-  // off-screen full-aspect view used ONLY for the watermark burn-in (photo quality unchanged)
-  const burnH = shot ? Math.round((displayW * shot.height) / shot.width) : 0;
   // visible media card: ~24% of screen height, tap to view full-screen
   const mediaH = Math.round(windowH * 0.24);
 
@@ -738,28 +730,6 @@ function IncidentCaptureInner() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
-          {/* off-screen full-size composite for the burn-in — never visible */}
-          {shot ? (
-            <View
-              ref={watermarkRef}
-              collapsable={false}
-              style={[styles.burnSource, { width: displayW, height: burnH }]}
-            >
-              <Image source={{ uri: shot.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-              <View style={styles.watermark}>
-                <Text style={styles.wmLine1}>HOGO PLUS · {t("home.reportIncident")}</Text>
-                <Text style={styles.wmLine2}>
-                  {dayjs(capturedAt).format("DD/MM/YYYY HH:mm")} ·{" "}
-                  {gps ? `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)}` : t("incident.gpsNone")}
-                </Text>
-                {address ? <Text style={styles.wmLine2} numberOfLines={1}>{address}</Text> : null}
-                <Text style={styles.wmLine2}>
-                  {profile?.full_name ?? ""}{profile?.emp_id ? ` · ${profile.emp_id}` : ""}
-                </Text>
-              </View>
-            </View>
-          ) : null}
-
           {/* compact media card — tap opens the full-screen viewer */}
           <Pressable
             testID="incident-media-card"
