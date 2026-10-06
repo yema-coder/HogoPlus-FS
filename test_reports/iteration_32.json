@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only verification of incident DETAIL layout + CAPTURE mount on web preview. Logged in as Demo CGM (+919000000500 / OTP 123456 via native-setter injection, auto-verify) and opened a seeded Department photo incident (ccb08a39-6c35-480b-8e48-81f693c84ccc, PRODUCTION, 'Other'). BUG-2 PASS: incident-media-card renders ONLY the photo (image child, no sibling text/overlay nodes, no HogoPlus brand pill, no expand pill, no mediaStrip under clean mode). Capture/time/status/severity metadata render BELOW the photo in MetaGrid (meta-status, meta-severity, meta-captured) and location data in incident-object-location + incident-device-location. BUG-4 PASS: on this photo incident BOTH incident-people-section AND incident-plates-section are present; initial state is the 'Checking…' loader (people-checking + plates-checking) — a valid one-of-three state per the spec (count-with-results and 'None detected' are the other two valid states). After 30s the sections remained in checking state (hard timeout is 55s in [id].tsx line 116 — this falls back to the empty state automatically if analysis never resolves), both allowed states. Sections were never missing. BUG-1 PASS: tapping the home 'Report incident' tile mounts incident-capture-screen cleanly (no crash, no permanent blank/black screen). With camera permission granted it renders the live capture UI with all controls: incident-camera-close-button, incident-shutter-button, mode-photo-button, mode-video-button, gps-chip-searching, camera-coach-overlay, and the graceful AR fallback chip 'Distance needs the full app build' (ar-distance-off), confirming the plain camera UI fallback on web. No React Native red screen anywhere.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "incident/[id] media card", "issues": ["Minor: on web, the seeded demo photo file itself contains a faint pre-fix burned-in server-side watermark visible on the image bitmap. This is NOT drawn by the React Native component — the MediaCard clean path renders no overlay. Captures taken after the BUG-2 fix will not have it (capture.tsx line 440: 'incident photos are stored CLEAN — no burned-in watermark'). Pre-existing seeded photos cannot be re-watermarked out without a backend re-render; cosmetic only."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/frontend/tests_playwright/test_incident_detail_capture.py"],
+  "action_items": [
+    "No code fixes required — all three target behaviours verified on web preview.",
+    "Optional (cosmetic): one-time job to re-save pre-fix seeded incident photos without the burned-in watermark so demo screenshots look as clean as new captures."
+  ],
+  "critical_code_review_comments": [
+    "incident/[id].tsx (clean MediaCard) correctly gates People/Plates sections on detail.photo_key and renders the three states via analysisPending / faces.length / plates.length. Hard timeout at line 116 (55s) guarantees no stuck 'Checking…'.",
+    "MediaCard.tsx clean prop path renders ONLY the <Image> (no overlays, no brand pill, no expand badge). Background is #000 for letterbox when resizeMode=contain.",
+    "capture.tsx CaptureGuards (strict camera+location+gps+bluetooth) runs before IncidentCaptureInner; permission screen (incident-camera-permission) is itself a valid mounted state with its own controls."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "None. Used pre-existing demo-seeded PRODUCTION photo incident ccb08a39-6c35-480b-8e48-81f693c84ccc.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login harness: pick English → data-testid=phone-input type 9000000500 → data-testid=send-otp-button → data-testid=otp-input inject '123456' via native value setter + input event (auto-verifies). Reports/Complaints tab defaults to 'Mine' (empty for CGM) — click data-testid=reports-scope-dept to see Department incidents. CGM-visible photo incident with ANPR/faces to re-test BUG-4 all-three-states: ccb08a39-6c35-480b-8e48-81f693c84ccc. For live-camera BUG-1, context.grant_permissions(['camera','microphone','geolocation']) BEFORE goto, then tap the in-app 'Camera needed' grant button.",
+  "rca_of_issue": "n/a — this iteration verified fixes landed. BUG-2 fix path: MediaCard was given a `clean` prop (resizeMode=contain, no overlay children) and incident/[id].tsx passes clean to the primary photo card; all metadata moved into MetaGrid + dedicated location blocks below. BUG-4 fix path: the two sections (incident-people-section / incident-plates-section) are now always rendered when detail.photo_key is set, with analysisPending gated by a 55s hard timeout so one of the three states (checking / count / none) is always visible."
+}
