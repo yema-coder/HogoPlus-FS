@@ -853,8 +853,12 @@ async def _analyze_photos_async(kind: str, record_id: str, force: bool = False) 
 
                 try:
                     img = await run_in_threadpool(storage.get, key)
-                    res = await run_in_threadpool(
-                        vision_local.analyze_image, img, do_faces=face_enabled, do_plates=plate_enabled
+                    # analyze_image_rotating retries at 90/270 ONLY when the straight
+                    # pass ran fine and found nothing, and maps the boxes back to the
+                    # original frame. A correctly oriented photo costs what it did.
+                    res, rot_deg = await run_in_threadpool(
+                        vision_local.analyze_image_rotating,
+                        img, do_faces=face_enabled, do_plates=plate_enabled,
                     )
                 except Exception as e:
                     logger.warning("photo analysis read/infer failed for %s/%s: %s", kind, key, e)
@@ -869,6 +873,13 @@ async def _analyze_photos_async(kind: str, record_id: str, force: bool = False) 
                     row.processed_at = now_ist()
                     continue
 
+                row.rotation_deg = rot_deg
+                if rot_deg:
+                    logger.warning(
+                        "photo %s for %s/%s only analysed at %d deg — the uploaded "
+                        "image is mis-rotated (camera orientation bug)",
+                        key, kind, record_id, rot_deg,
+                    )
                 fcount = 0
                 for fc in res.get("faces") or []:
                     session.add(PhotoFace(
