@@ -80,20 +80,24 @@ interface Props {
   /** When provided, tapping the card calls this instead of opening the built-in
    * viewer (e.g. to open a boxes-overlay viewer). */
   onPress?: () => void;
+  /** clean: show ONLY the image (no expand/brand badges), fit the whole photo
+   * (contain), tap opens the plain pinch-zoom viewer. Used by the incident detail
+   * screen so NOTHING is drawn over the photo. */
+  clean?: boolean;
 }
 
 /**
  * Branded media card: 14px radius, 2px brand-blue border, soft shadow, expand
  * affordance + "HogoPlus" eye badge (UI-only). Tap opens the full-screen viewer.
  */
-export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-card", onPress }: Props) {
+export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-card", onPress, clean = false }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Pressable
         onPress={() => (onPress ? onPress() : setOpen(true))}
-        style={({ pressed }) => [styles.card, { opacity: pressed ? 0.9 : 1 }]}
+        style={({ pressed }) => [styles.card, clean && styles.cardClean, { opacity: pressed ? 0.9 : 1 }]}
         testID={testID}
         accessibilityRole="imagebutton"
         accessibilityLabel={t("media.viewFull")}
@@ -105,15 +109,23 @@ export function MediaCard({ uri, kind = "photo", height = 200, testID = "media-c
             </View>
           </View>
         ) : (
-          <Image source={{ uri }} style={{ width: "100%", height }} resizeMode="cover" />
+          <Image
+            source={{ uri }}
+            style={{ width: "100%", height }}
+            resizeMode={clean ? "contain" : "cover"}
+          />
         )}
-        <View style={styles.expandPill}>
-          <Maximize2 size={14} color="#FFFFFF" strokeWidth={2.6} />
-        </View>
-        <View style={styles.brandPill}>
-          <Image source={LOGO} style={styles.brandLogo} resizeMode="contain" />
-          <Text style={styles.brandText}>HogoPlus</Text>
-        </View>
+        {clean ? null : (
+          <>
+            <View style={styles.expandPill}>
+              <Maximize2 size={14} color="#FFFFFF" strokeWidth={2.6} />
+            </View>
+            <View style={styles.brandPill}>
+              <Image source={LOGO} style={styles.brandLogo} resizeMode="contain" />
+              <Text style={styles.brandText}>HogoPlus</Text>
+            </View>
+          </>
+        )}
       </Pressable>
       {onPress ? null : (
         <MediaViewerModal uri={open ? uri : null} kind={kind} onClose={() => setOpen(false)} />
@@ -135,6 +147,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 4,
   },
+  cardClean: { backgroundColor: "#000000" },
   videoPoster: {
     width: "100%",
     backgroundColor: "#101826",

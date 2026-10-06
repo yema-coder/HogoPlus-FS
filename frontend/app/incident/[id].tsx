@@ -57,6 +57,7 @@ export default function IncidentDetailScreen() {
 
   const [detail, setDetail] = useState<IncidentDetail | null>(null);
   const [analysis, setAnalysis] = useState<IncidentAnalysis | null>(null);
+  const [analysisTimedOut, setAnalysisTimedOut] = useState(false);
   const [editingPlate, setEditingPlate] = useState<DetectedPlate | null>(null);
   const [plateInput, setPlateInput] = useState("");
   const [savingPlate, setSavingPlate] = useState(false);
@@ -96,13 +97,25 @@ export default function IncidentDetailScreen() {
   // faces + plates land async after capture — re-poll lightly while pending
   const analysisPolls = useRef(0);
   useEffect(() => {
-    if (!analysis || !analysis.pending || analysisPolls.current >= 6) return;
+    if (!analysis || !analysis.pending) return;
+    if (analysisPolls.current >= 6) {
+      setAnalysisTimedOut(true); // stop "Checking…" after ~48s → show the resolved state
+      return;
+    }
     const timer = setTimeout(() => {
       analysisPolls.current += 1;
       void loadAnalysis();
     }, 8000);
     return () => clearTimeout(timer);
   }, [analysis, loadAnalysis]);
+
+  // hard stop: never leave the People/Plates sections stuck on "Checking…" — even if
+  // the analysis endpoint itself never resolves, fall through to the empty state (~55s).
+  useEffect(() => {
+    if (!detail?.photo_key) return;
+    const hard = setTimeout(() => setAnalysisTimedOut(true), 55000);
+    return () => clearTimeout(hard);
+  }, [detail?.photo_key]);
 
   // AI severity + ANPR land async — re-poll lightly (max 5x) while either is pending
   const pollCount = useRef(0);
@@ -189,6 +202,10 @@ export default function IncidentDetailScreen() {
   const primaryPhoto = analysis?.photos.find((p) => p.photo_key === detail?.photo_key) ?? null;
   const faces = primaryPhoto?.faces ?? [];
   const plates = primaryPhoto?.plates ?? [];
+  // BUG-4: the People/Plates sections ALWAYS render (for photo incidents) in one of
+  // three states — Checking… / (N) with results / None — never a missing section.
+  const analysisPending =
+    !!detail?.photo_key && (analysis == null || analysis.pending) && !analysisTimedOut;
   const distanceText =
     detail?.distance_m != null && detail.distance_method && detail.distance_method !== "none"
       ? `${detail.distance_m.toFixed(1)} m` +
@@ -246,15 +263,10 @@ export default function IncidentDetailScreen() {
               <MediaCard
                 uri={fileUrl(detail.photo_key)}
                 kind="photo"
-                height={260}
-                onPress={() => setBoxViewerOpen(true)}
+                height={300}
+                clean
                 testID="incident-media"
               />
-              {faces.length > 0 || plates.length > 0 ? (
-                <Text style={styles.detectHint} testID="incident-detect-hint">
-                  {t("incident.tapPhotoDetections")}
-                </Text>
-              ) : null}
             </View>
           ) : null}
 
@@ -293,26 +305,54 @@ export default function IncidentDetailScreen() {
             }
           />
 
-          {faces.length > 0 ? (
+          {detail.photo_key ? (
             <View style={styles.section} testID="incident-people-section">
               <Text style={styles.sectionTitle}>
-                {t("incident.peopleDetected")} ({faces.length})
+                {analysisPending
+                  ? t("incident.peopleDetected")
+                  : `${t("incident.peopleDetected")} (${faces.length})`}
               </Text>
-              <FaceStrip
-                photoUrl={fileUrl(detail.photo_key as string)}
-                faces={faces}
-                onPress={() => setBoxViewerOpen(true)}
-              />
+              {analysisPending ? (
+                <View style={styles.checkRow} testID="people-checking">
+                  <EyeLoader size={16} />
+                  <Text style={styles.checkText}>{t("incident.analysisChecking")}</Text>
+                </View>
+              ) : faces.length > 0 ? (
+                <FaceStrip
+                  photoUrl={fileUrl(detail.photo_key)}
+                  faces={faces}
+                  onPress={() => setBoxViewerOpen(true)}
+                />
+              ) : (
+                <Text style={styles.emptyText} testID="people-none">
+                  {t("incident.noPeople")}
+                </Text>
+              )}
             </View>
           ) : null}
 
-          {plates.length > 0 ? (
+          {detail.photo_key ? (
             <View style={styles.section} testID="incident-plates-section">
               <Text style={styles.sectionTitle}>
-                {t("incident.numberPlates")} ({plates.length})
+                {analysisPending
+                  ? t("incident.numberPlates")
+                  : `${t("incident.numberPlates")} (${plates.length})`}
               </Text>
-              <PlateSection plates={plates} canEdit={canEditPlate} onEdit={openPlateEditor} />
-              {canEditPlate ? <Text style={styles.hint}>{t("incident.tapPlateToEdit")}</Text> : null}
+              {analysisPending ? (
+                <View style={styles.checkRow} testID="plates-checking">
+                  <EyeLoader size={16} />
+                  <Text style={styles.checkText}>{t("incident.analysisChecking")}</Text>
+                </View>
+              ) : plates.length > 0 ? (
+                <>
+                  <PlateSection plates={plates} canEdit={canEditPlate} onEdit={openPlateEditor} />
+                  {canEditPlate ? <Text style={styles.hint}>{t("incident.tapPlateToEdit")}</Text> : null}
+                </>
+              ) : (
+                <Text style={styles.emptyText} testID="plates-none">
+                  {t("incident.noPlates")}
+                </Text>
+              )}
             </View>
           ) : null}
 
@@ -697,6 +737,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   section: { gap: spacing.xs },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, minHeight: 32 },
+  checkText: { fontFamily: fonts.medium, fontSize: type.sm, color: colors.muted },
+  emptyText: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   headRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   catIcon: {
     width: 48,
