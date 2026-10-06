@@ -267,3 +267,105 @@ def analyze_image(img_bytes: bytes, *, do_faces: bool = True, do_plates: bool = 
             result["plates"] = _detect_plates(img)
     result["ok"] = True
     return result
+
+
+# ---- rotation fallback ------------------------------------------------------
+# Field finding (2026-10-06): the AR camera writes its JPEG in SENSOR orientation
+# and nothing rotates it, so a portrait photo reaches the server as 1600x900
+# landscape. YuNet is not rotation invariant — a sideways face scores ~0 while the
+# same photo rotated 90° CW scores 0.772. Until the app is fixed (and for any
+# future camera that does the same), retry a blank result at 90° and 270°.
+#
+# Detected boxes come back in the ROTATED frame and MUST be mapped back to the
+# original frame, or every box the app draws over the photo lands in the wrong
+# place. Normalised (0..1) coordinates, u = x/width, v = y/height:
+#   rotate 90° CW : u' = 1 - v, v' = u   → inverse: u = v',     v = 1 - u'
+#   rotate 270° CW: u' = v,     v' = 1-u → inverse: u = 1 - v', v = u'
+
+ROTATION_FALLBACKS = (90, 270)
+
+
+def map_box_from_rotated(box: dict, rotation: int) -> dict:
+    """Map one normalised box detected in a rotated image back to the original.
+
+    `rotation` is how far the image was rotated CLOCKWISE before detection.
+    Width and height swap; x/y are re-derived from the rotated corners.
+    """
+    if rotation % 360 == 0:
+        return box
+    x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+    out = dict(box)
+    if rotation % 360 == 90:
+        out["x"], out["y"], out["w"], out["h"] = y, 1.0 - x - w, h, w
+    elif rotation % 360 == 270:
+        out["x"], out["y"], out["w"], out["h"] = 1.0 - y - h, x, h, w
+    elif rotation % 360 == 180:
+        out["x"], out["y"], out["w"], out["h"] = 1.0 - x - w, 1.0 - y - h, w, h
+    else:
+        return box
+    return out
+
+
+def _rotate_jpeg(img_bytes: bytes, rotation: int) -> bytes | None:
+    """Re-encode the image rotated `rotation`° clockwise. None on any failure."""
+    try:
+        cv2 = _get_cv2()
+        import numpy as np  # noqa: PLC0415
+
+        arr = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if arr is None:
+            return None
+        code = {
+            90: cv2.ROTATE_90_CLOCKWISE,
+            180: cv2.ROTATE_180,
+            270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+        }.get(rotation % 360)
+        if code is None:
+            return None
+        ok, buf = cv2.imencode(".jpg", cv2.rotate(arr, code), [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        return buf.tobytes() if ok else None
+    except Exception:
+        logger.exception("vision: rotation %s failed", rotation)
+        return None
+
+
+def analyze_image_rotating(
+    img_bytes: bytes,
+    *,
+    do_faces: bool = True,
+    do_plates: bool = True,
+    rotations: tuple[int, ...] = ROTATION_FALLBACKS,
+) -> tuple[dict, int]:
+    """analyze_image() plus a rotation retry, returning ``(result, rotation)``.
+
+    The straight pass runs first and is returned as-is whenever it finds anything
+    (or when both pipelines are unavailable — a missing model is not a rotation
+    problem). Only a genuine "ran fine, found nothing" triggers the retries, so a
+    correctly oriented photo costs exactly what it costs today. Boxes in the
+    returned result are always in the ORIGINAL image's coordinate frame.
+    """
+    base = analyze_image(img_bytes, do_faces=do_faces, do_plates=do_plates)
+    if not base.get("ok"):
+        return base, 0
+    found = bool(base.get("faces")) or bool(base.get("plates"))
+    ran = base.get("faces") is not None or base.get("plates") is not None
+    if found or not ran:
+        return base, 0
+
+    for rot in rotations:
+        rotated = _rotate_jpeg(img_bytes, rot)
+        if rotated is None:
+            continue
+        res = analyze_image(rotated, do_faces=do_faces, do_plates=do_plates)
+        if not res.get("ok"):
+            continue
+        if res.get("faces") or res.get("plates"):
+            res["faces"] = [map_box_from_rotated(f, rot) for f in (res.get("faces") or [])]
+            res["plates"] = [map_box_from_rotated(p, rot) for p in (res.get("plates") or [])]
+            logger.info(
+                "vision: nothing at 0°, found %d face(s) / %d plate(s) at %d° — "
+                "the uploaded image is mis-rotated",
+                len(res.get("faces") or []), len(res.get("plates") or []), rot,
+            )
+            return res, rot
+    return base, 0

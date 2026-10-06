@@ -545,6 +545,10 @@ async def incident_analysis(
             "slot": a.slot,
             "status": a.status,
             "face_count": a.face_count,
+            # non-zero => the STORED image is mis-rotated; rotate the photo this
+            # many degrees clockwise to display it upright. Boxes are already in
+            # the stored image's frame, so rotate image and boxes together.
+            "rotation_deg": a.rotation_deg,
             "plate_count": a.plate_count,
             "faces": [_face_out(f) for f in a.faces],
             "plates": [_plate_out(p) for p in a.plates],

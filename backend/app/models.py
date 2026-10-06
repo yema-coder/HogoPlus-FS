@@ -871,6 +871,11 @@ class PhotoAnalysis(Base):
     status: Mapped[str] = mapped_column(String(15), default="pending", nullable=False)  # pending|done|failed|skipped
     face_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     plate_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Clockwise rotation (0/90/180/270) that actually produced the detections. The
+    # AR camera uploads sensor-orientation JPEGs, so a portrait photo arrives
+    # landscape; non-zero means the STORED image is mis-rotated and a viewer should
+    # rotate it by this much to show it upright.
+    rotation_deg: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     error: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
