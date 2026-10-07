@@ -259,9 +259,31 @@ async def test_cleanup_purges_judge_rows_and_spares_seed(client, db_session):
     )
     await db_session.commit()
 
+    # old_judge carries a photo analysis (+faces/+plates) — the sweep must delete these
+    # first or the incident delete would trip a NOT-NULL FK and abort the whole purge.
+    from app.models import PhotoAnalysis, PhotoFace, PhotoPlate
+
+    pa = PhotoAnalysis(incident_id=old_judge["id"], photo_key="k.jpg", slot="primary",
+                       status="done", face_count=1, plate_count=1, is_demo=True)
+    db_session.add(pa)
+    await db_session.flush()
+    db_session.add(PhotoFace(analysis_id=pa.id, x=0.1, y=0.1, w=0.2, h=0.2, score=0.9))
+    db_session.add(PhotoPlate(analysis_id=pa.id, x=0.3, y=0.6, w=0.3, h=0.1,
+                              plate_text="MH12AB1234", original_text="MH12AB1234"))
+    await db_session.commit()
+
     # mocked clock: cleanup runs "now" with the 60-minute boundary
     result = await run_demo_cleanup(db_session, now=now, delete_media=False)
     assert result["incidents"] >= 1
+
+    # the old_judge analysis (+faces/plates via cascade) must be gone too
+    orphan = (
+        await db_session.execute(
+            text("SELECT count(*) FROM photo_analyses WHERE incident_id = CAST(:i AS uuid)"),
+            {"i": old_judge["id"]},
+        )
+    ).scalar()
+    assert orphan == 0
 
     remaining = {
         str(r) for r in (

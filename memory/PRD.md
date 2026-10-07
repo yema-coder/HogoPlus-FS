@@ -2020,3 +2020,29 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - Backend regression: tests/test_admin_misc + test_step3_camera_ai + test_attendance (37) + test_part_d (2)
   all green. Services healthy. frontend/.env EXPO_PUBLIC_API_URL stays at the sandbox preview URL.
 - Issue 2 (upright photos from the standard camera) — USER to verify on the next native APK build.
+
+## Round wrap-up — facts confirmed (2026-06 fork)
+- Demo fixture (scripts/seed_face_plate_demo.py) RE-FLAGGED is_demo=true, is_demo_seed=FALSE →
+  the hourly demo_cleanup AUTO-PURGES it (visibility is scoped by is_demo==employee.is_demo, so
+  D500 still sees it regardless of is_demo_seed). VERIFIED: dry-run counts it, real purge removes
+  incident + its photo_analyses/faces/plates with no FK error. It lives ONLY in the sandbox DB;
+  it is a manual dev script, NOT wired to any migration/startup seed/deploy — prod stays clean
+  (the fresh prod restore shows 0 incidents).
+- FIX (latent bug): app/demo_cleanup.py now deletes photo_analyses by incident_id BEFORE deleting
+  the incident (photo_analyses.incident_id is NOT NULL with no DB cascade; photo_faces/photo_plates
+  cascade from photo_analyses). Covered by tests/test_demo_isolation.py::test_cleanup_purges_* (now
+  attaches an analysis to the aged judge incident and asserts 0 orphans).
+- sface.onnx: COMMITTED to the repo at backend/ml_models/sface.onnx (38,696,353 bytes ≈ 36.9 MiB),
+  COPY'd into the Docker image by `COPY backend/ /app/backend/` (same as yunet.onnx), and VERIFIED
+  at build by `RUN python scripts/prefetch_models.py`. NOT downloaded at runtime.
+- Migration 0028 is ADDITIVE-ONLY: adds settings.face_collection_enabled (server_default false) +
+  creates face_references + 3 indexes. No drops/alters of existing columns. Flag defaults FALSE.
+- AR removal complete: app.json has NO AR plugin (plugins = expo-router/splash/audio/camera/location/
+  ble-plx/datetimepicker/video/image-picker/withBleScanNoNeverForLocation); zero arcore/arkit/
+  sceneform/expo-ar references in app.json/plugins/eas.json. capture.tsx uses expo-camera CameraView.
+- Versioning: Android versionName=1.0.27, versionCode=10027 (history 10025→10026→10027). iOS
+  CFBundleShortVersionString=1.0.27, build=1.0.14. appVersion.ts reads NATIVE values via
+  expo-application (nativeApplicationVersion/nativeBuildVersion), not the JS bundle.
+- SANDBOX NOTE: the recurring Postgres restore reverts local DB to prod rev 0026 (drops original_text
+  / face_references / face_collection_enabled). Re-apply via the DDL in this session + stamp 0028, then
+  re-run seed_face_plate_demo.py. (Prod/GitHub main already has 0026; 0027+0028 chain applies on deploy.)

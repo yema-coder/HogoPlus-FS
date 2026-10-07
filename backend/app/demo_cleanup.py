@@ -19,6 +19,7 @@ from app.models import (
     Incident,
     IncidentTimeline,
     Notification,
+    PhotoAnalysis,
     ShiftSwapRequest,
 )
 
@@ -94,6 +95,10 @@ async def run_demo_cleanup(
 
     inc_ids = [i.id for i in incidents]
     if inc_ids:
+        # photo_analyses has a NOT NULL FK to incidents (no DB cascade); delete it
+        # first (its photo_faces/photo_plates cascade) so the incident delete cannot
+        # trip a foreign-key violation and abort the whole sweep.
+        await session.execute(delete(PhotoAnalysis).where(PhotoAnalysis.incident_id.in_(inc_ids)))
         await session.execute(delete(IncidentTimeline).where(IncidentTimeline.incident_id.in_(inc_ids)))
         await session.execute(delete(Incident).where(Incident.id.in_(inc_ids)))
     if subs:

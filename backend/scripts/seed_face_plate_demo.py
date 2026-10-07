@@ -1,15 +1,21 @@
-"""Seed ONE demo-seeded incident carrying a realistic face + number-plate photo
+"""Seed ONE ephemeral demo incident carrying a realistic face + number-plate photo
 and the matching photo-analysis rows, so the rebuilt mobile incident-detail screen
 (face strips + editable plate preserving `original_text`) can be verified end-to-end
-by the policy-mandated Demo CGM D500 (+919000000500 / OTP 123456).
+by Demo CGM D500 (+919000000500 / OTP 123456).
 
-Why this exists: the demo bubble (Prompt 14) seals Demo CGM D500 to `is_demo_seed=true`
-rows only. The real/production incidents that happen to carry faces + plates are NOT in
-that bubble (→ 404). This fixture puts a 2-faces + 1-plate incident INSIDE the bubble.
+DEV/SANDBOX ONLY — this is a manual script. It is NOT wired into any migration,
+startup seed, or the deploy pipeline, so it never runs against production.
 
-Idempotent: keyed on client_uuid='demo-faceplate-fixture'. Re-running refreshes the
-photo + analysis. (A full `seed_demo_showcase.py` reseed wipes all is_demo rows — just
-re-run this script afterwards.)
+Why this exists: incident visibility is scoped by `incident.is_demo == employee.is_demo`,
+so a demo account only sees demo rows. The real/production incidents that happen to carry
+faces + plates are is_demo=false (→ not visible to the demo account). This fixture puts a
+2-faces + 2-plates incident INSIDE the demo bubble.
+
+Flagged is_demo=true, is_demo_seed=FALSE → it is an EPHEMERAL demo row that the hourly
+`demo_cleanup` sweep AUTO-PURGES (with its media + analysis). Re-run this script to recreate
+it whenever you need to re-verify.
+
+Idempotent: keyed on client_uuid='demo-faceplate-fixture'.
 
 Run:  cd /app/backend && python scripts/seed_face_plate_demo.py
 """
@@ -152,7 +158,7 @@ async def main() -> None:
         inc.plate_reason = None
         inc.source = "field"
         inc.is_demo = True
-        inc.is_demo_seed = True
+        inc.is_demo_seed = False  # ephemeral demo row → hourly demo_cleanup auto-purges it
         await s.flush()
 
         # refresh analysis rows (idempotent per incident)
@@ -181,7 +187,8 @@ async def main() -> None:
         await s.commit()
         print(f"OK incident_id={inc.id} dept={dept} photo_key={photo_key}")
         print(f"   faces={len(FACE_BOXES)} plates={len(PLATE_BOXES)} "
-              f"({', '.join(p['text'] for p in PLATE_BOXES)}) is_demo_seed=true — visible to Demo CGM D500")
+              f"({', '.join(p['text'] for p in PLATE_BOXES)}) is_demo=true is_demo_seed=false "
+              f"— visible to Demo CGM D500, AUTO-PURGED by hourly demo_cleanup")
 
 
 if __name__ == "__main__":
