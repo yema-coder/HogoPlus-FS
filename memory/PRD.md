@@ -1981,3 +1981,42 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - NOTE: this fork booted with local Postgres wiped (DATABASE_URL=127.0.0.1) — recovered via
   `sudo bash /app/scripts/sandbox_recover.sh` (PGDG PG16+pgvector+redis, restore R2 backup
   2026-10-06/1230, 470 employees, db_seeded=true). Same recurring reset as prior forks.
+
+## AR-drop session (contd) — Face/Plate verify + webdash presentation + Part D face collection (2026-06 fork) ✅
+- ISSUE-1 UNBLOCKED: scripts/seed_face_plate_demo.py seeds a demo-bubble incident
+  (7c20280b-1261-44c6-b109-28c88bb02773, SECURITY, is_demo_seed=true) with 2 faces + 2 plates
+  (primary MH12AB1234 + MH14GH7777, each with original_text). Only visible to Demo CGM D500
+  (+919000000500 / OTP 123456). testing_agent iter_34: ALL 5 PASS — clean photo top, MetaGrid
+  (Status/Severity/Captured, no AR), People(2) FaceStrip, PlateSection MH12AB1234(Primary,High 88%)
+  + MH14GH7777(Medium 71%), tap→edit→save keeps the model's original read ("Model read: MH12AB1234"),
+  capture screen AR-free (no ar-crosshair/ar-distance-banner/ar-reticle/ar-debug-dot).
+- PART C (webdash) — webdash/src/screens/Incidents.tsx DetailModal now mirrors the mobile pro
+  presentation: a People face-crop strip (CropThumb) + per-plate EVIDENCE rows (plate crop image +
+  text + ✓Primary + confidence tier chip + ✎Corrected + "model read: <original>"), on top of the
+  existing on-photo overlay boxes + blur toggle. i18n keys added (an_people/an_plates_title/
+  an_primary/an_conf_*/an_edited/an_model_read/an_tap_row_edit...). Screenshot-verified as Demo CGM
+  D500. Satisfies the "ANPR multiple plates with plate image as evidence" ask on the dashboard.
+- ANPR MULTI-PLATE: already native to the local-ONNX pipeline (vision_local._detect_plates, up to
+  _MAX_PLATES=10 → one PhotoPlate row each). Both mobile (PlateSection) and webdash now show ALL
+  plates, each with its own crop as evidence. The Rekognition/LLM path is only a single-best FALLBACK
+  used when local ONNX finds nothing.
+- PART D — attendance face REFERENCE data collection (STRICTLY data only, NO matching/identification):
+  * settings.face_collection_enabled (migration 0028, default FALSE). Admin PATCH /api/admin/settings
+    + _settings_out expose it; SettingsPatchIn field added.
+  * New table face_references (migration 0028): employee_id, attendance_id, source, selfie_key,
+    crop_key, embedding Vector(128) nullable, embedding_dim, quality_score, model_version, det_version,
+    face box + image dims, is_demo. Requires pgvector (already present).
+  * vision_local: SFace recognizer (ml_models/sface.onnx, 38MB vendored; prefetch_models.py verifies,
+    non-fatal if absent) + extract_primary_face_embedding() = YuNet detect strongest face → alignCrop →
+    SFace 128-d feature + aligned 112x112 crop + quality(score). Never raises.
+  * tasks.run_face_collection_background(attendance_id): no-op unless flag ON; else stores crop +
+    embedding + quality + versions. punch-in schedules it as a FastAPI BackgroundTask (prod has no
+    Celery) right after face-verification, both gated by not-TESTING.
+  * Tests: tests/test_part_d_face_collection.py (flag default OFF + toggle + no-op when OFF).
+    Manual E2E: flag OFF=0 rows, flag ON=1 row (quality 0.909, 128-d embedding, crop, is_demo inherited).
+- ALEMBIC: local DB was at 0026 (0026 file lives only in prod/GitHub — NOT imported per user). 0028
+  chains down_revision=0027→0026 for prod; locally the table + settings column were applied via direct
+  DDL and alembic_version stamped to 0028. Migration file is correct for the production chain.
+- Backend regression: tests/test_admin_misc + test_step3_camera_ai + test_attendance (37) + test_part_d (2)
+  all green. Services healthy. frontend/.env EXPO_PUBLIC_API_URL stays at the sandbox preview URL.
+- Issue 2 (upright photos from the standard camera) — USER to verify on the next native APK build.

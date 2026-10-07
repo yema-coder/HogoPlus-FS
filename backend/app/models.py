@@ -484,6 +484,13 @@ class FactorySettings(TimestampMixin, Base):
     plate_scale_k: Mapped[float] = mapped_column(
         Float, default=1.2, server_default="1.2", nullable=False
     )
+    # Face REFERENCE data collection (Part D, ships OFF). When ON, a successful
+    # attendance punch triggers a background job that extracts the worker's face
+    # embedding from the punch selfie and stores it in `face_references`. This is
+    # STRICTLY data collection — NO matching / identification is performed.
+    face_collection_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
 
 class BleBeacon(TimestampMixin, Base):
@@ -916,6 +923,9 @@ class PhotoPlate(Base):
     w: Mapped[float] = mapped_column(Float, nullable=False)
     h: Mapped[float] = mapped_column(Float, nullable=False)
     plate_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # the model's FIRST read — preserved even after a reviewer corrects plate_text, so
+    # the app/dashboard can show "CORRECTED (model read: XYZ)". Set once at creation.
+    original_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
     det_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 detector
     ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 OCR mean char prob
     region: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -926,6 +936,51 @@ class PhotoPlate(Base):
         UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
     )
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+
+class FaceReference(Base):
+    """Collected face reference from a daily attendance selfie (Part D).
+
+    STRICTLY data collection — the embedding + crop + quality are stored so a
+    FUTURE, separately-approved step could build a recognition model. There is
+    NO matching, naming or identification anywhere in the codebase yet. Every
+    row records the exact model + detector version that produced the embedding
+    so a later comparison only ever happens between same-model vectors.
+    """
+
+    __tablename__ = "face_references"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    attendance_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attendance.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(20), default="attendance", server_default="attendance", nullable=False
+    )
+    selfie_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    crop_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 128-d SFace embedding — nullable so a crop + quality can still be collected
+    # on a container that has not baked the recognition model.
+    embedding = mapped_column(Vector(128), nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # detector confidence 0..1
+    model_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    det_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    face_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    image_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_h: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

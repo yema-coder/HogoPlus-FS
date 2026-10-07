@@ -125,6 +125,7 @@ def _plate_out(p: PhotoPlate) -> dict:
         "id": str(p.id),
         "x": p.x, "y": p.y, "w": p.w, "h": p.h,
         "text": p.plate_text,
+        "original_text": p.original_text,
         "det_confidence": p.det_confidence,
         "ocr_confidence": p.ocr_confidence,
         "region": p.region,
@@ -610,6 +611,8 @@ async def edit_incident_plate(
     if analysis is None or analysis.incident_id != incident.id:
         raise HTTPException(status_code=404, detail="Plate not found")
     old = plate.plate_text
+    if plate.original_text is None:
+        plate.original_text = old  # preserve the model's first read before overwriting
     plate.plate_text = body.text
     plate.edited = True
     plate.edited_by = employee.id

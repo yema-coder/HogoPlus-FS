@@ -115,6 +115,7 @@
     "cameraPermissionBody": "Take a photo to report the complaint",
     "locationHelps": "Location helps the manager find the spot",
     "captureHint": "Take a photo of the problem",
+    "torch": "Flash",
     "distanceLabel": "Distance: {{d}}",
     "voiceNote": "Voice note (optional)",
     "aiCardTitle": "Is this correct?",
@@ -165,7 +166,13 @@
     "labelSeverity": "Severity",
     "labelDistance": "Distance",
     "labelCaptured": "Captured",
-    "plateEdited": "Edited"
+    "plateEdited": "Edited",
+    "platePrimary": "Primary",
+    "plateModelRead": "Model read: {{v}}",
+    "conf_high": "High confidence",
+    "conf_medium": "Medium confidence",
+    "conf_low": "Low confidence",
+    "seeInMap": "See in Map"
   },
   "status": {
     "submitted": "Sent",
@@ -269,7 +276,8 @@
     "privacy": "Privacy policy",
     "deleteAccount": "Delete my account",
     "designation": "Designation",
-    "accessRole": "Access role"
+    "accessRole": "Access role",
+    "version": "App version {{v}}"
   },
   "shift": {
     "title": "My Shift",

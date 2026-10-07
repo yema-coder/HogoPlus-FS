@@ -1,10 +1,12 @@
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Camera as CameraIcon, Car, CircleDot, Copy, MapPin, Ruler, Smartphone } from "lucide-react-native";
+import { Camera as CameraIcon, Car, CircleDot, Copy, MapPin, Navigation, Smartphone } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -206,13 +208,17 @@ export default function IncidentDetailScreen() {
   // three states — Checking… / (N) with results / None — never a missing section.
   const analysisPending =
     !!detail?.photo_key && (analysis == null || analysis.pending) && !analysisTimedOut;
-  const distanceText =
-    detail?.distance_m != null && detail.distance_method && detail.distance_method !== "none"
-      ? `${detail.distance_m.toFixed(1)} m` +
-        (detail.distance_uncertainty_m != null && detail.distance_uncertainty_m >= 0.1
-          ? ` ±${detail.distance_uncertainty_m.toFixed(1)}`
-          : "")
-      : null;
+
+  const openInMaps = (lat: number, lng: number, label?: string) => {
+    // Opens the device's own map app at the pin — no API key, works offline on our side.
+    const q = `${lat},${lng}`;
+    const name = encodeURIComponent(label || "Location");
+    const url =
+      Platform.OS === "ios" ? `maps://?q=${name}&ll=${q}` : `geo:${q}?q=${q}(${name})`;
+    Linking.openURL(url).catch(() =>
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`).catch(() => undefined),
+    );
+  };
 
   const openPlateEditor = (p: DetectedPlate) => {
     setEditingPlate(p);
@@ -249,7 +255,9 @@ export default function IncidentDetailScreen() {
           <EyeLoader size={40} />
         </View>
       ) : (
+        <>
         <KeyboardAwareScrollView
+          style={{ flex: 1 }}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           bottomOffset={24}
@@ -298,9 +306,6 @@ export default function IncidentDetailScreen() {
                   label: t("incident.labelCaptured"),
                   value: formatDateTime(detail.created_at),
                 },
-                ...(distanceText
-                  ? [{ key: "distance", label: t("incident.labelDistance"), value: distanceText }]
-                  : []),
               ] as MetaItem[]
             }
           />
@@ -345,7 +350,13 @@ export default function IncidentDetailScreen() {
                 </View>
               ) : plates.length > 0 ? (
                 <>
-                  <PlateSection plates={plates} canEdit={canEditPlate} onEdit={openPlateEditor} />
+                  <PlateSection
+                    plates={plates}
+                    photoUrl={fileUrl(detail.photo_key)}
+                    primaryText={detail.detected_plate}
+                    canEdit={canEditPlate}
+                    onEdit={openPlateEditor}
+                  />
                   {canEditPlate ? <Text style={styles.hint}>{t("incident.tapPlateToEdit")}</Text> : null}
                 </>
               ) : (
@@ -436,20 +447,25 @@ export default function IncidentDetailScreen() {
                     {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
                   </Text>
                 ) : null}
+                {detail.gps_lat != null && detail.gps_lng != null ? (
+                  <Pressable
+                    testID="incident-see-in-map"
+                    accessibilityRole="button"
+                    onPress={() =>
+                      openInMaps(
+                        detail.gps_lat as number,
+                        detail.gps_lng as number,
+                        detail.ble_zone ?? detail.address_text ?? undefined,
+                      )
+                    }
+                    style={({ pressed }) => [styles.mapBtn, pressed && { opacity: 0.7 }]}
+                  >
+                    <Navigation size={16} color={colors.primary} strokeWidth={2.4} />
+                    <Text style={styles.mapBtnText}>{t("incident.seeInMap")}</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </>
-          ) : null}
-
-          {analysis?.plate_scale ? (
-            <View style={styles.capturedRow} testID="incident-crosscheck-row">
-              <Ruler size={15} color={colors.muted} strokeWidth={2.2} />
-              <Text style={styles.capturedText}>
-                {t("incident.plateScaleLabel", { d: `${analysis.plate_scale.est_distance_m.toFixed(1)} m` })}
-                {analysis.plate_scale.consistent != null
-                  ? `  ${analysis.plate_scale.consistent ? "✓" : `⚠ ${analysis.plate_scale.delta_pct}%`}`
-                  : ""}
-              </Text>
-            </View>
           ) : null}
 
           {detail.duplicate_of ? (
@@ -571,86 +587,104 @@ export default function IncidentDetailScreen() {
             ))}
           </View>
 
-          {rank <= 3 && detail.status !== "resolved" ? (
-            <View style={styles.actions}>
-              {detail.status === "submitted" ? (
-                <BigButton
-                  testID="mark-seen-button"
-                  label={t("reports.markSeen")}
-                  variant="accent"
-                  loading={acting}
-                  onPress={() => void act("seen")}
+          {rank <= 3 && detail.status !== "resolved" && resolving ? (
+            <View style={styles.resolveBox}>
+              <Text style={styles.sectionLabel}>{t("reports.resolutionNote")}</Text>
+              <TextInput
+                testID="resolution-note-input"
+                style={styles.noteInput}
+                value={note}
+                onChangeText={setNote}
+                placeholder={t("reports.resolutionNote")}
+                placeholderTextColor={colors.muted}
+                multiline
+              />
+              <Text style={styles.sectionLabel}>{t("reports.resolutionPhoto")}</Text>
+              {resolutionUri ? (
+                <Image
+                  source={{ uri: resolutionUri }}
+                  style={styles.resolutionPhoto}
+                  resizeMode="cover"
+                  testID="resolution-photo-preview"
                 />
-              ) : null}
-              {detail.status === "seen" ? (
+              ) : (
+                <Text style={styles.photoRequiredHint}>{t("reports.resolutionPhotoRequired")}</Text>
+              )}
+              <BigButton
+                testID="take-resolution-photo-button"
+                label={t("reports.takeResolutionPhoto")}
+                icon={CameraIcon}
+                variant="outline"
+                disabled={acting}
+                onPress={() => setPhotoModal(true)}
+              />
+              <View style={styles.resolveActions}>
                 <BigButton
-                  testID="mark-in-progress-button"
-                  label={t("reports.markInProgress")}
-                  variant="primary"
-                  loading={acting}
-                  onPress={() => void act("in_progress")}
+                  testID="cancel-resolve-button"
+                  label={t("common.cancel")}
+                  variant="muted"
+                  disabled={acting}
+                  onPress={() => {
+                    setResolving(false);
+                    setNote("");
+                    setResolutionUri(null);
+                  }}
+                  style={{ flex: 1 }}
                 />
-              ) : null}
-              {detail.status !== "submitted" && !resolving ? (
                 <BigButton
-                  testID="mark-resolved-button"
+                  testID="confirm-resolve-button"
                   label={t("reports.markResolved")}
                   variant="success"
-                  onPress={() => setResolving(true)}
+                  loading={acting}
+                  disabled={!resolutionUri}
+                  onPress={() => void resolveWithPhoto()}
+                  style={{ flex: 2 }}
                 />
-              ) : null}
-              {resolving ? (
-                <View style={styles.resolveBox}>
-                  <Text style={styles.sectionLabel}>{t("reports.resolutionNote")}</Text>
-                  <TextInput
-                    testID="resolution-note-input"
-                    style={styles.noteInput}
-                    value={note}
-                    onChangeText={setNote}
-                    placeholder={t("reports.resolutionNote")}
-                    placeholderTextColor={colors.muted}
-                    multiline
-                  />
-                  <Text style={styles.sectionLabel}>{t("reports.resolutionPhoto")}</Text>
-                  {resolutionUri ? (
-                    <Image
-                      source={{ uri: resolutionUri }}
-                      style={styles.resolutionPhoto}
-                      resizeMode="cover"
-                      testID="resolution-photo-preview"
-                    />
-                  ) : (
-                    <Text style={styles.photoRequiredHint}>{t("reports.resolutionPhotoRequired")}</Text>
-                  )}
-                  <BigButton
-                    testID="take-resolution-photo-button"
-                    label={t("reports.takeResolutionPhoto")}
-                    icon={CameraIcon}
-                    variant="outline"
-                    disabled={acting}
-                    onPress={() => setPhotoModal(true)}
-                  />
-                  <BigButton
-                    testID="confirm-resolve-button"
-                    label={t("reports.markResolved")}
-                    variant="success"
-                    loading={acting}
-                    disabled={!resolutionUri}
-                    onPress={() => void resolveWithPhoto()}
-                  />
-                </View>
-              ) : null}
-              {!resolving ? (
-                <BigButton
-                  testID="escalate-button"
-                  label={t("escalate.button")}
-                  variant="outline"
-                  onPress={() => setEscalateOpen(true)}
-                />
-              ) : null}
+              </View>
             </View>
           ) : null}
         </KeyboardAwareScrollView>
+        {rank <= 3 && detail.status !== "resolved" && !resolving ? (
+          <View style={styles.footerBar} testID="incident-action-bar">
+            {detail.status === "submitted" ? (
+              <BigButton
+                testID="mark-seen-button"
+                label={t("reports.markSeen")}
+                variant="accent"
+                loading={acting}
+                onPress={() => void act("seen")}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+            {detail.status === "seen" ? (
+              <BigButton
+                testID="mark-in-progress-button"
+                label={t("reports.markInProgress")}
+                variant="primary"
+                loading={acting}
+                onPress={() => void act("in_progress")}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+            {detail.status !== "submitted" ? (
+              <BigButton
+                testID="mark-resolved-button"
+                label={t("reports.markResolved")}
+                variant="success"
+                onPress={() => setResolving(true)}
+                style={{ flex: 1 }}
+              />
+            ) : null}
+            <BigButton
+              testID="escalate-button"
+              label={t("escalate.button")}
+              variant="outline"
+              onPress={() => setEscalateOpen(true)}
+              style={{ flex: 1 }}
+            />
+          </View>
+        ) : null}
+        </>
       )}
       <PhotoCaptureModal
         visible={photoModal}
@@ -773,6 +807,17 @@ const styles = StyleSheet.create({
   timelineEvent: { fontFamily: fonts.semiBold, fontSize: type.base, color: colors.text },
   timelineTime: { fontFamily: fonts.regular, fontSize: type.sm, color: colors.muted },
   actions: { gap: spacing.md, marginTop: spacing.md },
+  footerBar: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingHorizontal: sizes.screenPadding,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  resolveActions: { flexDirection: "row", gap: spacing.sm },
   resolveBox: { gap: spacing.sm },
   plateCard: {
     backgroundColor: colors.surface,
@@ -844,6 +889,20 @@ const styles = StyleSheet.create({
   locationLabel: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.muted },
   locationAddress: { fontFamily: fonts.medium, fontSize: type.base, color: colors.text },
   locationCoords: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  mapBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: 6,
+    minHeight: 40,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: colors.brandTertiary,
+  },
+  mapBtnText: { fontFamily: fonts.semiBold, fontSize: type.sm, color: colors.primary },
   noteInput: {
     minHeight: 64,
     borderRadius: radius.md,

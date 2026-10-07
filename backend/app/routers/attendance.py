@@ -324,6 +324,11 @@ async def punch_in(
         from app.tasks import run_face_verification_background
 
         background.add_task(run_face_verification_background, str(record.id))
+        # Part D: collect a face reference from this punch selfie (data only).
+        # The task itself is a no-op unless settings.face_collection_enabled is ON.
+        from app.tasks import run_face_collection_background
+
+        background.add_task(run_face_collection_background, str(record.id))
 
     return _out(record)
 

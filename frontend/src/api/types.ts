@@ -183,6 +183,7 @@ export interface DetectedPlate {
   w: number;
   h: number;
   text: string | null;
+  original_text: string | null;
   det_confidence: number | null;
   ocr_confidence: number | null;
   region: string | null;

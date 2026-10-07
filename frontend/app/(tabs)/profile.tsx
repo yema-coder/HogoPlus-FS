@@ -13,6 +13,7 @@ import { ScreenHeader } from "@/src/components/ScreenHeader";
 import i18n, { LANGUAGES, tri, type AppLanguage } from "@/src/i18n";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors, fonts, radius, sizes, spacing, type } from "@/src/theme/tokens";
+import { APP_VERSION_LABEL } from "@/src/utils/appVersion";
 import { storage } from "@/src/utils/storage";
 
 export default function ProfileScreen() {
@@ -183,6 +184,10 @@ export default function ProfileScreen() {
           <Text style={[styles.linkText, { color: colors.danger }]}>{t("profile.deleteAccount")}</Text>
           <ChevronRight size={18} color={colors.muted} strokeWidth={2.2} />
         </Pressable>
+
+        <Text style={styles.versionText} testID="profile-app-version">
+          {t("profile.version", { v: APP_VERSION_LABEL })}
+        </Text>
       </ScrollView>
 
       <ConfirmModal
@@ -296,4 +301,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   linkText: { flex: 1, fontFamily: fonts.semiBold, fontSize: type.base, color: colors.muted },
+  versionText: {
+    fontFamily: fonts.regular,
+    fontSize: type.sm,
+    color: colors.muted,
+    textAlign: "center",
+    marginTop: spacing.lg,
+  },
 });

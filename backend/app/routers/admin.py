@@ -111,6 +111,7 @@ def _settings_out(s: FactorySettings) -> dict:
         "ar_distance_enabled": s.ar_distance_enabled,
         "face_detection_enabled": s.face_detection_enabled,
         "plate_detection_enabled": s.plate_detection_enabled,
+        "face_collection_enabled": s.face_collection_enabled,
         "plate_scale_enabled": s.plate_scale_enabled,
         "plate_ref_width_m": s.plate_ref_width_m,
         "plate_scale_k": s.plate_scale_k,
@@ -134,6 +135,7 @@ async def patch_settings(
         "dup_window_minutes", "dup_same_zone", "dup_same_category",
         "broadcasts_enabled", "broadcast_rate_per_hour",
         "ar_distance_enabled", "face_detection_enabled", "plate_detection_enabled",
+        "face_collection_enabled",
         "plate_scale_enabled", "plate_ref_width_m", "plate_scale_k",
         "ar_debug_emp_ids",
     ):
