@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import { Download, X } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
@@ -7,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { getAppVersion } from "@/src/api/endpoints";
 import { colors, fonts, radius, spacing, type } from "@/src/theme/tokens";
 import { storage } from "@/src/utils/storage";
+import { APP_VERSION } from "@/src/utils/appVersion";
 
 const CHECK_KEY = "hogo.versionCheck"; // {date, latest, url}
 
@@ -27,7 +27,7 @@ export function UpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const current = Constants.expoConfig?.version ?? "0.0.0";
+    const current = APP_VERSION;
     const today = new Date().toISOString().slice(0, 10);
     void (async () => {
       try {

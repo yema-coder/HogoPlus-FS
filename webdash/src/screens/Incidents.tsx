@@ -27,6 +27,66 @@ function Thumb({ i, size = 64 }: { i: any; size?: number }) {
   return <div style={{ ...style, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>⚠️</div>;
 }
 
+/** Natural pixel size of an image URL (needed to place crop windows). */
+function useImgDims(url?: string | null) {
+  const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    if (!url) {
+      setDims(null);
+      return;
+    }
+    let alive = true;
+    const img = new window.Image();
+    img.onload = () => alive && img.naturalWidth && setDims({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => alive && setDims(null);
+    img.src = url;
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+  return dims;
+}
+
+/** A cropped "evidence" thumbnail of a detection box, uniformly scaled + centred. */
+function CropThumb({
+  url, box, dims, w, h, pad = 1.2, round = 8,
+}: {
+  url: string;
+  box: { x: number; y: number; w: number; h: number };
+  dims: { w: number; h: number } | null;
+  w: number;
+  h: number;
+  pad?: number;
+  round?: number;
+}) {
+  const base: React.CSSProperties = {
+    width: w, height: h, borderRadius: round, overflow: "hidden", position: "relative",
+    background: "var(--bg)", border: "1px solid var(--border, #e2e2e2)", flex: "0 0 auto",
+  };
+  if (!dims) return <div style={base} />;
+  const bw = box.w * dims.w;
+  const bh = box.h * dims.h;
+  const scale = Math.min(w / (bw * pad || 1), h / (bh * pad || 1));
+  const left = w / 2 - (box.x * dims.w + bw / 2) * scale;
+  const top = h / 2 - (box.y * dims.h + bh / 2) * scale;
+  return (
+    <div style={base}>
+      <img
+        src={url}
+        alt=""
+        style={{ position: "absolute", width: dims.w * scale, height: dims.h * scale, left, top, maxWidth: "none" }}
+      />
+    </div>
+  );
+}
+
+function plateTier(conf: number | null, t: (k: string) => string): { label: string; color: string } {
+  const c = conf ?? 0;
+  if (c >= 0.85) return { label: t("an_conf_high"), color: "var(--success, #1E8E4E)" };
+  if (c >= 0.6) return { label: t("an_conf_medium"), color: "var(--warning, #F59E0B)" };
+  return { label: t("an_conf_low"), color: "var(--danger, #D64545)" };
+}
+
 function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
   const { t } = useI18n();
   const [analysis, setAnalysis] = useState<any | null>(null);
@@ -47,6 +107,12 @@ function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
   const faces: any[] = primary?.faces ?? [];
   const plates: any[] = primary?.plates ?? [];
   const ps = analysis?.plate_scale;
+  const dims = useImgDims(item.photo_url);
+
+  const openPlateEdit = (p: any) => {
+    setEditId(p.id);
+    setEditText(p.text ?? "");
+  };
 
   const savePlate = async () => {
     if (!editId || !editText.trim()) return;
@@ -142,8 +208,87 @@ function DetailModal({ item, onClose }: { item: any; onClose: () => void }) {
             <button className="btn primary" data-testid="dash-plate-save" disabled={saving} onClick={savePlate}>{t("save")}</button>
             <button className="btn" onClick={() => setEditId(null)}>{t("back")}</button>
           </div>
-        ) : plates.length ? (
-          <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }}>{t("an_tap_plate")}</p>
+        ) : null}
+
+        {/* People — clear cropped face evidence (no identification) */}
+        {item.photo_url && (faces.length > 0 || (analysis && !analysis.pending)) ? (
+          <div data-testid="dash-people-section" style={{ marginTop: 14 }}>
+            <div className="an-sec-title">🙂 {t("an_people")} ({faces.length})</div>
+            {faces.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>{t("an_no_people")}</p>
+            ) : (
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {faces.map((f, idx) => (
+                  <div key={f.id} style={{ textAlign: "center" }} data-testid={`dash-face-crop-${f.id}`}>
+                    <CropThumb url={item.photo_url} box={f} dims={dims} w={76} h={76} pad={1.18} />
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>#{idx + 1}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Number plates — one row per detected plate with its crop as evidence */}
+        {item.photo_url && (plates.length > 0 || (analysis && !analysis.pending)) ? (
+          <div data-testid="dash-plates-section" style={{ marginTop: 14 }}>
+            <div className="an-sec-title">🚗 {t("an_plates_title")} ({plates.length})</div>
+            {plates.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: "4px 0 0" }}>{t("an_no_plates")}</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
+                {plates.map((p) => {
+                  const conf = p.ocr_confidence ?? p.det_confidence ?? null;
+                  const tier = plateTier(conf, t);
+                  const isPrimary = !!plate && (p.text ?? "").toUpperCase() === plate.toUpperCase();
+                  const showOriginal =
+                    p.edited && p.original_text && p.original_text.toUpperCase() !== (p.text ?? "").toUpperCase();
+                  return (
+                    <div
+                      key={p.id}
+                      data-testid={`dash-plate-row-${p.id}`}
+                      onClick={() => openPlateEdit(p)}
+                      title={t("an_edit_plate")}
+                      style={{
+                        display: "flex", gap: 10, alignItems: "center", cursor: "pointer",
+                        padding: 8, border: "1px solid var(--border, #e2e2e2)", borderRadius: 10,
+                      }}
+                    >
+                      <CropThumb url={item.photo_url} box={p} dims={dims} w={104} h={60} pad={1.25} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontWeight: 800, fontSize: 18, letterSpacing: 1.5 }}>{p.text || "?"}</span>
+                          {isPrimary ? (
+                            <span data-testid={`dash-plate-primary-${p.id}`} style={{
+                              fontSize: 11, fontWeight: 800, color: "#fff", background: "var(--accent)",
+                              padding: "1px 8px", borderRadius: 10,
+                            }}>✓ {t("an_primary")}</span>
+                          ) : null}
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, color: tier.color,
+                            border: `1px solid ${tier.color}`, padding: "1px 8px", borderRadius: 10,
+                          }}>{tier.label}{conf != null ? ` · ${Math.round(conf * 100)}%` : ""}</span>
+                          {p.edited ? (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, color: "var(--accent)",
+                              background: "var(--bg)", padding: "1px 8px", borderRadius: 10,
+                            }}>✎ {t("an_edited")}</span>
+                          ) : null}
+                        </div>
+                        {showOriginal ? (
+                          <div style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic", marginTop: 3 }}>
+                            {t("an_model_read")} {p.original_text}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span style={{ color: "var(--accent)", fontSize: 13, fontWeight: 700 }}>✎</span>
+                    </div>
+                  );
+                })}
+                <p style={{ fontSize: 12, color: "var(--muted)", margin: 0 }}>{t("an_tap_row_edit")}</p>
+              </div>
+            )}
+          </div>
         ) : null}
 
         <h2 style={{ marginTop: 10 }}>{item.category} · {item.department_code}</h2>

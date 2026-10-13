@@ -6,7 +6,7 @@
  * "Send to server" posts the full report to POST /api/attendance/ble-diag so the
  * output can be shared verbatim. English-only by design (owner/debug tool).
  */
-import Constants from "expo-constants";
+import { APP_VERSION } from "@/src/utils/appVersion";
 import * as Location from "expo-location";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -139,7 +139,7 @@ export default function BleDiagScreen() {
     setSending(true);
     try {
       const report = {
-        app_version: Constants.expoConfig?.version ?? "?",
+        app_version: APP_VERSION,
         platform: `${Platform.OS} ${Platform.Version}`,
         at: new Date().toISOString(),
         permissions: perm,

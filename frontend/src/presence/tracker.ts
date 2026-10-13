@@ -13,7 +13,7 @@
  *  - "Tracking stopped" is reported honestly when the worker stops it.
  */
 import * as Battery from "expo-battery";
-import Constants from "expo-constants";
+import { APP_VERSION } from "@/src/utils/appVersion";
 import * as Location from "expo-location";
 
 import { ApiError } from "@/src/api/client";
@@ -28,7 +28,6 @@ const ST_KEY = "hogo.presence.state.v1";
 const HEARTBEAT_MS = 290_000; // resend even without change (5 min − jitter)
 const QUEUE_CAP = 200; // ~16 h of pings — enough for any offline shift
 const BLE_SCAN_MS = 6_000;
-const APP_VERSION = Constants.expoConfig?.version ?? "0.0.0";
 
 interface TrackState {
   active: boolean;

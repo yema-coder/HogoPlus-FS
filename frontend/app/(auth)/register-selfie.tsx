@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -14,6 +13,7 @@ import { SelfieCamera } from "@/src/components/SelfieCamera";
 import { showToast } from "@/src/components/Toast";
 import { useAuthStore } from "@/src/stores/authStore";
 import { colors } from "@/src/theme/tokens";
+import { APP_VERSION } from "@/src/utils/appVersion";
 import { reverseGeocode } from "@/src/utils/geocode";
 import { acquireGps } from "@/src/utils/gps";
 
@@ -40,7 +40,7 @@ export default function RegisterSelfie() {
         const ctx: { lat?: number; lng?: number; address?: string; device?: string; app_version?: string } = {};
         try {
           ctx.device = [Device.manufacturer, Device.modelName].filter(Boolean).join(" ") || undefined;
-          ctx.app_version = Constants.expoConfig?.version ?? undefined;
+          ctx.app_version = APP_VERSION;
           const gps = await acquireGps(6000);
           if (gps.fix) {
             ctx.lat = gps.fix.lat;

@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { useCameraPermissions, useMicrophonePermissions } from "expo-camera";
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
@@ -9,6 +9,8 @@ import NetInfo from "@react-native-community/netinfo";
 import {
   Camera as CameraIcon,
   ChevronDown,
+  Flashlight,
+  FlashlightOff,
   Images,
   Maximize2,
   MapPin,
@@ -41,10 +43,7 @@ import { aiVoiceDescribe, createIncident, listDepartments } from "@/src/api/endp
 import type { DepartmentItem, Incident } from "@/src/api/types";
 import { beaconPayload, type BleBeaconHit } from "@/src/ble/BleScanner";
 import { startZoneSession } from "@/src/ble/zoneSession";
-import { DistanceCamera, type DistanceCameraRef, type DistancePhoto } from "@/src/ar/DistanceCamera";
 import { isArDebugEnabled } from "@/src/ar/debugAccess";
-import type { ArCapabilities, CaptureDistanceMeta, DistanceReading } from "@/src/ar/types";
-import { ArDistanceOverlay } from "@/src/components/ArDistanceOverlay";
 import { BigButton } from "@/src/components/BigButton";
 import { CaptureGuards } from "@/src/components/CaptureGuards";
 import { EyeLoader } from "@/src/components/EyeLoader";
@@ -102,12 +101,10 @@ function IncidentCaptureInner() {
   const { t } = useTranslation();
   const profile = useAuthStore((s) => s.profile);
   const rank = profile?.role?.rank ?? 6;
-  // AR debug HUD/dot — and the gallery test-upload button below, which the code
-  // agent gated on the same signal. For THIS test build everyone sees both (the
-  // owner's own account is rank 3 and the server allowlist needs a backend deploy
-  // first). The real gate — dev, demo bubble, rank <= 2, or the server-driven
-  // allowlist (settings.ar_debug_emp_ids -> profile.ar_debug) — is intact behind
-  // AR_DEBUG_FOR_EVERYONE in src/ar/debugAccess.ts.
+  // Gallery test-upload gate, in ONE place (src/ar/debugAccess.ts): dev build, OR
+  // demo bubble (any rank), OR real admin (rank <= 2), OR a server-allowlisted
+  // account (settings.ar_debug_emp_ids -> profile.ar_debug). Real workers never
+  // see the test button.
   const isDemo = profile?.is_demo === true;
   const arDebug = isArDebugEnabled({
     rank,
@@ -116,7 +113,7 @@ function IncidentCaptureInner() {
     serverAllowed: profile?.ar_debug === true,
   });
   const enqueue = useOutboxStore((s) => s.enqueue);
-  const { width: windowW, height: windowH } = useWindowDimensions();
+  const { height: windowH } = useWindowDimensions();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [micPerm, requestMicPerm] = useMicrophonePermissions();
@@ -155,15 +152,9 @@ function IncidentCaptureInner() {
   const [deptModal, setDeptModal] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const cameraRef = useRef<DistanceCameraRef>(null);
-  // PART 1 (AR object distance): live reading + capabilities + torch + tap target
-  const [reading, setReading] = useState<DistanceReading | null>(null);
-  const [arCaps, setArCaps] = useState<ArCapabilities | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+  // flash/torch toggle for low-light incident photos
   const [torch, setTorchOn] = useState(false);
-  const [target, setTarget] = useState({ x: 0.5, y: 0.5 });
-  const [capturedDist, setCapturedDist] = useState("");
-  const distanceMetaRef = useRef<unknown>(null);
-  const intrinsicsRef = useRef<unknown>(null);
   const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   // BLE zone context: scanned in the BACKGROUND while the camera is open. The user
   // never waits on it — whatever is found by Submit time travels with the payload.
@@ -236,19 +227,28 @@ function IncidentCaptureInner() {
     if (!cameraRef.current || capturing) return;
     setCapturing(true);
     try {
-      const photo = (await cameraRef.current.takePictureAsync({ quality: 0.85 })) as DistancePhoto | null;
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
-        setShot({ uri: photo.uri, width: photo.width || 1200, height: photo.height || 1600 });
+        // UPRIGHT FIX: the server reads raw pixels and IGNORES EXIF orientation, so a
+        // camera photo that only carries an EXIF rotation tag would break face/plate
+        // detection and show sideways on the dashboard. Re-encode through
+        // ImageManipulator (bakes orientation INTO the pixels + strips EXIF) and
+        // right-size it, so every upload is genuinely upright.
+        const longest = Math.max(photo.width || 0, photo.height || 0);
+        const actions =
+          longest > 2600
+            ? [(photo.width || 0) >= (photo.height || 0) ? { resize: { width: 2600 } } : { resize: { height: 2600 } }]
+            : [];
+        const jpg = await ImageManipulator.manipulateAsync(photo.uri, actions, {
+          compress: 0.85,
+          format: ImageManipulator.SaveFormat.JPEG,
+        });
+        setShot({
+          uri: jpg.uri,
+          width: jpg.width || photo.width || 1200,
+          height: jpg.height || photo.height || 1600,
+        });
         setCapturedAt(Date.now());
-        // PART 1: keep the AR distance measured at the instant of capture
-        distanceMetaRef.current = photo.distanceMeta ?? null;
-        intrinsicsRef.current = photo.intrinsics ?? null;
-        const meta = photo.distanceMeta as { distance_m?: number; distance_method?: string } | null;
-        setCapturedDist(
-          meta && meta.distance_m != null && meta.distance_method && meta.distance_method !== "none"
-            ? `${Number(meta.distance_m).toFixed(1)} m`
-            : "",
-        );
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => undefined);
       }
     } catch {
@@ -296,9 +296,6 @@ function IncidentCaptureInner() {
         setFromGallery(true);
         setShot({ uri: jpg.uri, width: jpg.width || a.width || 1200, height: jpg.height || a.height || 1600 });
         setCapturedAt(Date.now());
-        setCapturedDist("");
-        distanceMetaRef.current = null;
-        intrinsicsRef.current = null;
       }
     } catch {
       showToast(t("errors.generic"), "error");
@@ -388,6 +385,7 @@ function IncidentCaptureInner() {
       // the server stores source='gallery' and keeps them out of factory statistics.
       gps_lat: fromGallery ? null : (gps?.lat ?? null),
       gps_lng: fromGallery ? null : (gps?.lng ?? null),
+      gps_accuracy: fromGallery ? null : (gps?.accuracy ?? null),
       address_text: fromGallery ? null : address,
       description: desc.trim() || null,
       severity: "normal",
@@ -397,16 +395,6 @@ function IncidentCaptureInner() {
     };
     // voice note already uploaded during transcription — reuse the key
     if (voiceKeyRef.current) payload.voice_note_key = voiceKeyRef.current;
-
-    // AR object distance measured at the instant of capture (travels through the
-    // outbox too). Only attach a real, non-"none" measurement.
-    const dm = distanceMetaRef.current as CaptureDistanceMeta | null;
-    if (!fromGallery && dm && dm.distance_m != null && dm.distance_method && dm.distance_method !== "none") {
-      payload.distance_m = dm.distance_m;
-      payload.distance_method = dm.distance_method;
-      payload.distance_confidence = dm.distance_confidence;
-      payload.distance_uncertainty_m = dm.distance_uncertainty_m ?? dm.sample_spread_m ?? null;
-    }
 
     // ---- video path (network required; no outbox for videos) ----
     if (videoUri) {
@@ -543,33 +531,15 @@ function IncidentCaptureInner() {
   if (!shot && !videoUri) {
     return (
       <View style={styles.fill} testID="incident-capture-screen">
-        <DistanceCamera
+        <CameraView
           ref={cameraRef}
           style={styles.fill}
           facing="back"
           mode={mode}
           videoQuality="720p"
-          videoBitrate={2_000_000}
           enableTorch={torch}
           active={!shot && !videoUri}
-          onReading={setReading}
-          onCapabilities={setArCaps}
         />
-        {mode === "picture" ? (
-          <ArDistanceOverlay
-            reading={reading}
-            caps={arCaps}
-            target={target}
-            torchOn={torch}
-            debug={arDebug}
-            onCalibrate={() => router.push("/ar-calibration")}
-            onTapMeasure={(x, y) => {
-              setTarget({ x, y });
-              cameraRef.current?.setTarget(x, y);
-            }}
-            onToggleTorch={() => setTorchOn((v) => !v)}
-          />
-        ) : null}
         {coach ? (
           <View style={styles.coachWrap} testID="camera-coach-overlay">
             <View style={styles.coachCard}>
@@ -600,6 +570,21 @@ function IncidentCaptureInner() {
             >
               <X size={26} color="#FFFFFF" strokeWidth={2.6} />
             </Pressable>
+            {mode === "picture" ? (
+              <Pressable
+                testID="incident-torch-button"
+                accessibilityRole="button"
+                accessibilityLabel={t("incident.torch")}
+                onPress={() => setTorchOn((v) => !v)}
+                style={styles.cameraClose}
+              >
+                {torch ? (
+                  <Flashlight size={24} color={colors.warning} strokeWidth={2.4} />
+                ) : (
+                  <FlashlightOff size={24} color="#FFFFFF" strokeWidth={2.4} />
+                )}
+              </Pressable>
+            ) : null}
             {gpsChip()}
             {bleZone ? (
               <View style={[styles.gpsChip, { backgroundColor: colors.primary }]} testID="zone-chip">
@@ -767,15 +752,6 @@ function IncidentCaptureInner() {
           ) : (
             locationLine()
           )}
-
-          {capturedDist ? (
-            <View style={styles.locLine} testID="capture-distance-line">
-              <Text style={styles.distIcon}>📏</Text>
-              <Text style={styles.locText} numberOfLines={1}>
-                {t("incident.distanceLabel", { d: capturedDist })}
-              </Text>
-            </View>
-          ) : null}
 
           <Pressable
             testID="incident-dept-selector"
@@ -1109,7 +1085,6 @@ const styles = StyleSheet.create({
     minHeight: 28,
   },
   locText: { flex: 1, fontFamily: fonts.medium, fontSize: type.sm, color: colors.text },
-  distIcon: { fontSize: type.base },
   watermark: {
     backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: spacing.md,

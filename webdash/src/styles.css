@@ -52,6 +52,7 @@ input, select { font-family: inherit; font-size: 15px; padding: 10px 12px; borde
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal-card { background: var(--surface); border-radius: 16px; padding: 18px; max-width: 560px; width: 100%; max-height: 92vh; overflow-y: auto; }
 .detail-rows { display: flex; flex-direction: column; gap: 6px; font-size: 16px; }
+.an-sec-title { font-size: 15px; font-weight: 800; color: var(--text, #1b1b1b); margin-bottom: 6px; }
 .feed-item .m { font-size: 12px; color: var(--muted); }
 
 .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--bg); color: var(--muted); }
@@ -216,3 +217,20 @@ tr.red td { background: #FDF0F2; }
 .trail-current { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 0 0 6px rgba(232, 135, 30, 0.25); }
 .play-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 0 4px; }
 .play-row input[type="range"] { flex: 1; }
+
+/* Attendance review + location cards + maps (2026-06) */
+.btn.sm { padding: 6px 12px; font-size: 13px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-weight: 700; border-radius: 8px; cursor: pointer; }
+.btn.sm:hover { background: var(--surface); }
+.loc-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+.loc-card.muted { color: var(--muted); font-size: 13px; }
+.map-fallback { background: var(--bg); border: 1px dashed var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+.kpi-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.flag-row { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: var(--surface); }
+.flag-row .head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.flag-selfies { display: flex; gap: 8px; }
+.flag-selfies img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+.name-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.name-pill { background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+.name-pill.absent { background: #FDE3E7; color: var(--danger); border-color: #FDE3E7; }
+.note-input { width: 100%; max-width: 420px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; margin-top: 8px; }
+

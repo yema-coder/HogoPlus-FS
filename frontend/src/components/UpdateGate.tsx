@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 
 import { getAppVersion } from "@/src/api/endpoints";
 import { colors, fonts, radius, spacing, type } from "@/src/theme/tokens";
+import { APP_VERSION } from "@/src/utils/appVersion";
 
 function isNewer(latest: string, current: string): boolean {
   // SEMANTIC comparison — numeric per dot-segment ("1.0.18" > "1.0.9"),
@@ -34,7 +35,7 @@ function isNewer(latest: string, current: string): boolean {
   return false;
 }
 
-const CURRENT = Constants.expoConfig?.version ?? "0.0.0";
+const CURRENT = APP_VERSION;
 const PACKAGE = Constants.expoConfig?.android?.package ?? "com.hogoplus.fs";
 
 export function UpdateGate() {

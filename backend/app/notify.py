@@ -254,6 +254,21 @@ T = {
     "attendance_approved": {
         "title": {"en": "Flagged attendance approved", "hi": "चिह्नित उपस्थिति स्वीकृत", "mr": "चिन्हांकित हजेरी मंजूर"},
     },
+    "attendance_rejected": {
+        "title": {"en": "Flagged attendance rejected", "hi": "चिह्नित उपस्थिति अस्वीकृत", "mr": "चिन्हांकित हजेरी नाकारली"},
+    },
+    "attendance_auto_punch_out": {
+        "title": {
+            "en": "Auto punch-out recorded",
+            "hi": "स्वतः पंच-आउट दर्ज",
+            "mr": "स्वयं पंच-आउट नोंदवले",
+        },
+        "body": {
+            "en": "You did not punch out, so the system recorded an AUTO punch-out at your shift end. Time Office will review it — if the time is wrong, open My Attendance and report it.",
+            "hi": "आपने पंच-आउट नहीं किया, इसलिए सिस्टम ने शिफ्ट समाप्ति पर स्वतः पंच-आउट दर्ज किया। टाइम ऑफिस इसकी जाँच करेगा — समय गलत हो तो My Attendance में बताएं।",
+            "mr": "तुम्ही पंच-आउट केले नाही, म्हणून सिस्टमने शिफ्ट संपल्यावर स्वयं पंच-आउट नोंदवले. टाइम ऑफिस तपासेल — वेळ चुकीची असल्यास My Attendance मध्ये कळवा.",
+        },
+    },
     "attendance_face_mismatch": {
         "title": {"en": "Face mismatch on punch-in", "hi": "पंच-इन पर चेहरा मेल नहीं खाया", "mr": "पंच-इनला चेहरा जुळला नाही"},
     },

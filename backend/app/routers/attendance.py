@@ -19,7 +19,15 @@ from app.models import (
     FactorySettings,
 )
 from app.notify import dispatcher, template
-from app.schemas import BeaconAttachIn, BleDiagIn, PunchInIn, RegularizeDecideIn, RegularizeIn
+from app.schemas import (
+    BeaconAttachIn,
+    BleDiagIn,
+    BulkApproveIn,
+    FlaggedDecisionIn,
+    PunchInIn,
+    RegularizeDecideIn,
+    RegularizeIn,
+)
 from app.security import get_approved_employee, is_dept_manager, require_role
 from app.shift_logic import IST, get_shift, is_late, now_ist, resolve_shift_code
 from app.storage import get_storage
@@ -46,6 +54,11 @@ def _out(a: Attendance) -> dict:
         "gps_lat": a.gps_lat,
         "gps_lng": a.gps_lng,
         "gps_verified": a.gps_verified,
+        "gps_accuracy": a.gps_accuracy,
+        "geo_distance_m": a.geo_distance_m,
+        "verification_path": a.verification_path,
+        "geo_address": a.geo_address,
+        "punch_out_source": a.punch_out_source,
         "ble_beacon_id": a.ble_beacon_id,
         "ble_zone": a.ble_zone,
         "selfie_key": a.selfie_key,
@@ -226,23 +239,25 @@ async def punch_in(
         minor=body.ble_ibeacon_minor,
     )
 
-    # verification level — BEACON WINS (launch order 2026-07-27): a matched registered
-    # beacon is physical proof of presence (beacons are mounted inside the factory),
-    # so it yields verified_plus even when GPS drifts outside the geofence or is
-    # missing. Geofence/GPS flagging applies ONLY when no beacon was matched.
+    # verification LADDER (2026-06, PER-DEPARTMENT). Beacon is always the strongest
+    # proof. The rest depends on the department's location policy, read from the
+    # departments table (NOT hardcoded):
+    #   * FIELD department  (geofence_exempt = true, e.g. AGRICULTURE field staff whose
+    #     work is 2–78 km out in the cane areas): no geofence / no beacon requirement —
+    #     face match + a recorded GPS fix is VERIFIED (field). Location always shown.
+    #   * OFFICE/PLANT department: beacon → verified; else inside the factory geofence
+    #     (+grace) with acceptable GPS accuracy + face → verified (location); else flagged.
+    # The selfie face check runs async and can later DOWNGRADE any verified punch to
+    # flagged(face_mismatch) — see tasks._verify_face_async. Every flag states WHY.
     inside = False
     distance = None
     flagged_reason = None
-    if body.gps_lat is not None and body.gps_lng is not None:
+    verification_path = None
+    accuracy = body.gps_accuracy
+    has_gps = body.gps_lat is not None and body.gps_lng is not None
+    if has_gps:
         distance = _haversine_m(body.gps_lat, body.gps_lng, fs.factory_lat, fs.factory_lng)
         inside = distance <= fs.radius_meters
-    # Per-department location policy (v1.0.24, general capability): remote
-    # departments (HEAD_OFFICE in Pune — no beacons installed, permanently outside
-    # the factory geofence) opt out via flags on the department row.
-    #  - beacon_exempt: never wait for/require/flag on beacons (incl. beacon-first mode)
-    #  - geofence_exempt: the factory geofence never flags their punches
-    # GPS is still captured and stored as evidence (gps_verified stays truthful);
-    # a punch with NO GPS at all still flags gps_missing; selfie/face unchanged.
     dept_row = None
     if employee.department_code:
         dept_row = (
@@ -252,27 +267,46 @@ async def punch_in(
         ).scalar_one_or_none()
     beacon_exempt = bool(dept_row and dept_row.beacon_exempt)
     geofence_exempt = bool(dept_row and dept_row.geofence_exempt)
+    is_field = geofence_exempt  # field dept = no geofence requirement
+    inside_grace = has_gps and distance is not None and distance <= (fs.radius_meters + fs.geofence_grace_m)
+    accuracy_ok = accuracy is None or accuracy <= fs.gps_accuracy_max_m
+
     if matched_beacon:
+        # beacon detected → VERIFIED (by zone)
         level = "verified_plus"
+        verification_path = "beacon"
+    elif is_field:
+        # FIELD department → face + recorded GPS is enough; geofence never applies.
+        if not has_gps:
+            level, flagged_reason = "flagged", "field_no_gps"
+        else:
+            level = "verified"
+            verification_path = "field"
+    elif fs.gps_verify_enabled:
+        # OFFICE/PLANT with the GPS second-path ENABLED (flag ON)
+        if not has_gps:
+            level, flagged_reason = "flagged", "gps_missing"
+        elif not inside_grace:
+            level, flagged_reason = "flagged", f"outside_geofence({int(distance)}m)"
+        elif not accuracy_ok:
+            level, flagged_reason = "flagged", f"gps_inaccurate({int(accuracy)}m)"
+        else:
+            level = "verified"
+            verification_path = "gps"
     elif fs.beacon_first_mode and not beacon_exempt:
-        # BEACON-FIRST POLICY (settings flag, ships OFF): the beacon zone is the
-        # PRIMARY location identity. GPS is still captured and stored as secondary
-        # evidence (gps_verified keeps the geofence truth) but never decides the
-        # outcome — a no-beacon punch is ACCEPTED and flagged for Time Office review.
+        # legacy BEACON-FIRST policy (flag ON, ships OFF): no beacon → Time Office review
         level = "flagged"
-        flagged_reason = (
-            "no_beacon_gps_only"
-            if body.gps_lat is not None and body.gps_lng is not None
-            else "no_beacon_no_gps"
-        )
-    elif body.gps_lat is None or body.gps_lng is None:
+        flagged_reason = "no_beacon_gps_only" if has_gps else "no_beacon_no_gps"
+    elif not has_gps:
         level = "flagged"
         flagged_reason = "gps_missing"
-    elif not inside and not geofence_exempt:
+    elif not inside:
         level = "flagged"
         flagged_reason = f"outside_geofence({int(distance)}m)"
     else:
+        # legacy: office inside the geofence → VERIFIED (by location)
         level = "verified"
+        verification_path = "gps"
 
     # attribute date: with the corrected windows (C = 00:00–08:00) every shift's
     # punch-in window sits inside a single calendar day, so a 01:30 punch belongs
@@ -302,6 +336,10 @@ async def punch_in(
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
         gps_verified=inside,
+        gps_accuracy=accuracy,
+        geo_distance_m=distance,
+        verification_path=verification_path,
+        geo_address=(body.geo_address or None),
         ble_beacon_id=scanned_ref,
         ble_zone=matched_beacon.zone_label_en if matched_beacon else None,
         selfie_key=body.selfie_key,
@@ -324,6 +362,17 @@ async def punch_in(
         from app.tasks import run_face_verification_background
 
         background.add_task(run_face_verification_background, str(record.id))
+        # Part D: collect a face reference from this punch selfie (data only).
+        # The task itself is a no-op unless settings.face_collection_enabled is ON.
+        from app.tasks import run_face_collection_background
+
+        background.add_task(run_face_collection_background, str(record.id))
+        # Server-side reverse geocoding (Mappls) — resolve the address on the BACKEND,
+        # never the worker's phone. No-op when GPS is absent or Mappls is unreachable.
+        if record.gps_lat is not None and record.gps_lng is not None:
+            from app.tasks import run_geocode_background
+
+            background.add_task(run_geocode_background, "attendance", str(record.id))
 
     return _out(record)
 
@@ -349,6 +398,7 @@ async def punch_out(
     if record is None:
         raise HTTPException(status_code=404, detail="No open punch-in found")
     record.punch_out_at = datetime.now(timezone.utc)
+    record.punch_out_source = "manual"
     # nudge lifecycle: a late punch-out self-resolves the "no punch-out" flag
     # (only while Time Office hasn't touched it)
     if record.flagged_reason == "no_punch_out" and record.approved_by is None:
@@ -710,11 +760,12 @@ async def flagged_attendance(
         )
         .join(Employee, Attendance.employee_id == Employee.id)
         .where(
-            # verification-flagged punches OR missing punch-outs (nudge escalation) —
-            # both land in the same Time Office queue
+            # verification-flagged punches, missing punch-outs, OR auto punch-outs —
+            # all land in the same Time Office review queue
             or_(
                 Attendance.verification_level == "flagged",
                 Attendance.flagged_reason == "no_punch_out",
+                Attendance.punch_out_source == "auto",
             ),
             Attendance.approved_by.is_(None),
             Attendance.is_demo == employee.is_demo,
@@ -765,6 +816,7 @@ async def department_attendance(
 @router.post("/attendance/{attendance_id}/approve")
 async def approve_flagged(
     attendance_id: uuid.UUID,
+    body: FlaggedDecisionIn | None = None,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -775,18 +827,59 @@ async def approve_flagged(
         raise HTTPException(status_code=404, detail="Attendance record not found")
     if record.verification_level != "flagged" and record.flagged_reason != "no_punch_out":
         raise HTTPException(status_code=409, detail="Only flagged records need approval")
+    note = (body.note if body else None) or None
     record.approved_by = employee.id
-    await write_audit(session, employee.id, "attendance.approved", "attendance", str(record.id), {})
-    title, body = template("attendance_approved", record.date.isoformat())
-    await dispatcher.notify(session, record.employee_id, "attendance_approved", title, body, "attendance", str(record.id))
+    await write_audit(
+        session, employee.id, "attendance.approved", "attendance", str(record.id),
+        {"note": note},
+    )
+    title, body_txt = template("attendance_approved", record.date.isoformat())
+    if note:
+        body_txt = f"{body_txt} — {note}"
+    await dispatcher.notify(session, record.employee_id, "attendance_approved", title, body_txt, "attendance", str(record.id))
     await session.commit()
     await session.refresh(record)
     return _out(record)
 
 
+@router.post("/attendance/approve-bulk")
+async def approve_flagged_bulk(
+    body: BulkApproveIn,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Approve several flagged punches at once (same obvious reason). Each worker is
+    notified; every approval audited individually."""
+    if not await is_dept_manager(session, employee, "TIME_OFFICE"):
+        raise HTTPException(status_code=403, detail="Time Office Manager / CGM / MD only")
+    note = body.note or None
+    approved = 0
+    for aid in body.ids:
+        record = await session.get(Attendance, aid)
+        if record is None or record.is_demo != employee.is_demo:
+            continue
+        if record.approved_by is not None:
+            continue
+        if record.verification_level != "flagged" and record.flagged_reason != "no_punch_out":
+            continue
+        record.approved_by = employee.id
+        await write_audit(
+            session, employee.id, "attendance.approved", "attendance", str(record.id),
+            {"note": note, "bulk": True},
+        )
+        title, body_txt = template("attendance_approved", record.date.isoformat())
+        if note:
+            body_txt = f"{body_txt} — {note}"
+        await dispatcher.notify(session, record.employee_id, "attendance_approved", title, body_txt, "attendance", str(record.id))
+        approved += 1
+    await session.commit()
+    return {"approved": approved, "requested": len(body.ids)}
+
+
 @router.post("/attendance/{attendance_id}/reject")
 async def reject_flagged(
     attendance_id: uuid.UUID,
+    body: FlaggedDecisionIn | None = None,
     employee: Employee = Depends(get_approved_employee),
     session: AsyncSession = Depends(get_session),
 ):
@@ -801,6 +894,7 @@ async def reject_flagged(
         record.verification_level != "flagged" and record.flagged_reason != "no_punch_out"
     ) or record.approved_by is not None:
         raise HTTPException(status_code=409, detail="Only pending flagged records can be rejected")
+    note = (body.note if body else None) or None
     record.approved_by = employee.id
     record.face_verified = False
     cleared_reference = False
@@ -812,8 +906,12 @@ async def reject_flagged(
             cleared_reference = True
     await write_audit(
         session, employee.id, "attendance.rejected", "attendance", str(record.id),
-        {"cleared_reference": cleared_reference},
+        {"cleared_reference": cleared_reference, "note": note},
     )
+    title, body_txt = template("attendance_rejected", record.date.isoformat())
+    if note:
+        body_txt = f"{body_txt} — {note}"
+    await dispatcher.notify(session, record.employee_id, "attendance_rejected", title, body_txt, "attendance", str(record.id))
     await session.commit()
     await session.refresh(record)
     return {**_out(record), "rejected": True, "cleared_reference": cleared_reference}
@@ -843,3 +941,64 @@ async def attendance_summary(
         if att.verification_level == "flagged":
             entry["flagged"] += 1
     return {"date": target.isoformat(), "departments": sorted(summary.values(), key=lambda x: x["department_code"])}
+
+
+
+@router.get("/dashboard/daily-attendance")
+async def daily_attendance_report(
+    date: str | None = Query(default=None),
+    employee: Employee = Depends(require_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Department-wise daily attendance: present/absent/flagged/auto counts + name lists
+    + per-present-row detail (verification path, location, in/out, hours). Date picker
+    supports any past day. Managers (rank 3) see only their own department."""
+    from app.attendance_report import build_daily_attendance
+
+    target = datetime.fromisoformat(date).date() if date else now_ist().date()
+    data = await build_daily_attendance(session, target, employee.is_demo)
+    if employee.role.rank == 3:
+        own = employee.department_code
+        data["departments"] = [d for d in data["departments"] if d["code"] == own]
+        tot = {"present": 0, "absent": 0, "flagged": 0, "auto_punch_out": 0, "late": 0}
+        for d in data["departments"]:
+            for k in tot:
+                tot[k] += d[k]
+        data["totals"] = tot
+    return data
+
+
+@router.get("/dashboard/daily-attendance/export")
+async def daily_attendance_export(
+    date: str | None = Query(default=None),
+    format: str = Query(default="pdf"),
+    employee: Employee = Depends(require_role(3)),
+    session: AsyncSession = Depends(get_session),
+):
+    """Download the daily attendance report as PDF or Excel (bilingual Marathi/English)."""
+    from fastapi.responses import Response
+
+    from app.attendance_report import (
+        build_daily_attendance,
+        render_attendance_pdf,
+        render_attendance_xlsx,
+    )
+
+    target = datetime.fromisoformat(date).date() if date else now_ist().date()
+    data = await build_daily_attendance(session, target, employee.is_demo)
+    if employee.role.rank == 3:
+        own = employee.department_code
+        data["departments"] = [d for d in data["departments"] if d["code"] == own]
+    if format == "xlsx":
+        content = render_attendance_xlsx(data)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="attendance_{target.isoformat()}.xlsx"'},
+        )
+    content = render_attendance_pdf(data)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="attendance_{target.isoformat()}.pdf"'},
+    )

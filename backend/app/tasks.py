@@ -373,6 +373,135 @@ async def run_face_verification_background(attendance_id: str) -> None:
         logger.exception("Face verification FAILED for attendance %s", attendance_id)
 
 
+# ---------------- Part D: attendance face REFERENCE collection (data only) ------
+# Strictly data collection behind settings.face_collection_enabled (default OFF).
+# NO matching / identification is performed — we only store the embedding + crop +
+# quality + model version so a future, separately-approved step could use them.
+
+async def _collect_face_reference_async(attendance_id: str) -> dict:
+    from starlette.concurrency import run_in_threadpool
+
+    from app import vision_local
+    from app.models import Attendance, FaceReference, FactorySettings
+    from app.storage import get_storage
+    from sqlalchemy import select
+
+    engine, sm = _session_factory()
+    try:
+        async with sm() as session:
+            s = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+            if not (s and getattr(s, "face_collection_enabled", False)):
+                return {"skipped": "flag_off"}
+
+            rec = await session.get(Attendance, attendance_id)
+            if rec is None or not rec.selfie_key:
+                return {"skipped": "no_selfie"}
+
+            storage = get_storage()
+            try:
+                img = await run_in_threadpool(storage.get, rec.selfie_key)
+            except Exception as e:
+                logger.warning("face-collect: selfie read failed for %s: %s", attendance_id, e)
+                return {"error": "selfie_read_failed"}
+
+            res = await run_in_threadpool(vision_local.extract_primary_face_embedding, img)
+            if not res.get("ok"):
+                logger.info("FACE COLLECT attendance/%s → skipped reason=%s", attendance_id, res.get("reason"))
+                return {"skipped": res.get("reason") or "no_face"}
+
+            crop_key = None
+            if res.get("crop_jpeg"):
+                try:
+                    crop_key = await storage.save(res["crop_jpeg"], "jpg")
+                except Exception:
+                    logger.exception("face-collect: crop upload failed for %s", attendance_id)
+
+            box = res.get("box") or {}
+            row = FaceReference(
+                employee_id=rec.employee_id,
+                attendance_id=rec.id,
+                source="attendance",
+                selfie_key=rec.selfie_key,
+                crop_key=crop_key,
+                embedding=res.get("embedding"),
+                embedding_dim=res.get("embedding_dim") if res.get("embedding") else None,
+                quality_score=res.get("score"),
+                model_version=res.get("model_version") or vision_local.FACE_EMBED_MODEL_VERSION,
+                det_version=res.get("det_version"),
+                face_x=box.get("x"), face_y=box.get("y"), face_w=box.get("w"), face_h=box.get("h"),
+                image_w=res.get("image_w"), image_h=res.get("image_h"),
+                is_demo=rec.is_demo,
+            )
+            session.add(row)
+            await session.commit()
+            logger.info(
+                "FACE COLLECT attendance/%s → stored ref emp=%s quality=%s has_embedding=%s model=%s",
+                attendance_id, rec.employee_id, res.get("score"),
+                res.get("embedding") is not None, row.model_version,
+            )
+            return {
+                "stored": True,
+                "has_embedding": res.get("embedding") is not None,
+                "quality": res.get("score"),
+            }
+    finally:
+        await engine.dispose()
+        try:
+            from app import vision_local as _vl
+
+            _vl.release_models()
+        except Exception:
+            pass
+
+
+async def run_face_collection_background(attendance_id: str) -> None:
+    """In-process attendance face-reference collection (FastAPI background task).
+    No-op unless settings.face_collection_enabled is ON. Never raises; data only."""
+    try:
+        out = await _collect_face_reference_async(attendance_id)
+        if "skipped" not in out:
+            logger.info("Face collection attendance/%s → %s", attendance_id, out)
+    except Exception:
+        logger.exception("Face collection FAILED for attendance %s", attendance_id)
+
+
+# ---------------- Server-side reverse geocoding (Mappls, 2026-06) ----------------
+# Resolve coords → readable address on the BACKEND (never the worker's phone) and store
+# it on the record so the dashboard/reports never re-resolve. Cached + fails gracefully.
+
+async def _geocode_async(kind: str, record_id: str) -> dict:
+    from app import mappls
+    from app.models import Attendance, Incident
+
+    engine, sm = _session_factory()
+    try:
+        async with sm() as session:
+            rec = await session.get(Attendance if kind == "attendance" else Incident, record_id)
+            if rec is None or rec.gps_lat is None or rec.gps_lng is None:
+                return {"skip": "no_gps"}
+            addr = await mappls.reverse_geocode(session, rec.gps_lat, rec.gps_lng)
+            if addr:
+                if kind == "attendance":
+                    rec.geo_address = addr
+                else:
+                    rec.address_text = addr
+            await session.commit()
+            return {"address": addr}
+    finally:
+        await engine.dispose()
+
+
+async def run_geocode_background(kind: str, record_id: str) -> None:
+    """In-process reverse geocode (FastAPI background task). Never raises."""
+    try:
+        out = await _geocode_async(kind, record_id)
+        logger.info("Geocode %s/%s → %s", kind, record_id, out.get("address") or out.get("skip"))
+    except Exception:
+        logger.exception("Geocode FAILED for %s %s", kind, record_id)
+
+
+
+
 # ---------------- Phase 4 Part C: incident severity classification ----------------
 
 async def _classify_incident_async(incident_id: str) -> dict:
@@ -890,7 +1019,8 @@ async def _analyze_photos_async(kind: str, record_id: str, force: bool = False) 
                 for pl in res.get("plates") or []:
                     session.add(PhotoPlate(
                         analysis_id=row.id, x=pl["x"], y=pl["y"], w=pl["w"], h=pl["h"],
-                        plate_text=pl.get("text"), det_confidence=pl.get("det_confidence"),
+                        plate_text=pl.get("text"), original_text=pl.get("text"),
+                        det_confidence=pl.get("det_confidence"),
                         ocr_confidence=pl.get("ocr_confidence"), region=pl.get("region"),
                         source="local_onnx",
                     ))
@@ -1006,7 +1136,7 @@ async def _punchout_reminder_async(now=None) -> dict:
 
     from app.audit import write_audit
     from app.config import settings
-    from app.models import Attendance, Employee
+    from app.models import Attendance, Employee, FactorySettings
     from app.notify import dispatcher, template
     from app.shift_logic import IST, get_shift, now_ist, resolve_shift_code
     from sqlalchemy import select
@@ -1014,10 +1144,14 @@ async def _punchout_reminder_async(now=None) -> dict:
     engine, sm = _session_factory()
     sent = 0
     flagged = 0
+    auto_out = 0
     try:
         now = now or now_ist()
         today = now.date()
         async with sm() as session:
+            fs = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+            auto_enabled = bool(fs and fs.auto_punch_out_enabled)
+            auto_grace = fs.auto_punch_out_grace_min if fs else 60
             rows = (
                 await session.execute(
                     select(Attendance, Employee)
@@ -1050,12 +1184,33 @@ async def _punchout_reminder_async(now=None) -> dict:
                             "attendance", str(att.id),
                         )
                         sent += 1
-                    # stage 2: still nothing hours later → Time Office review (no auto punch-out)
-                    if (
+                    # stage 2: still no punch-out hours later.
+                    if att.punch_out_at is not None or att.approved_by is not None:
+                        continue
+                    if auto_enabled:
+                        # AUTO PUNCH-OUT (settings flag ON): write a punch-out at shift
+                        # end + grace, marked AUTO. Never a silent full day — it is
+                        # surfaced for Time Office review (punch_out_source='auto') and
+                        # the worker is told. Time Office can correct the time.
+                        if now >= end_dt + timedelta(minutes=auto_grace):
+                            att.punch_out_at = (end_dt + timedelta(minutes=auto_grace)).astimezone(timezone.utc)
+                            att.punch_out_source = "auto"
+                            title, body = template("attendance_auto_punch_out")
+                            await dispatcher.notify(
+                                session, emp.id, "attendance_auto_punch_out", title, body,
+                                "attendance", str(att.id),
+                            )
+                            await write_audit(
+                                session, None, "attendance.auto_punch_out", "attendance", str(att.id),
+                                {"shift_code": shift_code, "shift_end": end_dt.isoformat(),
+                                 "grace_min": auto_grace, "punch_out_at": att.punch_out_at.isoformat()},
+                                is_demo=emp.is_demo,
+                            )
+                            auto_out += 1
+                    elif (
                         now >= end_dt + timedelta(hours=settings.punchout_flag_after_hours)
                         and att.flagged_reason != "no_punch_out"
                         and att.verification_level != "flagged"
-                        and att.approved_by is None
                     ):
                         att.flagged_reason = "no_punch_out"
                         title, body = template("punchout_flagged")
@@ -1075,7 +1230,7 @@ async def _punchout_reminder_async(now=None) -> dict:
             await session.commit()
     finally:
         await engine.dispose()
-    return {"sent": sent, "flagged": flagged}
+    return {"sent": sent, "flagged": flagged, "auto_out": auto_out}
 
 
 @celery.task(name="app.tasks.punchout_reminder_sweep")

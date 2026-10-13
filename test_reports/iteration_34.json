@@ -1,0 +1,23 @@
+{
+  "summary": "Mobile incident DETAIL screen for fixture 7c20280b-1261-44c6-b109-28c88bb02773 fully verified end-to-end as Demo CGM D500 on Expo web preview. No 404/ErrorRetry: incident-detail-screen mounts cleanly, large photo renders at top (black bg, contain, no watermark/overlay), MetaGrid shows Status/Severity/Captured only (no Distance/AR), incident-people-section renders '(2)' with 2 face thumbs via FaceStrip, incident-plates-section renders '(2)' with PlateSection rows MH12AB1234 (Primary + High confidence 88%) and MH14GH7777 (Medium 71%). Plate edit flow works: tapping plate-row-<id> opens plate-edit-modal, saving MH12XY9999 closes modal + fires 'Number plate updated' toast, after re-render row shows 'Edited' badge + 'Model read: MH12AB1234' (original_text preserved). AR fully removed from /incident/capture: incident-capture-screen mounts, zero occurrences of ar-crosshair/ar-distance-banner/ar-reticle/ar-debug-dot. No RN red screen anywhere.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Benign console warnings observed on web preview only: 'shadow* style props are deprecated. Use boxShadow' and 'useNativeDriver is not supported' — these are react-native-web runtime warnings and do not affect native builds. No action required.",
+    "Two pre-auth 401s hit /api/incidents/.../analysis before the stored token is attached on fresh web mounts; the UI silently swallows them via try/catch in loadAnalysis and re-fetches after auth hydration. Not user-visible but could be tightened by guarding the fetch behind authStore hydration."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "100%", "frontend": "100%" },
+  "seed_data_creation": "No new seed created. Verified pre-existing fixture 7c20280b-1261-44c6-b109-28c88bb02773 (SECURITY, is_demo_seed=true, 2 faces + 2 plates MH12AB1234 primary / MH14GH7777). Test idempotency: edited plate was reverted back to MH12AB1234 at the end of the run so repeated runs still exercise the full edit flow.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login harness that works on this build: (1) goto '/', wait, click 'English'; (2) [data-testid=phone-input] fill '9000000500'; (3) click [data-testid=send-otp-button]; (4) wait for [data-testid=otp-input], then inject '123456' via Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set + dispatch input+change events (fill/type DO NOT trigger RN web); auto-verifies at 6 digits; (5) goto /incident/<id>. Fixture 7c20280b-... is visible ONLY to the demo bubble.",
+  "rca_of_issue": "N/A — this iteration is verification-only; previous iter_33's 404 was fixed by seeding the fixture inside the demo bubble (is_demo_seed=true) so Demo CGM D500 can see it."
+}

@@ -83,8 +83,7 @@
           "photosPermission": "Upload saved photos to test incident detection"
         }
       ],
-      "./plugins/withBleScanNoNeverForLocation.js",
-      "./modules/expo-ar-distance/app.plugin.js"
+      "./plugins/withBleScanNoNeverForLocation.js"
     ],
     "experiments": {
       "typedRoutes": true
