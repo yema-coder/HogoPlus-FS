@@ -40,9 +40,17 @@ _OCR_MODEL = "cct-xs-v2-global-model"
 _PROVIDERS = ["CPUExecutionProvider"]
 
 _YUNET_PATH = Path(__file__).resolve().parent.parent / "ml_models" / "yunet.onnx"
+_SFACE_PATH = Path(__file__).resolve().parent.parent / "ml_models" / "sface.onnx"
+
+# Face-embedding model identity stored alongside every reference so a future
+# matching step only ever compares vectors produced by the SAME model+detector.
+FACE_EMBED_MODEL_VERSION = "sface-2021dec-128d"
+FACE_DET_VERSION = "yunet-2023mar"
+FACE_EMBED_DIM = 128
 
 _lock = threading.Lock()
 _face_detector = None  # cv2.FaceDetectorYN
+_face_recognizer = None  # cv2.FaceRecognizerSF (embeddings — data collection only)
 _plate_detector = None  # open_image_models detector
 _plate_ocr = None  # fast_plate_ocr.LicensePlateRecognizer
 
@@ -71,6 +79,28 @@ def _get_face_detector():
         logger.exception("vision: failed to load YuNet face detector")
         _face_detector = None
     return _face_detector
+
+
+def _get_face_recognizer():
+    """SFace recognizer — produces a 128-d embedding from an aligned face crop.
+    Used ONLY for reference DATA COLLECTION (no matching/identification yet).
+    Returns None when the model is not vendored (prod bakes it into the image)."""
+    global _face_recognizer
+    if _face_recognizer is not None:
+        return _face_recognizer
+    try:
+        cv2 = _get_cv2()
+        if not _SFACE_PATH.exists():
+            logger.warning("vision: SFace model missing at %s (embeddings disabled)", _SFACE_PATH)
+            return None
+        if not hasattr(cv2, "FaceRecognizerSF"):
+            logger.warning("vision: cv2.FaceRecognizerSF unavailable in this OpenCV build")
+            return None
+        _face_recognizer = cv2.FaceRecognizerSF.create(str(_SFACE_PATH), "")
+    except Exception:
+        logger.exception("vision: failed to load SFace recognizer")
+        _face_recognizer = None
+    return _face_recognizer
 
 
 def _get_plate_detector():
@@ -105,9 +135,10 @@ def _get_plate_ocr():
 
 def release_models() -> None:
     """Drop every loaded model and return RSS to the OS (small-container hygiene)."""
-    global _face_detector, _plate_detector, _plate_ocr
+    global _face_detector, _face_recognizer, _plate_detector, _plate_ocr
     with _lock:
         _face_detector = None
+        _face_recognizer = None
         _plate_detector = None
         _plate_ocr = None
     gc.collect()
@@ -122,6 +153,7 @@ def models_available() -> dict:
     with _lock:
         return {
             "faces": _get_face_detector() is not None,
+            "face_embed": _get_face_recognizer() is not None,
             "plates": _get_plate_detector() is not None,
             "ocr": _get_plate_ocr() is not None,
         }
@@ -369,3 +401,80 @@ def analyze_image_rotating(
             )
             return res, rot
     return base, 0
+def extract_primary_face_embedding(img_bytes: bytes) -> dict:
+    """Detect the single most prominent face in a selfie and return its aligned
+    crop + SFace embedding + a quality score — for REFERENCE DATA COLLECTION ONLY.
+
+    NO matching / identification is performed anywhere. Returns a dict:
+      {"ok": bool, "reason": str|None, "box": {x,y,w,h} (fractions)|None,
+       "score": float|None, "embedding": list[float]|None, "crop_jpeg": bytes|None,
+       "image_w": int|None, "image_h": int|None,
+       "model_version": str, "det_version": str, "embedding_dim": int}
+    Never raises.
+    """
+    out: dict = {
+        "ok": False, "reason": None, "box": None, "score": None,
+        "embedding": None, "crop_jpeg": None, "image_w": None, "image_h": None,
+        "model_version": FACE_EMBED_MODEL_VERSION, "det_version": FACE_DET_VERSION,
+        "embedding_dim": FACE_EMBED_DIM,
+    }
+    try:
+        import cv2  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+
+        img = _decode_and_scale(img_bytes)
+        if img is None:
+            out["reason"] = "decode_failed"
+            return out
+        h, w = img.shape[:2]
+        out["image_w"], out["image_h"] = int(w), int(h)
+        with _lock:
+            det = _get_face_detector()
+            if det is None:
+                out["reason"] = "detector_unavailable"
+                return out
+            det.setInputSize((w, h))
+            _, faces = det.detect(img)
+            if faces is None or len(faces) == 0:
+                out["reason"] = "no_face"
+                return out
+            # pick the highest-confidence face (score is the last column)
+            best_idx = int(max(range(len(faces)), key=lambda i: float(faces[i][-1])))
+            row = faces[best_idx]
+            bx, by, bw, bh = float(row[0]), float(row[1]), float(row[2]), float(row[3])
+            score = float(row[-1])
+            out["box"] = {
+                "x": max(0.0, bx / w), "y": max(0.0, by / h),
+                "w": max(0.0, min(1.0, bw / w)), "h": max(0.0, min(1.0, bh / h)),
+            }
+            out["score"] = round(score, 3)
+
+            rec = _get_face_recognizer()
+            aligned = None
+            if rec is not None:
+                try:
+                    aligned = rec.alignCrop(img, row.reshape(1, -1))
+                    feat = rec.feature(aligned)
+                    vec = np.asarray(feat, dtype="float32").reshape(-1)
+                    if vec.shape[0] == FACE_EMBED_DIM:
+                        out["embedding"] = [round(float(v), 6) for v in vec.tolist()]
+                except Exception:
+                    logger.exception("vision: face embedding failed")
+            # crop evidence: the aligned 112x112 when available, else the raw bbox
+            try:
+                if aligned is None:
+                    x0, y0 = max(0, int(bx)), max(0, int(by))
+                    x1, y1 = min(w, int(bx + bw)), min(h, int(by + bh))
+                    aligned = img[y0:y1, x0:x1] if x1 > x0 and y1 > y0 else None
+                if aligned is not None and aligned.size:
+                    ok, enc = cv2.imencode(".jpg", aligned, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+                    if ok:
+                        out["crop_jpeg"] = enc.tobytes()
+            except Exception:
+                logger.exception("vision: face crop encode failed")
+        out["ok"] = True
+        return out
+    except Exception:
+        logger.exception("vision: extract_primary_face_embedding failed")
+        out["reason"] = out["reason"] or "error"
+        return out

@@ -262,6 +262,7 @@ class Incident(TimestampMixin, Base):
     client_uuid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gps_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
     address_text: Mapped[str | None] = mapped_column(String(300), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_note_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -343,6 +344,16 @@ class Attendance(TimestampMixin, Base):
     gps_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     gps_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # reported GPS accuracy radius in metres (from the device), and the straight-line
+    # distance from the factory centre at punch time — both stored as evidence so the
+    # dashboard can show accuracy + an inside/outside chip with distance-from-boundary.
+    gps_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geo_distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # WHICH path verified this punch: 'beacon' | 'gps' | None (flagged / undecided).
+    verification_path: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # device-reverse-geocoded human address captured by the app at punch time (no
+    # backend egress). May be None (offline / permission denied) — UI says so honestly.
+    geo_address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     ble_beacon_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     ble_zone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     selfie_key: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -357,6 +368,10 @@ class Attendance(TimestampMixin, Base):
     approved_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("employees.id"), nullable=True
     )
+    # how the punch-out happened: 'manual' (worker tapped) | 'auto' (scheduler wrote
+    # it at shift-end + grace). None until punched out. AUTO rows are surfaced for
+    # Time Office review and never counted as a silent full day.
+    punch_out_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False, index=True)
     is_demo_seed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
@@ -483,6 +498,38 @@ class FactorySettings(TimestampMixin, Base):
     )
     plate_scale_k: Mapped[float] = mapped_column(
         Float, default=1.2, server_default="1.2", nullable=False
+    )
+    # Face REFERENCE data collection (Part D, ships OFF). When ON, a successful
+    # attendance punch triggers a background job that extracts the worker's face
+    # embedding from the punch selfie and stores it in `face_references`. This is
+    # STRICTLY data collection — NO matching / identification is performed.
+    face_collection_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # ---- Attendance verification ladder (2026-06) ----
+    # GPS as a valid SECOND verification path (beacon stays first). Ships OFF; Time
+    # Office flips it ON from admin after validating on a real build. When ON, a
+    # no-beacon punch that is inside the geofence (+grace) with acceptable GPS
+    # accuracy AND a passing selfie face check is VERIFIED (by location) instead of
+    # flagged. When OFF, behaviour is unchanged (legacy).
+    gps_verify_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # reject a GPS fix worse than this many metres (accuracy radius) on the GPS path
+    gps_accuracy_max_m: Mapped[int] = mapped_column(
+        Integer, default=100, server_default="100", nullable=False
+    )
+    # tolerance added to radius_meters when deciding "inside" on the GPS path
+    geofence_grace_m: Mapped[int] = mapped_column(
+        Integer, default=150, server_default="150", nullable=False
+    )
+    # Auto punch-out (2026-06). Ships OFF. When ON, the scheduler writes a punch-out
+    # at shift-end + grace, marked AUTO (never a silent full day — surfaced for review).
+    auto_punch_out_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    auto_punch_out_grace_min: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", nullable=False
     )
 
 
@@ -921,6 +968,9 @@ class PhotoPlate(Base):
     w: Mapped[float] = mapped_column(Float, nullable=False)
     h: Mapped[float] = mapped_column(Float, nullable=False)
     plate_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # the model's FIRST read — preserved even after a reviewer corrects plate_text, so
+    # the app/dashboard can show "CORRECTED (model read: XYZ)". Set once at creation.
+    original_text: Mapped[str | None] = mapped_column(String(20), nullable=True)
     det_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 detector
     ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # 0..1 OCR mean char prob
     region: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -934,3 +984,67 @@ class PhotoPlate(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+
+class FaceReference(Base):
+    """Collected face reference from a daily attendance selfie (Part D).
+
+    STRICTLY data collection — the embedding + crop + quality are stored so a
+    FUTURE, separately-approved step could build a recognition model. There is
+    NO matching, naming or identification anywhere in the codebase yet. Every
+    row records the exact model + detector version that produced the embedding
+    so a later comparison only ever happens between same-model vectors.
+    """
+
+    __tablename__ = "face_references"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    attendance_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("attendance.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(20), default="attendance", server_default="attendance", nullable=False
+    )
+    selfie_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    crop_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # 128-d SFace embedding — nullable so a crop + quality can still be collected
+    # on a container that has not baked the recognition model.
+    embedding = mapped_column(Vector(128), nullable=True)
+    embedding_dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)  # detector confidence 0..1
+    model_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    det_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    face_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    face_h: Mapped[float | None] = mapped_column(Float, nullable=True)
+    image_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    image_h: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class GeocodeCache(Base):
+    """Server-side reverse-geocode cache (Mappls). Keyed on coordinates rounded to
+    ~11 m so repeated punches at the same spot never re-hit the paid API. `address`
+    may be NULL (a confirmed "no address" is cached as empty to stop repeat calls)."""
+
+    __tablename__ = "geocode_cache"
+    id: Mapped[uuid.UUID] = uuid_pk()
+    lat_key: Mapped[float] = mapped_column(Float, nullable=False)
+    lng_key: Mapped[float] = mapped_column(Float, nullable=False)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    __table_args__ = (
+        UniqueConstraint("lat_key", "lng_key", name="uq_geocode_cache_coords"),
+    )
+

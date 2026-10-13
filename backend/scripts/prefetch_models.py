@@ -50,6 +50,15 @@ def main() -> int:
         print(f"[prefetch] ERROR: YuNet face model MISSING at {yunet}")
         ok = False
 
+    # 1b) SFace recognizer — vendored, used for face-reference DATA COLLECTION only
+    # (settings.face_collection_enabled, default OFF). Verify-only; nullable at runtime.
+    sface = V._SFACE_PATH
+    if sface.exists():
+        print(f"[prefetch] SFace recognizer OK: {sface} ({_size_mb(sface)})")
+    else:
+        print(f"[prefetch] WARN: SFace recognizer MISSING at {sface} "
+              "(face-reference embeddings disabled until vendored — not fatal)")
+
     # 2) Plate detector (YOLOv9) — instantiation triggers the download.
     t = time.time()
     if V._get_plate_detector() is not None:

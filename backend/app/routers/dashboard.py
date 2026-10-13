@@ -524,6 +524,10 @@ async def department_detail(
             "verification_level": a.verification_level, "is_late": a.is_late,
             "flagged_reason": a.flagged_reason, "face_match_score": a.face_match_score,
             "approved_by": str(a.approved_by) if a.approved_by else None,
+            "gps_lat": a.gps_lat, "gps_lng": a.gps_lng, "gps_accuracy": a.gps_accuracy,
+            "geo_distance_m": a.geo_distance_m, "verification_path": a.verification_path,
+            "geo_address": a.geo_address, "ble_zone": a.ble_zone,
+            "punch_out_source": a.punch_out_source,
         }
         for a, name, emp_id in att_rows
     ]
@@ -787,3 +791,48 @@ async def audit_trail(
         }
         for a, name in rows
     ]
+
+
+@router.get("/maps-token")
+async def maps_token(
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Short-lived Mappls token for the dashboard map SDK + the factory geofence to draw.
+    The CLIENT_SECRET never leaves the backend — only this expiring token is handed out.
+    Fails soft: {configured:false} when Mappls is unset/unreachable so the UI shows a
+    coordinates + Open-in-Maps fallback instead of a broken map."""
+    from app import mappls
+    from app.models import FactorySettings
+
+    fs = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+    token = await mappls.get_token()
+    return {
+        "configured": mappls.mappls_configured(),
+        "token": token,
+        "factory": {
+            "lat": fs.factory_lat if fs else None,
+            "lng": fs.factory_lng if fs else None,
+            "radius_m": fs.radius_meters if fs else None,
+        } if fs else None,
+    }
+
+
+@router.get("/map-static")
+async def map_static(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    zoom: int = Query(default=16, ge=4, le=18),
+    employee: Employee = Depends(get_approved_employee),
+):
+    """Mappls still-image PNG proxied server-side (token never hits the client). 503 when
+    Mappls is unavailable → the caller shows coordinates + Open-in-Maps instead."""
+    from fastapi.responses import Response
+
+    from app import mappls
+
+    png = await mappls.static_map_png(lat, lng, zoom=zoom)
+    if png is None:
+        raise HTTPException(status_code=503, detail="map_unavailable")
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+

@@ -115,6 +115,7 @@
     "cameraPermissionBody": "शिकायत के लिए फ़ोटो लें",
     "locationHelps": "लोकेशन से मैनेजर को जगह जल्दी मिलती है",
     "captureHint": "समस्या की फ़ोटो लें",
+    "torch": "फ़्लैश",
     "distanceLabel": "दूरी: {{d}}",
     "voiceNote": "आवाज़ संदेश (वैकल्पिक)",
     "aiCardTitle": "क्या यह सही है?",
@@ -165,7 +166,16 @@
     "labelSeverity": "गंभीरता",
     "labelDistance": "दूरी",
     "labelCaptured": "लिया गया",
-    "plateEdited": "संपादित"
+    "plateEdited": "संपादित",
+    "platePrimary": "मुख्य",
+    "plateModelRead": "मॉडल रीड: {{v}}",
+    "conf_high": "उच्च विश्वास",
+    "conf_medium": "मध्यम विश्वास",
+    "conf_low": "कम विश्वास",
+    "seeInMap": "मैप में देखें",
+    "mapUnavailable": "मैप उपलब्ध नहीं",
+    "openInMaps": "मैप में खोलें",
+    "accuracy": "सटीकता"
   },
   "status": {
     "submitted": "भेजा गया",
@@ -269,7 +279,8 @@
     "privacy": "गोपनीयता नीति",
     "deleteAccount": "मेरा खाता हटाएँ",
     "designation": "पद",
-    "accessRole": "ऐक्सेस भूमिका"
+    "accessRole": "ऐक्सेस भूमिका",
+    "version": "ऐप वर्शन {{v}}"
   },
   "shift": {
     "title": "मेरी शिफ्ट",

@@ -1981,3 +1981,103 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - NOTE: this fork booted with local Postgres wiped (DATABASE_URL=127.0.0.1) — recovered via
   `sudo bash /app/scripts/sandbox_recover.sh` (PGDG PG16+pgvector+redis, restore R2 backup
   2026-10-06/1230, 470 employees, db_seeded=true). Same recurring reset as prior forks.
+
+## AR-drop session (contd) — Face/Plate verify + webdash presentation + Part D face collection (2026-06 fork) ✅
+- ISSUE-1 UNBLOCKED: scripts/seed_face_plate_demo.py seeds a demo-bubble incident
+  (7c20280b-1261-44c6-b109-28c88bb02773, SECURITY, is_demo_seed=true) with 2 faces + 2 plates
+  (primary MH12AB1234 + MH14GH7777, each with original_text). Only visible to Demo CGM D500
+  (+919000000500 / OTP 123456). testing_agent iter_34: ALL 5 PASS — clean photo top, MetaGrid
+  (Status/Severity/Captured, no AR), People(2) FaceStrip, PlateSection MH12AB1234(Primary,High 88%)
+  + MH14GH7777(Medium 71%), tap→edit→save keeps the model's original read ("Model read: MH12AB1234"),
+  capture screen AR-free (no ar-crosshair/ar-distance-banner/ar-reticle/ar-debug-dot).
+- PART C (webdash) — webdash/src/screens/Incidents.tsx DetailModal now mirrors the mobile pro
+  presentation: a People face-crop strip (CropThumb) + per-plate EVIDENCE rows (plate crop image +
+  text + ✓Primary + confidence tier chip + ✎Corrected + "model read: <original>"), on top of the
+  existing on-photo overlay boxes + blur toggle. i18n keys added (an_people/an_plates_title/
+  an_primary/an_conf_*/an_edited/an_model_read/an_tap_row_edit...). Screenshot-verified as Demo CGM
+  D500. Satisfies the "ANPR multiple plates with plate image as evidence" ask on the dashboard.
+- ANPR MULTI-PLATE: already native to the local-ONNX pipeline (vision_local._detect_plates, up to
+  _MAX_PLATES=10 → one PhotoPlate row each). Both mobile (PlateSection) and webdash now show ALL
+  plates, each with its own crop as evidence. The Rekognition/LLM path is only a single-best FALLBACK
+  used when local ONNX finds nothing.
+- PART D — attendance face REFERENCE data collection (STRICTLY data only, NO matching/identification):
+  * settings.face_collection_enabled (migration 0028, default FALSE). Admin PATCH /api/admin/settings
+    + _settings_out expose it; SettingsPatchIn field added.
+  * New table face_references (migration 0028): employee_id, attendance_id, source, selfie_key,
+    crop_key, embedding Vector(128) nullable, embedding_dim, quality_score, model_version, det_version,
+    face box + image dims, is_demo. Requires pgvector (already present).
+  * vision_local: SFace recognizer (ml_models/sface.onnx, 38MB vendored; prefetch_models.py verifies,
+    non-fatal if absent) + extract_primary_face_embedding() = YuNet detect strongest face → alignCrop →
+    SFace 128-d feature + aligned 112x112 crop + quality(score). Never raises.
+  * tasks.run_face_collection_background(attendance_id): no-op unless flag ON; else stores crop +
+    embedding + quality + versions. punch-in schedules it as a FastAPI BackgroundTask (prod has no
+    Celery) right after face-verification, both gated by not-TESTING.
+  * Tests: tests/test_part_d_face_collection.py (flag default OFF + toggle + no-op when OFF).
+    Manual E2E: flag OFF=0 rows, flag ON=1 row (quality 0.909, 128-d embedding, crop, is_demo inherited).
+- ALEMBIC: local DB was at 0026 (0026 file lives only in prod/GitHub — NOT imported per user). 0028
+  chains down_revision=0027→0026 for prod; locally the table + settings column were applied via direct
+  DDL and alembic_version stamped to 0028. Migration file is correct for the production chain.
+- Backend regression: tests/test_admin_misc + test_step3_camera_ai + test_attendance (37) + test_part_d (2)
+  all green. Services healthy. frontend/.env EXPO_PUBLIC_API_URL stays at the sandbox preview URL.
+- Issue 2 (upright photos from the standard camera) — USER to verify on the next native APK build.
+
+## Round wrap-up — facts confirmed (2026-06 fork)
+- Demo fixture (scripts/seed_face_plate_demo.py) RE-FLAGGED is_demo=true, is_demo_seed=FALSE →
+  the hourly demo_cleanup AUTO-PURGES it (visibility is scoped by is_demo==employee.is_demo, so
+  D500 still sees it regardless of is_demo_seed). VERIFIED: dry-run counts it, real purge removes
+  incident + its photo_analyses/faces/plates with no FK error. It lives ONLY in the sandbox DB;
+  it is a manual dev script, NOT wired to any migration/startup seed/deploy — prod stays clean
+  (the fresh prod restore shows 0 incidents).
+- FIX (latent bug): app/demo_cleanup.py now deletes photo_analyses by incident_id BEFORE deleting
+  the incident (photo_analyses.incident_id is NOT NULL with no DB cascade; photo_faces/photo_plates
+  cascade from photo_analyses). Covered by tests/test_demo_isolation.py::test_cleanup_purges_* (now
+  attaches an analysis to the aged judge incident and asserts 0 orphans).
+- sface.onnx: COMMITTED to the repo at backend/ml_models/sface.onnx (38,696,353 bytes ≈ 36.9 MiB),
+  COPY'd into the Docker image by `COPY backend/ /app/backend/` (same as yunet.onnx), and VERIFIED
+  at build by `RUN python scripts/prefetch_models.py`. NOT downloaded at runtime.
+- Migration 0028 is ADDITIVE-ONLY: adds settings.face_collection_enabled (server_default false) +
+  creates face_references + 3 indexes. No drops/alters of existing columns. Flag defaults FALSE.
+- AR removal complete: app.json has NO AR plugin (plugins = expo-router/splash/audio/camera/location/
+  ble-plx/datetimepicker/video/image-picker/withBleScanNoNeverForLocation); zero arcore/arkit/
+  sceneform/expo-ar references in app.json/plugins/eas.json. capture.tsx uses expo-camera CameraView.
+- Versioning: Android versionName=1.0.27, versionCode=10027 (history 10025→10026→10027). iOS
+  CFBundleShortVersionString=1.0.27, build=1.0.14. appVersion.ts reads NATIVE values via
+  expo-application (nativeApplicationVersion/nativeBuildVersion), not the JS bundle.
+- SANDBOX NOTE: the recurring Postgres restore reverts local DB to prod rev 0026 (drops original_text
+  / face_references / face_collection_enabled). Re-apply via the DDL in this session + stamp 0028, then
+  re-run seed_face_plate_demo.py. (Prod/GitHub main already has 0026; 0027+0028 chain applies on deploy.)
+
+## Attendance ladder + per-punch location + Mappls maps/geocoding (v1.0.27, 2026-06 fork) ✅ code complete + verified
+- **Attendance verification ladder** (flag-gated, ships OFF): settings `gps_verify_enabled`
+  (default FALSE), `gps_accuracy_max_m` (100), `geofence_grace_m` (150). When ON, a no-beacon punch
+  inside geofence+grace with acceptable GPS accuracy + passing face check = verified
+  (`verification_path='gps'`) instead of flagged. Beacon stays 1st path (`verified_plus`). Field depts
+  (`Department.geofence_exempt`) = face-pass + captured GPS = verified (`verification_path='field'`),
+  no beacon/factory-geofence. All thresholds from settings — never hardcoded.
+- **Auto punch-out** (flag OFF): settings `auto_punch_out_enabled` (FALSE), `auto_punch_out_grace_min`
+  (60); scheduler writes AUTO punch-out (`punch_out_source='auto'`), surfaced for review.
+- **Per-punch/-incident location**: attendance stores `gps_accuracy`, `geo_distance_m`,
+  `verification_path`, `geo_address`, `punch_out_source`; incidents add `gps_accuracy`.
+- **Mappls (MapmyIndia), SERVER-SIDE ONLY** (app/mappls.py): OAuth token cached; reverse geocode
+  coords→address CACHED in new `geocode_cache` table (~11 m grid key, negative-cache on empty),
+  fails graceful→None; `GET /api/dashboard/map-static` proxies still-image PNG (token never leaves
+  server); `GET /api/dashboard/maps-token` short-lived token for WEBDASH interactive map only.
+  Env: `MAPPLS_CLIENT_ID` / `MAPPLS_CLIENT_SECRET` (never logged/committed/sent to mobile). NO Google/OSM.
+- **Mobile** (client has ZERO Mappls refs): `MapPreview` fetches authed `/map-static` via
+  `fetchMapImageUri` in src/api/client.ts (web: blob objectURL; native: FileSystem.downloadAsync to
+  cache file, 401-refresh-retry) → falls back to coords + "Open in Maps" (Mappls web) on any failure.
+  Incident detail (`app/incident/[id].tsx`) shows Object vs Device location blocks + `±N m` accuracy +
+  MapPreview + "See in Map". Same MapPreview reused in approvals (flagged-attendance review).
+- **Migrations** (additive-only, head=0030): 0029_attendance_location_ladder, 0030_mappls_geocode_cache.
+  Chain 0026(prod)→0027→0028→0029→0030.
+- **Version release**: frontend/scripts/check_version.mjs (pre-publish Android versionCode guard,
+  .version_floor=10025) + `--commit` after publish; backend scripts/set_app_version.py <ver> [--force]
+  drives in-app update gate (app_versions row / PUT /api/admin/app-version).
+- **Docs**: docs/DEPLOY_ORDER_v1.0.27.md (migrations, env names, flag defaults, Mappls usage estimate
+  for 400/2,200 punches ×3 factories, release procedure).
+- **Verified**: backend 379 passed/2 skipped (test_attendance_ladder 6/6); /maps-token configured:true,
+  /map-static 200 image/png 400×260; mobile incident map rendered on web preview (Demo CGM D500, fixture
+  with GPS) — pin + © Mappls + ±12 m + See-in-Map, no OSM; i18n parity GREEN; lint clean.
+- **Fixture**: scripts/seed_face_plate_demo.py now also sets gps_lat/lng/accuracy/address_text/ble_zone
+  so the map block renders (Demo CGM D500 bubble, ephemeral, auto-purged).
+- **GitHub**: must be saved to a NEW non-main branch (standing rule) — pending the owner's Save-to-GitHub.

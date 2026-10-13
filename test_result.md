@@ -516,3 +516,43 @@ COVERAGE GAPS (need Mumbai host / device / isolated load): R2 upload+backup obje
 - HARNESS: otp boxes need page.evaluate native-setter injection on [data-testid='otp-input'];
   fill/type do NOT work. EXPO_PUBLIC_API_URL restored to api.hogoplus.in after testing
   (sandbox testing needs it flipped to the preview URL first — remember to flip back).
+
+## AR-drop session (2026-06 fork) — Face/Plate detail verify + webdash presentation + Part D
+agent_communication:
+  - agent: main
+    message: >
+      THREE deliverables this session. (1) ISSUE-1 FIX (frontend verify unblocked):
+      seeded a demo-bubble incident the policy-mandated Demo CGM D500 can open —
+      scripts/seed_face_plate_demo.py → incident 7c20280b-1261-44c6-b109-28c88bb02773
+      (SECURITY, is_demo_seed=true) with 2 detected faces + 2 number plates (primary
+      MH12AB1234 + MH14GH7777, each with original_text). (2) PART C webdash Face/Plate
+      presentation — Incidents.tsx detail modal now has a People face-crop strip +
+      per-plate evidence rows (crop image + text + Primary badge + confidence tier +
+      edited + "model read" original) in addition to the on-photo overlay boxes
+      (verified by screenshot as Demo CGM D500). (3) PART D attendance face-reference
+      DATA COLLECTION — settings.face_collection_enabled (default OFF); on punch-in a
+      background job extracts the strongest face (YuNet) → SFace 128-d embedding and
+      stores crop + embedding + quality + model_version in face_references (migration
+      0028). NO matching/identification. Verified manually: flag OFF = no-op, flag ON =
+      1 row with embedding+crop+quality. Also: ANPR already detects MULTIPLE plates
+      (local ONNX, up to 10, each a PhotoPlate row) — now surfaced with crop evidence
+      on BOTH mobile and webdash.
+
+frontend:
+  - task: "Mobile incident detail (rebuilt): clean photo, meta grid, face strips, editable PlateSection preserving original_text, AR-free capture"
+    implemented: true
+    working: "NA"
+    file: "app/incident/[id].tsx, src/components/PlateSection.tsx, src/components/FaceStrip.tsx"
+    comment: "Verify as Demo CGM D500 (+919000000500 / OTP 123456) on incident 7c20280b-1261-44c6-b109-28c88bb02773. Expect large photo top, People(2) strip, Number Plates(2) MH12AB1234(Primary)+MH14GH7777, tap plate -> edit -> save keeps model's original read. Capture screen has NO AR (ar-crosshair/ar-distance testIDs absent)."
+  - task: "Webdash Incidents detail modal: People crop strip + number-plate evidence rows"
+    implemented: true
+    working: true
+    file: "webdash/src/screens/Incidents.tsx"
+    comment: "Screenshot-verified as Demo CGM D500: People(2) crops, Number plates(2) each with crop + Primary + tier (High 88% / Medium 71%) + edit."
+
+backend:
+  - task: "Part D face_references collection (flag OFF default, data only, migration 0028)"
+    implemented: true
+    working: true
+    file: "app/vision_local.py, app/tasks.py, app/routers/attendance.py, app/models.py, alembic/versions/0028_face_references.py"
+    comment: "tests/test_part_d_face_collection.py green; manual E2E: flag OFF no-op, flag ON stores 128-d SFace embedding + crop + quality. Punch-in schedules run_face_collection_background (gated by flag at runtime)."

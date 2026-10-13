@@ -235,6 +235,70 @@ export function fileUrl(key: string): string {
   return `${API_BASE}/files/${key}`;
 }
 
+/** Authenticated Mappls static-map PNG (the Mappls token stays server-side). Returns a URI
+ * usable by <Image> (web: object URL, native: a cached file://), or null on any failure so
+ * the caller can fall back to coordinates + "Open in Maps". Never throws. */
+export async function fetchMapImageUri(
+  lat: number,
+  lng: number,
+  zoom = 16,
+): Promise<string | null> {
+  const path = `/dashboard/map-static?lat=${lat}&lng=${lng}&zoom=${zoom}`;
+  if (Platform.OS === "web") {
+    const run = async (token: string | null): Promise<Response | null> => {
+      if (!token) return null;
+      try {
+        return await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } });
+      } catch {
+        return null;
+      }
+    };
+    let res = await run(accessToken);
+    if (res && res.status === 401 && refreshToken) {
+      if (await tryRefresh()) res = await run(accessToken);
+    }
+    if (!res || !res.ok) return null;
+    try {
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }
+  // Native: stream the PNG to a cache file with the auth header (reliable + disk-cached).
+  const FileSystem = await import("expo-file-system/legacy");
+  const target = `${FileSystem.cacheDirectory}map_${lat.toFixed(5)}_${lng.toFixed(5)}_${zoom}.png`;
+  try {
+    const info = await FileSystem.getInfoAsync(target);
+    if (info.exists && info.size && info.size > 0) return target;
+  } catch {
+    /* fall through to download */
+  }
+  const download = async (token: string | null) => {
+    if (!token) return null;
+    try {
+      return await FileSystem.downloadAsync(`${API_BASE}${path}`, target, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      return null;
+    }
+  };
+  let dl = await download(accessToken);
+  if (dl && dl.status === 401 && refreshToken) {
+    if (await tryRefresh()) dl = await download(accessToken);
+  }
+  if (!dl || dl.status !== 200) {
+    try {
+      await FileSystem.deleteAsync(target, { idempotent: true });
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+  return dl.uri;
+}
+
 /** Localized message from a trilingual {en,hi,mr} error detail (or null). */
 export function localizedDetail(e: unknown, lang: string): string | null {
   if (e instanceof ApiError && typeof e.detail === "object" && e.detail !== null) {

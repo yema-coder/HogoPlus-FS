@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only verification of the rebuilt incident DETAIL screen, AR-removed capture screen, and Profile version line. BLOCKER: the target incident id in the request (03c39871-d96c-4431-b8ed-fcf91e51d3e0) is a REAL (non-demo) incident and is NOT accessible to the policy-mandated Demo CGM D500 (+919000000500) — the demo bubble isolation returns HTTP 404 for it, so faces + plate 'MH12AB1234' edit flow could NOT be exercised. All structural testIDs and layout rules of the new detail screen were still verified against the only PRODUCTION demo incident visible to D500 (69d38331-a941-44d5-806f-bebd4ee9b2cb). AR-distance code paths are fully removed. Profile version line renders (shows 'App version 1.0.22' on web — bundle, not native).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Open target incident as demo CGM",
+        "issue": "GET /api/incidents/03c39871-d96c-4431-b8ed-fcf91e51d3e0 → HTTP 404 for Demo CGM D500 (+919000000500). The id is a real seeded incident, not demo-seeded, so the is_demo bubble filters it out. Detail screen falls through to ErrorRetry ('No internet. Check your connection.'). Request credentials and the target id are therefore incompatible under current policy (never use +918483029039 for automated tests).",
+        "affected_testIDs": ["incident-detail-screen"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": ["/app/test_reports/iteration_33.json"],
+  "action_items": [
+    "Main agent: either (a) seed/duplicate the target incident with is_demo_seed=true + 2 faces + 1 plate 'MH12AB1234' under D500's demo bubble, OR (b) point this round's target id at an existing demo-seeded incident so the plate-edit + face-strip + primary-badge path can be executed by Demo CGM D500. Current demo PRODUCTION incident 69d38331-… has no faces/plates.",
+    "Nothing to fix on the detail screen layout itself — PhotoCard renders LARGE at top with contain + black bg and NO text/watermark/badge overlay, meta-grid shows Status/Severity/Captured (no Distance), People/Plates sections render in Checking… state, action-bar is pinned at the bottom (Resolve + Escalate), See-in-Map button appears when GPS coords exist.",
+    "Capture screen: in headless web, expo-camera permission never resolves → the screen stays on 'Camera needed' prompt (incident-camera-permission). Shutter/torch/close/mode-chip testIDs cannot be exercised here — this matches the agent note; verify on a native build.",
+    "Profile version string on web currently shows '1.0.22' — if the native app has been bumped to 1.0.27, confirm APP_VERSION_LABEL is sourced from a build-time constant on native so the 'TRUE native version' claim holds (web always falls back to the bundled constant)."
+  ],
+  "critical_code_review_comments": [
+    "incident/[id].tsx L513-539 renders Marathi reason first then English with reduced opacity — matches the spec; works when severity_reason_mr is present. The target incident required for Marathi+English verification was unreachable.",
+    "MediaCard clean prop (L93) correctly omits brand pill + expand pill + uses resizeMode='contain' on black background — NO overlay drawn on the incident photo."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend only)", "frontend": "60% — structural testIDs OK; faces/plate-edit flow UNVERIFIED due to 404" },
+  "seed_data_creation": "None — did not seed any data. See action items.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login flow: GET / → tap 'English' → fill [data-testid=phone-input] with 9000000500 → tap [data-testid=send-otp-button] → inject '123456' into [data-testid=otp-input] via native-setter page.evaluate (fill/type don't work). Auto-verifies on 6 digits. Demo CGM D500 is sealed to is_demo_seed=true rows ONLY — target incident id in the review_request is NOT in that bubble (API returns 404). Use incident 69d38331-a941-44d5-806f-bebd4ee9b2cb to validate detail-screen chrome/layout. Capture screen (expo-camera) does not auto-grant permission in headless web, so controls hide behind the 'Camera needed' permission card — the testID incident-capture-screen is mounted on BOTH states, confirming the AR-less screen boots without crashing. No ar-crosshair / ar-distance-banner / ar-debug-dot / ar-reticle testIDs were found anywhere.",
+  "rca_of_issue": "Review_request target incident 03c39871-d96c-4431-b8ed-fcf91e51d3e0 does not carry is_demo_seed=true (seeded as a real PRODUCTION report). Prompt 14 demo isolation (per /app/memory/test_credentials.md) means Demo CGM D500 can only read/mutate rows where is_demo_seed=true. Hence /api/incidents/{id} returns 404 and the detail screen enters ErrorRetry. Mitigation: either re-seed/clone the target incident with is_demo_seed=true (keeping the 2 faces + 1 plate 'MH12AB1234') or hand the agent a different, demo-seeded id with the same shape."
+}

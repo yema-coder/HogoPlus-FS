@@ -115,6 +115,7 @@
     "cameraPermissionBody": "तक्रारीसाठी फोटो घ्या",
     "locationHelps": "लोकेशनमुळे मॅनेजरला जागा लवकर सापडते",
     "captureHint": "समस्येचा फोटो घ्या",
+    "torch": "फ्लॅश",
     "distanceLabel": "अंतर: {{d}}",
     "voiceNote": "आवाज संदेश (ऐच्छिक)",
     "aiCardTitle": "हे बरोबर आहे का?",
@@ -165,7 +166,16 @@
     "labelSeverity": "तीव्रता",
     "labelDistance": "अंतर",
     "labelCaptured": "घेतले",
-    "plateEdited": "संपादित"
+    "plateEdited": "संपादित",
+    "platePrimary": "मुख्य",
+    "plateModelRead": "मॉडेल रीड: {{v}}",
+    "conf_high": "उच्च विश्वास",
+    "conf_medium": "मध्यम विश्वास",
+    "conf_low": "कमी विश्वास",
+    "seeInMap": "नकाशात पाहा",
+    "mapUnavailable": "नकाशा उपलब्ध नाही",
+    "openInMaps": "नकाशात उघडा",
+    "accuracy": "अचूकता"
   },
   "status": {
     "submitted": "पाठवले",
@@ -269,7 +279,8 @@
     "privacy": "गोपनीयता धोरण",
     "deleteAccount": "माझे खाते डिलीट करा",
     "designation": "हुद्दा",
-    "accessRole": "ॲक्सेस भूमिका"
+    "accessRole": "ॲक्सेस भूमिका",
+    "version": "ॲप आवृत्ती {{v}}"
   },
   "shift": {
     "title": "माझी शिफ्ट",

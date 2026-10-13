@@ -8,12 +8,13 @@ import {
   isArDebugEnabled,
 } from "../debugAccess.ts";
 
-test("this build shows the AR debug dot + HUD to everyone", () => {
-  assert.equal(AR_DEBUG_FOR_EVERYONE, true);
-  // owner's own account: Manager, rank 3 — locked out by the old rank<=2 gate
-  assert.equal(isArDebugEnabled({ rank: 3, empId: "0001" }), true);
-  assert.equal(isArDebugEnabled({ rank: 6, empId: "D001" }), true);
-  assert.equal(isArDebugEnabled(), true);
+test("the temporary everyone-gate is CLOSED again (launch build)", () => {
+  // 2026-10-13: AR distance was removed; this now gates only the gallery test
+  // button, which no worker at the factory should see.
+  assert.equal(AR_DEBUG_FOR_EVERYONE, false);
+  assert.equal(isArDebugEnabled({ rank: 6, empId: "1223" }), false); // real worker
+  assert.equal(isArDebugEnabled({ rank: 3, empId: "0001", allowlist: ["0001"] }), true); // owner
+  assert.equal(isArDebugEnabled({ rank: 6, isDemo: true }), true); // demo bubble
 });
 
 test("the real gate still works when AR_DEBUG_FOR_EVERYONE is turned off", () => {

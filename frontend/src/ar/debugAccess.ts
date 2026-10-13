@@ -1,15 +1,15 @@
 // Who may see the AR debug dot + diagnostic HUD.
 //
-// TEMPORARY (owner directive, 2026-10-06): this test build shows the dot and HUD
-// to EVERY logged-in user, because the owner's own account is Manager (rank 3)
-// and the previous rank<=2 gate locked him out of the very screen he has to
-// verify. The factory keeps running the older build, so nothing reaches workers.
-//
-// TO RESTORE THE REAL GATE: set AR_DEBUG_FOR_EVERYONE = false. The rank and
-// server-allowlist logic below is intact and takes over immediately — no other
-// file needs to change.
+// 2026-10-06: temporarily opened to EVERY logged-in user so the owner (rank 3)
+// could verify the AR screens on his own account.
+// 2026-10-13: CLOSED again. AR distance is being removed from the app, so this
+// now gates only the gallery test-upload button — and the factory is about to
+// launch, where no worker should see a test tool. The real gate is back on:
+// dev build, demo bubble, rank <= 2, or the server-driven allowlist
+// (settings.ar_debug_emp_ids -> profile.ar_debug), which already carries the
+// owner's 0001. Flip this constant to true to reopen it for a test build.
 
-export const AR_DEBUG_FOR_EVERYONE = true;
+export const AR_DEBUG_FOR_EVERYONE = false;
 
 /** Rank at or above which the HUD is normally visible (1 = MD, 2 = CGM). */
 export const AR_DEBUG_MIN_RANK = 2;

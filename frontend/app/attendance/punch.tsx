@@ -19,7 +19,6 @@ import { startZoneSession, type ZoneSession } from "@/src/ble/zoneSession";
 import { useOutboxStore } from "@/src/offline/outbox";
 import { colors, fonts, sizes, spacing, type } from "@/src/theme/tokens";
 import { acquireGps } from "@/src/utils/gps";
-import { reverseGeocode } from "@/src/utils/geocode";
 import { storage } from "@/src/utils/storage";
 
 type StepState = "pending" | "running" | "ok" | "skip";
@@ -123,16 +122,11 @@ function PunchInInner() {
     const [{ fix }, ble] = await Promise.all([gpsP, zoneP]);
     setStep("gps", fix ? "ok" : "skip");
     setStep("zone", ble ? "ok" : "skip");
-    const addressP: Promise<string | null> = fix
-      ? Promise.race([
-          reverseGeocode(fix.lat, fix.lng),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-        ])
-      : Promise.resolve(null);
 
     const payload: Record<string, unknown> = {
       gps_lat: fix?.lat ?? null,
       gps_lng: fix?.lng ?? null,
+      gps_accuracy: fix?.accuracy ?? null,
       ...beaconPayload(ble),
     };
     const selfieUri = await compressP;
@@ -160,7 +154,6 @@ function PunchInInner() {
           );
         });
       }
-      const address = await addressP;
       router.replace({
         pathname: "/attendance/result",
         params: {
@@ -169,7 +162,7 @@ function PunchInInner() {
           zone: record.ble_zone ?? "",
           late: record.is_late ? "1" : "0",
           time: record.punch_in_at ?? "",
-          addr: address ?? "",
+          addr: record.geo_address ?? "",
           coords: fix ? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}` : "",
         },
       });
