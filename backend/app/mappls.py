@@ -148,9 +148,41 @@ async def reverse_geocode(session: AsyncSession, lat: float, lng: float) -> str 
     return address
 
 
+STATIC_CACHE_PREFIX = "mappls:static:"
+STATIC_CACHE_TTL = 30 * 24 * 3600  # a map tile of a fixed spot does not change
+
+
+def static_cache_key(lat: float, lng: float, zoom: int, size: str) -> str:
+    """Same ~11 m grid as the geocode cache: managers reviewing the same punches
+    (and three managers reviewing the SAME punch) must cost one Mappls call, not one
+    per view per day. Zoom and size are part of the key — a different image is a
+    different object."""
+    return f"{STATIC_CACHE_PREFIX}{_round_key(lat)},{_round_key(lng)},z{int(zoom)},{size}"
+
+
 async def static_map_png(lat: float, lng: float, zoom: int = 16, size: str = "400x260") -> bytes | None:
     """Still-image PNG for a mobile preview, proxied so the token never hits the client.
-    None on any failure → the app shows coords + Open-in-Maps instead."""
+    Cached in Redis for 30 days on the ~11 m grid — without it every review of the
+    same punch burned a fresh billed call. None on any failure → the app shows
+    coords + Open-in-Maps instead.
+
+    The bytes are base64-encoded in the cache because the shared Redis client runs
+    with decode_responses=True; storing raw PNG bytes through it would corrupt them.
+    """
+    import base64  # noqa: PLC0415
+
+    from app.redis_client import redis_client  # noqa: PLC0415
+
+    key = static_cache_key(lat, lng, zoom, size)
+    try:
+        hit = await redis_client.get(key)
+        if hit:
+            return base64.b64decode(hit)
+    except Exception:
+        pass  # a cache outage must never stop the map from loading
+
+    # ask Mappls for the ROUNDED point so the image matches the key it is stored under
+    lat, lng = _round_key(lat), _round_key(lng)
     token = await get_token()
     if not token:
         return None
@@ -164,6 +196,10 @@ async def static_map_png(lat: float, lng: float, zoom: int = 16, size: str = "40
                 },
             )
         if r.status_code == 200 and r.headers.get("content-type", "").startswith("image"):
+            try:
+                await redis_client.set(key, base64.b64encode(r.content).decode(), ex=STATIC_CACHE_TTL)
+            except Exception:
+                pass
             return r.content
         logger.warning("Mappls still-image HTTP %s", r.status_code)
         return None
