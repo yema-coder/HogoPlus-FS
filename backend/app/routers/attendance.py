@@ -724,17 +724,61 @@ async def flagged_attendance(
         query = query.where(Attendance.date == datetime.fromisoformat(date).date())
     rows = (await session.execute(query.order_by(Attendance.date.desc()))).all()
     storage = get_storage()
-    return [
-        {
+    # Addresses come from the cache ONLY here: a list must never make the reviewer
+    # wait on Nominatim (1 req/s). The per-record endpoint below resolves the one
+    # row a manager actually opens, and every later viewer gets it from cache.
+    from app.geocode import cached_address
+
+    out = []
+    for a, name, emp_id, dept, ref_key in rows:
+        out.append({
             **_out(a),
             "employee_name": name,
             "emp_id": emp_id,
             "department_code": dept,
             "selfie_url": storage.url_for(a.selfie_key) if a.selfie_key else None,
             "reference_selfie_url": storage.url_for(ref_key) if ref_key else None,
-        }
-        for a, name, emp_id, dept, ref_key in rows
-    ]
+            "address_text": await cached_address(a.gps_lat, a.gps_lng),
+        })
+    return out
+
+
+@router.get("/attendance/{attendance_id}/address")
+async def attendance_address(
+    attendance_id: str,
+    employee: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Reverse-geocode ONE punch's coordinates, for the record a manager has open.
+
+    Deliberately not part of any list response: Nominatim allows 1 req/s, and a
+    worker's phone must never be made to resolve an address for a manager's screen.
+    Cached for 30 days, so the second viewer (and tomorrow's punch from the same
+    spot) costs nothing. Returns address: null when it cannot be resolved — the
+    caller shows the coordinates instead.
+    """
+    att = await session.get(Attendance, attendance_id)
+    if att is None:
+        raise HTTPException(status_code=404, detail="Attendance not found")
+    emp = await session.get(Employee, att.employee_id)
+    rank = employee.role.rank
+    allowed = (
+        rank <= 2
+        or await is_dept_manager(session, employee, "TIME_OFFICE")
+        or (emp is not None and await is_dept_manager(session, employee, emp.department_code or ""))
+        or att.employee_id == employee.id
+    )
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Not your department")
+    if att.gps_lat is None or att.gps_lng is None:
+        return {"address": None, "reason": "no_gps"}
+    from app.geocode import reverse_geocode
+
+    return {
+        "address": await reverse_geocode(att.gps_lat, att.gps_lng),
+        "lat": att.gps_lat,
+        "lng": att.gps_lng,
+    }
 
 
 @router.get("/attendance/department/{code}")
