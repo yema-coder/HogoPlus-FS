@@ -172,7 +172,10 @@
     "conf_high": "उच्च विश्वास",
     "conf_medium": "मध्यम विश्वास",
     "conf_low": "कम विश्वास",
-    "seeInMap": "मैप में देखें"
+    "seeInMap": "मैप में देखें",
+    "mapUnavailable": "मैप उपलब्ध नहीं",
+    "openInMaps": "मैप में खोलें",
+    "accuracy": "सटीकता"
   },
   "status": {
     "submitted": "भेजा गया",

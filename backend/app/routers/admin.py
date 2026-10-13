@@ -30,6 +30,7 @@ from app.schemas import (
     BeaconIn,
     BeaconBulkIn,
     BeaconPatchIn,
+    DeptLocationPolicyIn,
     EmployeePatchIn,
     FormDefCreateIn,
     FormDefPatchIn,
@@ -112,6 +113,11 @@ def _settings_out(s: FactorySettings) -> dict:
         "face_detection_enabled": s.face_detection_enabled,
         "plate_detection_enabled": s.plate_detection_enabled,
         "face_collection_enabled": s.face_collection_enabled,
+        "gps_verify_enabled": s.gps_verify_enabled,
+        "gps_accuracy_max_m": s.gps_accuracy_max_m,
+        "geofence_grace_m": s.geofence_grace_m,
+        "auto_punch_out_enabled": s.auto_punch_out_enabled,
+        "auto_punch_out_grace_min": s.auto_punch_out_grace_min,
         "plate_scale_enabled": s.plate_scale_enabled,
         "plate_ref_width_m": s.plate_ref_width_m,
         "plate_scale_k": s.plate_scale_k,
@@ -136,6 +142,8 @@ async def patch_settings(
         "broadcasts_enabled", "broadcast_rate_per_hour",
         "ar_distance_enabled", "face_detection_enabled", "plate_detection_enabled",
         "face_collection_enabled",
+        "gps_verify_enabled", "gps_accuracy_max_m", "geofence_grace_m",
+        "auto_punch_out_enabled", "auto_punch_out_grace_min",
         "plate_scale_enabled", "plate_ref_width_m", "plate_scale_k",
         "ar_debug_emp_ids",
     ):
@@ -659,6 +667,47 @@ async def assign_manager(
     )
     await session.commit()
     return {"department_code": code, "manager_employee_id": str(emp.id), "manager_name": emp.full_name}
+
+
+@router.patch("/departments/{code}/location-policy")
+async def set_department_location_policy(
+    code: str,
+    body: DeptLocationPolicyIn,
+    actor: Employee = Depends(get_approved_employee),
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a department's attendance location policy (field vs office). A FIELD
+    department (AGRICULTURE field staff etc.) verifies by face + recorded GPS with NO
+    geofence / beacon requirement — so routine far-from-mill punches are not flagged.
+    Time Office / CGM / MD only; demo accounts cannot touch shared config; audited."""
+    await _require_time_office_or_top(session, actor)
+    if actor.is_demo:
+        raise HTTPException(
+            status_code=403, detail="Demo accounts cannot modify shared factory configuration"
+        )
+    dept = (await session.execute(select(Department).where(Department.code == code))).scalar_one_or_none()
+    if dept is None:
+        raise HTTPException(status_code=404, detail="Department not found")
+    old = {"geofence_exempt": dept.geofence_exempt, "beacon_exempt": dept.beacon_exempt}
+    if body.is_field is not None:
+        # a field department has no geofence AND no beacon requirement
+        dept.geofence_exempt = body.is_field
+        dept.beacon_exempt = body.is_field
+    if body.geofence_exempt is not None:
+        dept.geofence_exempt = body.geofence_exempt
+    if body.beacon_exempt is not None:
+        dept.beacon_exempt = body.beacon_exempt
+    await write_audit(
+        session, actor.id, "department.location_policy", "department", code,
+        {"old": old, "new": {"geofence_exempt": dept.geofence_exempt, "beacon_exempt": dept.beacon_exempt}},
+    )
+    await session.commit()
+    return {
+        "department_code": code,
+        "geofence_exempt": dept.geofence_exempt,
+        "beacon_exempt": dept.beacon_exempt,
+        "is_field": dept.geofence_exempt,
+    }
 
 
 # ---------------- beacons ----------------

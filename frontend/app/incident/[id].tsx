@@ -38,6 +38,7 @@ import { MetaGrid, type MetaItem } from "@/src/components/MetaGrid";
 import { PlateSection } from "@/src/components/PlateSection";
 import { PhotoCaptureModal } from "@/src/components/PhotoCaptureModal";
 import { ScreenHeader } from "@/src/components/ScreenHeader";
+import { MapPreview } from "@/src/components/MapPreview";
 import { SeverityChip } from "@/src/components/SeverityChip";
 import { showToast } from "@/src/components/Toast";
 import { SpeakerButton } from "@/src/components/SpeakerButton";
@@ -216,7 +217,7 @@ export default function IncidentDetailScreen() {
     const url =
       Platform.OS === "ios" ? `maps://?q=${name}&ll=${q}` : `geo:${q}?q=${q}(${name})`;
     Linking.openURL(url).catch(() =>
-      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`).catch(() => undefined),
+      Linking.openURL(`https://maps.mappls.com/@${lat},${lng},17z`).catch(() => undefined),
     );
   };
 
@@ -446,6 +447,21 @@ export default function IncidentDetailScreen() {
                   <Text style={styles.locationCoords}>
                     {detail.gps_lat.toFixed(5)}, {detail.gps_lng.toFixed(5)}
                   </Text>
+                ) : null}
+                {detail.gps_accuracy != null ? (
+                  <Text style={styles.locationCoords}>
+                    {t("incident.accuracy")}: ±{Math.round(detail.gps_accuracy)} m
+                  </Text>
+                ) : null}
+                {detail.gps_lat != null && detail.gps_lng != null ? (
+                  <View style={{ marginTop: spacing.sm }}>
+                    <MapPreview
+                      lat={detail.gps_lat}
+                      lng={detail.gps_lng}
+                      height={150}
+                      testID="incident-map-preview"
+                    />
+                  </View>
                 ) : null}
                 {detail.gps_lat != null && detail.gps_lng != null ? (
                   <Pressable

@@ -46,6 +46,7 @@ def _out(i: Incident) -> dict:
         "video_url": f"/api/files/{i.video_key}" if i.video_key else None,
         "gps_lat": i.gps_lat,
         "gps_lng": i.gps_lng,
+        "gps_accuracy": i.gps_accuracy,
         "address_text": i.address_text,
         "ble_zone": i.ble_zone,
         "ble_beacon_id": i.ble_beacon_id,
@@ -200,6 +201,7 @@ async def create_incident(
         video_key=body.video_key,
         gps_lat=body.gps_lat,
         gps_lng=body.gps_lng,
+        gps_accuracy=body.gps_accuracy,
         address_text=body.address_text,
         description=body.description,
         voice_note_key=body.voice_note_key,
@@ -243,6 +245,11 @@ async def create_incident(
         background.add_task(
             run_incident_ai_background, str(incident.id), bool(incident.photo_key), source == "gallery"
         )
+        # Server-side reverse geocoding (Mappls) — fill address_text on the backend.
+        if incident.gps_lat is not None and incident.gps_lng is not None:
+            from app.tasks import run_geocode_background
+
+            background.add_task(run_geocode_background, "incident", str(incident.id))
 
     return _out(incident)
 

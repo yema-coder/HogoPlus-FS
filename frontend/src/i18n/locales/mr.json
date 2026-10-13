@@ -172,7 +172,10 @@
     "conf_high": "उच्च विश्वास",
     "conf_medium": "मध्यम विश्वास",
     "conf_low": "कमी विश्वास",
-    "seeInMap": "नकाशात पाहा"
+    "seeInMap": "नकाशात पाहा",
+    "mapUnavailable": "नकाशा उपलब्ध नाही",
+    "openInMaps": "नकाशात उघडा",
+    "accuracy": "अचूकता"
   },
   "status": {
     "submitted": "पाठवले",

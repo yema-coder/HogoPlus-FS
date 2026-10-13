@@ -465,6 +465,42 @@ async def run_face_collection_background(attendance_id: str) -> None:
         logger.exception("Face collection FAILED for attendance %s", attendance_id)
 
 
+# ---------------- Server-side reverse geocoding (Mappls, 2026-06) ----------------
+# Resolve coords → readable address on the BACKEND (never the worker's phone) and store
+# it on the record so the dashboard/reports never re-resolve. Cached + fails gracefully.
+
+async def _geocode_async(kind: str, record_id: str) -> dict:
+    from app import mappls
+    from app.models import Attendance, Incident
+
+    engine, sm = _session_factory()
+    try:
+        async with sm() as session:
+            rec = await session.get(Attendance if kind == "attendance" else Incident, record_id)
+            if rec is None or rec.gps_lat is None or rec.gps_lng is None:
+                return {"skip": "no_gps"}
+            addr = await mappls.reverse_geocode(session, rec.gps_lat, rec.gps_lng)
+            if addr:
+                if kind == "attendance":
+                    rec.geo_address = addr
+                else:
+                    rec.address_text = addr
+            await session.commit()
+            return {"address": addr}
+    finally:
+        await engine.dispose()
+
+
+async def run_geocode_background(kind: str, record_id: str) -> None:
+    """In-process reverse geocode (FastAPI background task). Never raises."""
+    try:
+        out = await _geocode_async(kind, record_id)
+        logger.info("Geocode %s/%s → %s", kind, record_id, out.get("address") or out.get("skip"))
+    except Exception:
+        logger.exception("Geocode FAILED for %s %s", kind, record_id)
+
+
+
 
 # ---------------- Phase 4 Part C: incident severity classification ----------------
 
@@ -1089,7 +1125,7 @@ async def _punchout_reminder_async(now=None) -> dict:
 
     from app.audit import write_audit
     from app.config import settings
-    from app.models import Attendance, Employee
+    from app.models import Attendance, Employee, FactorySettings
     from app.notify import dispatcher, template
     from app.shift_logic import IST, get_shift, now_ist, resolve_shift_code
     from sqlalchemy import select
@@ -1097,10 +1133,14 @@ async def _punchout_reminder_async(now=None) -> dict:
     engine, sm = _session_factory()
     sent = 0
     flagged = 0
+    auto_out = 0
     try:
         now = now or now_ist()
         today = now.date()
         async with sm() as session:
+            fs = (await session.execute(select(FactorySettings).limit(1))).scalar_one_or_none()
+            auto_enabled = bool(fs and fs.auto_punch_out_enabled)
+            auto_grace = fs.auto_punch_out_grace_min if fs else 60
             rows = (
                 await session.execute(
                     select(Attendance, Employee)
@@ -1133,12 +1173,33 @@ async def _punchout_reminder_async(now=None) -> dict:
                             "attendance", str(att.id),
                         )
                         sent += 1
-                    # stage 2: still nothing hours later → Time Office review (no auto punch-out)
-                    if (
+                    # stage 2: still no punch-out hours later.
+                    if att.punch_out_at is not None or att.approved_by is not None:
+                        continue
+                    if auto_enabled:
+                        # AUTO PUNCH-OUT (settings flag ON): write a punch-out at shift
+                        # end + grace, marked AUTO. Never a silent full day — it is
+                        # surfaced for Time Office review (punch_out_source='auto') and
+                        # the worker is told. Time Office can correct the time.
+                        if now >= end_dt + timedelta(minutes=auto_grace):
+                            att.punch_out_at = (end_dt + timedelta(minutes=auto_grace)).astimezone(timezone.utc)
+                            att.punch_out_source = "auto"
+                            title, body = template("attendance_auto_punch_out")
+                            await dispatcher.notify(
+                                session, emp.id, "attendance_auto_punch_out", title, body,
+                                "attendance", str(att.id),
+                            )
+                            await write_audit(
+                                session, None, "attendance.auto_punch_out", "attendance", str(att.id),
+                                {"shift_code": shift_code, "shift_end": end_dt.isoformat(),
+                                 "grace_min": auto_grace, "punch_out_at": att.punch_out_at.isoformat()},
+                                is_demo=emp.is_demo,
+                            )
+                            auto_out += 1
+                    elif (
                         now >= end_dt + timedelta(hours=settings.punchout_flag_after_hours)
                         and att.flagged_reason != "no_punch_out"
                         and att.verification_level != "flagged"
-                        and att.approved_by is None
                     ):
                         att.flagged_reason = "no_punch_out"
                         title, body = template("punchout_flagged")
@@ -1158,7 +1219,7 @@ async def _punchout_reminder_async(now=None) -> dict:
             await session.commit()
     finally:
         await engine.dispose()
-    return {"sent": sent, "flagged": flagged}
+    return {"sent": sent, "flagged": flagged, "auto_out": auto_out}
 
 
 @celery.task(name="app.tasks.punchout_reminder_sweep")

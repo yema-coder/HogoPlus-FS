@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     # use it; the Emergent key is only the sandbox fallback.
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"  # text/vision/chat model on the OpenAI account
+    # Mappls (MapmyIndia) — server-side reverse geocoding + dashboard map token.
+    # OAuth2 client-credentials; read server-side ONLY, never sent to the mobile app.
+    mappls_client_id: str = ""
+    mappls_client_secret: str = ""
     smsgatewayhub_api_key: str = ""
     smsgatewayhub_sender_id: str = ""
     smsgatewayhub_dlt_template_id: str = ""

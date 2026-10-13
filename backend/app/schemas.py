@@ -152,6 +152,7 @@ class IncidentCreateIn(BaseModel):
     client_uuid: str | None = Field(default=None, max_length=64)
     gps_lat: float | None = None
     gps_lng: float | None = None
+    gps_accuracy: float | None = None
     address_text: str | None = Field(default=None, max_length=300)
     description: str | None = None
     voice_note_key: str | None = None
@@ -214,6 +215,11 @@ class IncidentStatusIn(BaseModel):
 class PunchInIn(BaseModel):
     gps_lat: float | None = None
     gps_lng: float | None = None
+    # device-reported GPS accuracy radius in metres (expo-location Location.coords.accuracy)
+    gps_accuracy: float | None = None
+    # human address the APP reverse-geocoded on-device at punch time (prod backend has
+    # no internet egress, so geocoding happens client-side). Optional — may be None.
+    geo_address: str | None = Field(default=None, max_length=300)
     selfie_key: str = Field(min_length=1)
     # Dual-mode BLE: the app sends whichever identifier matched a registered beacon.
     # MAC of the strongest matched beacon (MAC mode)...
@@ -262,6 +268,11 @@ class SettingsPatchIn(BaseModel):
     face_detection_enabled: bool | None = None
     plate_detection_enabled: bool | None = None
     face_collection_enabled: bool | None = None
+    gps_verify_enabled: bool | None = None
+    gps_accuracy_max_m: int | None = Field(default=None, ge=10, le=1000)
+    geofence_grace_m: int | None = Field(default=None, ge=0, le=5000)
+    auto_punch_out_enabled: bool | None = None
+    auto_punch_out_grace_min: int | None = Field(default=None, ge=0, le=720)
     plate_scale_enabled: bool | None = None
     plate_ref_width_m: float | None = Field(default=None, ge=0.1, le=2.0)
     plate_scale_k: float | None = Field(default=None, ge=0.1, le=5.0)
@@ -297,6 +308,26 @@ class RegularizeIn(BaseModel):
 class RegularizeDecideIn(BaseModel):
     action: Literal["approve", "reject"]
     note: str | None = Field(default=None, max_length=500)
+
+
+class FlaggedDecisionIn(BaseModel):
+    """Approve / reject a flagged punch with an optional Time-Office note."""
+    note: str | None = Field(default=None, max_length=500)
+
+
+class BulkApproveIn(BaseModel):
+    """Approve several flagged punches at once (same obvious reason)."""
+    ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+    note: str | None = Field(default=None, max_length=500)
+
+
+class DeptLocationPolicyIn(BaseModel):
+    """Edit a department's attendance location policy (field vs office).
+    is_field=True → field department (no geofence/beacon requirement: face + GPS verifies).
+    Either send is_field (sets both exemptions together) or the fine-grained flags."""
+    is_field: bool | None = None
+    geofence_exempt: bool | None = None
+    beacon_exempt: bool | None = None
 
 
 class EmployeePatchIn(BaseModel):

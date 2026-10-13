@@ -172,7 +172,10 @@
     "conf_high": "High confidence",
     "conf_medium": "Medium confidence",
     "conf_low": "Low confidence",
-    "seeInMap": "See in Map"
+    "seeInMap": "See in Map",
+    "mapUnavailable": "Map unavailable",
+    "openInMaps": "Open in Maps",
+    "accuracy": "Accuracy"
   },
   "status": {
     "submitted": "Sent",

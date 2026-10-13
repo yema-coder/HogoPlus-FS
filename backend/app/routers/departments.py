@@ -22,6 +22,11 @@ async def list_departments(session: AsyncSession = Depends(get_session)):
             "name_hi": d.name_hi,
             "name_mr": d.name_mr,
             "has_manager": d.manager_employee_id is not None,
+            # location policy (field vs office). A FIELD department (geofence_exempt)
+            # verifies by face + GPS with no geofence/beacon requirement.
+            "geofence_exempt": d.geofence_exempt,
+            "beacon_exempt": d.beacon_exempt,
+            "is_field": d.geofence_exempt,
         }
         for d in depts
     ]

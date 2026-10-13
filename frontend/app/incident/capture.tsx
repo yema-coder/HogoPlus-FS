@@ -378,6 +378,7 @@ function IncidentCaptureInner() {
       // the server stores source='gallery' and keeps them out of factory statistics.
       gps_lat: fromGallery ? null : (gps?.lat ?? null),
       gps_lng: fromGallery ? null : (gps?.lng ?? null),
+      gps_accuracy: fromGallery ? null : (gps?.accuracy ?? null),
       address_text: fromGallery ? null : address,
       description: desc.trim() || null,
       severity: "normal",

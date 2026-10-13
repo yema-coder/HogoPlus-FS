@@ -2046,3 +2046,38 @@ Broadcast backlog as follow-ups to fork #3 (all webdash; mobile untouched).
 - SANDBOX NOTE: the recurring Postgres restore reverts local DB to prod rev 0026 (drops original_text
   / face_references / face_collection_enabled). Re-apply via the DDL in this session + stamp 0028, then
   re-run seed_face_plate_demo.py. (Prod/GitHub main already has 0026; 0027+0028 chain applies on deploy.)
+
+## Attendance ladder + per-punch location + Mappls maps/geocoding (v1.0.27, 2026-06 fork) ✅ code complete + verified
+- **Attendance verification ladder** (flag-gated, ships OFF): settings `gps_verify_enabled`
+  (default FALSE), `gps_accuracy_max_m` (100), `geofence_grace_m` (150). When ON, a no-beacon punch
+  inside geofence+grace with acceptable GPS accuracy + passing face check = verified
+  (`verification_path='gps'`) instead of flagged. Beacon stays 1st path (`verified_plus`). Field depts
+  (`Department.geofence_exempt`) = face-pass + captured GPS = verified (`verification_path='field'`),
+  no beacon/factory-geofence. All thresholds from settings — never hardcoded.
+- **Auto punch-out** (flag OFF): settings `auto_punch_out_enabled` (FALSE), `auto_punch_out_grace_min`
+  (60); scheduler writes AUTO punch-out (`punch_out_source='auto'`), surfaced for review.
+- **Per-punch/-incident location**: attendance stores `gps_accuracy`, `geo_distance_m`,
+  `verification_path`, `geo_address`, `punch_out_source`; incidents add `gps_accuracy`.
+- **Mappls (MapmyIndia), SERVER-SIDE ONLY** (app/mappls.py): OAuth token cached; reverse geocode
+  coords→address CACHED in new `geocode_cache` table (~11 m grid key, negative-cache on empty),
+  fails graceful→None; `GET /api/dashboard/map-static` proxies still-image PNG (token never leaves
+  server); `GET /api/dashboard/maps-token` short-lived token for WEBDASH interactive map only.
+  Env: `MAPPLS_CLIENT_ID` / `MAPPLS_CLIENT_SECRET` (never logged/committed/sent to mobile). NO Google/OSM.
+- **Mobile** (client has ZERO Mappls refs): `MapPreview` fetches authed `/map-static` via
+  `fetchMapImageUri` in src/api/client.ts (web: blob objectURL; native: FileSystem.downloadAsync to
+  cache file, 401-refresh-retry) → falls back to coords + "Open in Maps" (Mappls web) on any failure.
+  Incident detail (`app/incident/[id].tsx`) shows Object vs Device location blocks + `±N m` accuracy +
+  MapPreview + "See in Map". Same MapPreview reused in approvals (flagged-attendance review).
+- **Migrations** (additive-only, head=0030): 0029_attendance_location_ladder, 0030_mappls_geocode_cache.
+  Chain 0026(prod)→0027→0028→0029→0030.
+- **Version release**: frontend/scripts/check_version.mjs (pre-publish Android versionCode guard,
+  .version_floor=10025) + `--commit` after publish; backend scripts/set_app_version.py <ver> [--force]
+  drives in-app update gate (app_versions row / PUT /api/admin/app-version).
+- **Docs**: docs/DEPLOY_ORDER_v1.0.27.md (migrations, env names, flag defaults, Mappls usage estimate
+  for 400/2,200 punches ×3 factories, release procedure).
+- **Verified**: backend 379 passed/2 skipped (test_attendance_ladder 6/6); /maps-token configured:true,
+  /map-static 200 image/png 400×260; mobile incident map rendered on web preview (Demo CGM D500, fixture
+  with GPS) — pin + © Mappls + ±12 m + See-in-Map, no OSM; i18n parity GREEN; lint clean.
+- **Fixture**: scripts/seed_face_plate_demo.py now also sets gps_lat/lng/accuracy/address_text/ble_zone
+  so the map block renders (Demo CGM D500 bubble, ephemeral, auto-purged).
+- **GitHub**: must be saved to a NEW non-main branch (standing rule) — pending the owner's Save-to-GitHub.

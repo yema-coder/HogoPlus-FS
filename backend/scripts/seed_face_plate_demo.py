@@ -157,6 +157,13 @@ async def main() -> None:
         inc.plate_source = "local_onnx"
         inc.plate_reason = None
         inc.source = "field"
+        # GPS + accuracy + address so the Mappls static-map preview and the
+        # accuracy row on the incident-detail device-location block render.
+        inc.gps_lat = 19.4735908
+        inc.gps_lng = 74.5290816
+        inc.gps_accuracy = 12.0
+        inc.address_text = "Prasad Sugar & Allied Agro Products, Sonai, Maharashtra"
+        inc.ble_zone = "Main Gate"
         inc.is_demo = True
         inc.is_demo_seed = False  # ephemeral demo row → hourly demo_cleanup auto-purges it
         await s.flush()

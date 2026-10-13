@@ -123,6 +123,7 @@ export interface Incident {
   video_url: string | null;
   gps_lat: number | null;
   gps_lng: number | null;
+  gps_accuracy?: number | null;
   address_text: string | null;
   ble_zone: string | null;
   ble_beacon_id: string | null;
@@ -238,6 +239,11 @@ export interface AttendanceRecord {
   gps_lat: number | null;
   gps_lng: number | null;
   gps_verified: boolean;
+  gps_accuracy?: number | null;
+  geo_distance_m?: number | null;
+  verification_path?: "beacon" | "gps" | "field" | null;
+  geo_address?: string | null;
+  punch_out_source?: "manual" | "auto" | null;
   ble_beacon_id: string | null;
   ble_zone: string | null;
   selfie_key: string;
