@@ -124,7 +124,10 @@ export default function Attendance() {
     if (dept === ALL) {
       api(`/attendance/flagged?date=${date}`).then(setFlaggedRows).catch((e) => setErr(e.message));
     } else {
-      api(`/dashboard/department/${dept}?date=${date}`).then(setData).catch((e) => setErr(e.message));
+      // /attendance/department/{code} returns the ROW LIST this table renders.
+      // (/dashboard/department/{code} is the drill-down OBJECT — rendering that as
+      // an array is what white-screened this tab on 13 Oct.)
+      api(`/attendance/department/${dept}?date=${date}`).then(setData).catch((e) => setErr(e.message));
     }
   };
   const loadReport = () => {
@@ -192,9 +195,14 @@ export default function Attendance() {
           </div>
         )
       ) : !data ? (!err && <Loading />) : (
+        (() => {
+          // never trust the payload shape: an object, an error body or a partial
+          // response must degrade to "no rows", not unmount the whole screen.
+          const rows: any[] = Array.isArray(data) ? data : (Array.isArray(data?.attendance) ? data.attendance : []);
+          return (
         <div className="card">
-          <h2>{dept} — {date} · {data.length} {t("present")}</h2>
-          {data.length === 0 ? <Empty /> : (
+          <h2>{dept} — {date} · {rows.length} {t("present")}</h2>
+          {rows.length === 0 ? <Empty /> : (
             <table data-testid="attendance-table">
               <thead>
                 <tr>
@@ -203,15 +211,22 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody>
-                {data.map((a: any) => <DeptRow key={a.id} a={a} canReview={canReview} onReview={review} />)}
+                {rows.map((a: any) => <DeptRow key={a.id} a={a} canReview={canReview} onReview={review} />)}
               </tbody>
             </table>
           )}
         </div>
+          );
+        })()
       ))}
 
       {/* ---------------- DAILY REPORT ---------------- */}
-      {tab === "report" && (!report ? (!err && <Loading />) : (
+      {tab === "report" && (!report ? (!err && <Loading />) : (() => {
+        // same rule as the review tab: a missing/partial payload must render an
+        // empty report, never throw and blank the page.
+        const totals = report?.totals ?? {};
+        const departments: any[] = Array.isArray(report?.departments) ? report.departments : [];
+        return (
         <div data-testid="attendance-report">
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
@@ -222,20 +237,20 @@ export default function Attendance() {
               </div>
             </div>
             <div className="kpi-row" style={{ marginTop: 14 }}>
-              <KPI label={t("present")} value={report.totals.present} />
-              <KPI label={t("absent")} value={report.totals.absent} red={report.totals.absent > 0} />
-              <KPI label={t("flaggedCount")} value={report.totals.flagged} red={report.totals.flagged > 0} />
-              <KPI label={t("autoPunchOut")} value={report.totals.auto_punch_out} />
-              <KPI label={t("late")} value={report.totals.late} />
+              <KPI label={t("present")} value={totals.present ?? 0} />
+              <KPI label={t("absent")} value={totals.absent ?? 0} red={(totals.absent ?? 0) > 0} />
+              <KPI label={t("flaggedCount")} value={totals.flagged ?? 0} red={(totals.flagged ?? 0) > 0} />
+              <KPI label={t("autoPunchOut")} value={totals.auto_punch_out ?? 0} />
+              <KPI label={t("late")} value={totals.late ?? 0} />
             </div>
           </div>
 
-          {report.departments.map((d: any) => (
+          {departments.map((d: any) => (
             <div className="card" key={d.code} data-testid={`report-dept-${d.code}`}>
               <h2>
                 {lang === "en" ? d.name_en : d.name_mr}
                 {d.is_field && <Chip tone="green">&nbsp;{t("fieldDept")}</Chip>}
-                <span style={{ fontWeight: 500, color: "var(--muted)", fontSize: 14 }}> · {d.present}/{d.present + d.absent} {t("present")}</span>
+                <span style={{ fontWeight: 500, color: "var(--muted)", fontSize: 14 }}> · {d.present ?? 0}/{(d.present ?? 0) + (d.absent ?? 0)} {t("present")}</span>
               </h2>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
                 {d.flagged > 0 && <Chip tone="red">{t("flaggedCount")}: {d.flagged}</Chip>}
@@ -243,13 +258,13 @@ export default function Attendance() {
                 {d.late > 0 && <Chip tone="amber">{t("late")}: {d.late}</Chip>}
               </div>
 
-              {d.present_rows.length > 0 && (
+              {(d.present_rows?.length ?? 0) > 0 && (
                 <table>
                   <thead>
                     <tr><th>{t("empId")}</th><th>{t("name")}</th><th>{t("punchIn")}</th><th>{t("punchOut")}</th><th>{t("hours")}</th><th>{t("verification")}</th><th>{t("location")}</th></tr>
                   </thead>
                   <tbody>
-                    {d.present_rows.map((r: any) => (
+                    {(d.present_rows ?? []).map((r: any) => (
                       <tr key={r.attendance_id} className={r.verification_level === "flagged" ? "red" : r.is_late ? "amber" : ""}>
                         <td>{r.emp_id}</td>
                         <td>{r.name}</td>
@@ -264,18 +279,19 @@ export default function Attendance() {
                 </table>
               )}
 
-              {d.absent_names.length > 0 && (
+              {(d.absent_names?.length ?? 0) > 0 && (
                 <div>
                   <div style={{ fontWeight: 700, marginTop: 10, color: "var(--danger)" }}>{t("absent")} ({d.absent})</div>
                   <div className="name-list">
-                    {d.absent_names.map((p: any) => <span className="name-pill absent" key={p.emp_id}>{p.name} · {p.emp_id}</span>)}
+                    {(d.absent_names ?? []).map((p: any) => <span className="name-pill absent" key={p.emp_id}>{p.name} · {p.emp_id}</span>)}
                   </div>
                 </div>
               )}
             </div>
           ))}
         </div>
-      ))}
+        );
+      })())}
     </div>
   );
 }
